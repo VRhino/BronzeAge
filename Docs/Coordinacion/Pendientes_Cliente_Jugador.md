@@ -6,6 +6,13 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### El Liderazgo cuenta solo lo que va contigo (2026-11-18; nucleo 0.48.0, militar 0.11.0, sin cambios en el contrato ni partida nueva)
+
+Lo pidió Víctor tras un `liderazgo.superado` al salir con 14 de 21 teniendo tropa en guarniciones. El Liderazgo es la tropa bajo tu mando en la batalla: al salir, al recoger tropa a la columna (de una guarnición, una avanzada, un pueblo o una escolta), al reclutar directo a la columna y al defender tu plaza, el motor cuenta solo lo que va en tu columna más lo que se suma. Lo prestado a guarniciones o escoltas ya no gasta Liderazgo (Heroe_Y_Tropa §5). Qué cambia para el cliente:
+
+1. **Nada que tocar en lo que ya valida:** el cliente ya cuenta solo lo que sale (en 0.220.1 se revirtió la suma de lo de fuera). Solo comprobar que ningún otro aviso o barra de Liderazgo resta lo prestado.  
+2. Al **recoger** una escuadra a la columna, si el cliente avisa antes de mandar la orden, la cuenta es lo que ya va en la columna más lo que vuelve.
+
 ### El vado es un punto (2026-11-18; mundo 0.5.0, rutas 0.2.0, nucleo 0.47.0, mundo nuevo y partida nueva, sin cambios en el contrato)
 
 Lo pidió Víctor para que una columna parada en un vado esté en el camino de quien cruce. El cauce va cerrado entero y cada vado es un nodo del grafo en su punto, enlazado con hasta 3 nodos de cada orilla: toda ruta que cruza el río pasa exactamente por ese punto (Movimiento_Ejercitos §4.3, contrato 06). Qué cambia para el cliente:

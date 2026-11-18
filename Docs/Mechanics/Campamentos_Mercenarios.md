@@ -108,7 +108,7 @@ Todas lanzan `MercenariosInvalidoError`:
 6. **Pago**: con `almacenPersonal`, `heroe.almacenPersonal.oro ≥ oro`; con `carro`, debe ser el Líder de una columna a `≤ radioPuerta` del campamento y llevar el oro en el carro. El oro se descuenta (la clave se borra si queda en 0).
 
 Efecto: si la escuadra existe, `cantidad +=` (moral, nivel y experiencia no cambian); si no, nace `escuadron-{campamento.id}-{n}` en `contenedor: campamento` con la progresión inicial y `moral 100`.
-**Se une a la columna**: si es nueva y su Líder tiene una columna a la puerta y la escuadra **cabe en su Liderazgo** contando lo que ya lleva fuera del campamento (`puedeLlevar(héroe, [fuera + nueva])`), nace directamente en esa columna (`contenedor: ejercito`, y se añade a `escuadronIds`) para no obligarle a entrar y volver a salir. Una escuadra que se repone no se mueve.
+**Se une a la columna**: si es nueva y su Líder tiene una columna a la puerta y la escuadra **cabe en su Liderazgo** contando lo que ya lleva en una columna (`puedeLlevar(héroe, [en columna + nueva])`; lo prestado a guarniciones o escoltas no cuenta, Rust 2026-11-18), nace directamente en esa columna (`contenedor: ejercito`, y se añade a `escuadronIds`) para no obligarle a entrar y volver a salir. Una escuadra que se repone no se mueve.
 `poblacion = actual − cantidad`, `poblacionEn = ahora`. Evento `mercenarios.reclutado { campamentoId, heroeId, tropaId, cantidad, oro, seUne }`. Resultado `{ cantidad, oro, seUne }`.
 Como en una plaza, **suma los contadores de tecnología** `reclutados.*` ([`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) §2.1, Q4 del autor del 2026-10-24); a diferencia de la plaza, **no exige reserva de trigo ni población de plaza**.
 
@@ -252,7 +252,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Población: el tope son sus viviendas por lo que da cada una y recupera por hora; más viviendas, más tope; lo gastado se recupera sin ningún evento | `engine/__tests__/reclutamientoMercenario.test.ts` |
 | Qué se recluta: edificio y tecnología; la tecnología del campamento por porcentaje de Facciones o por plazo; sin Facciones manda el plazo | `reclutamientoMercenario.test.ts` |
 | Precio: oro del escalón, caballos y equipo × recargo; la mala reputación lo encarece; sin asentamientos lo abarata | `reclutamientoMercenario.test.ts` |
-| Reclutar: crea la escuadra, cobra del almacén personal o del carro y gasta población; repone solo lo que falta; se une a la columna si cabe en el Liderazgo (contando lo que ya lleva fuera); rechaza no residente, tropa que no ofrece, sin oro, sin reclutas, al tope | `reclutamientoMercenario.test.ts` |
+| Reclutar: crea la escuadra, cobra del almacén personal o del carro y gasta población; repone solo lo que falta; se une a la columna si cabe en el Liderazgo (contando lo que ya lleva en una columna); rechaza no residente, tropa que no ofrece, sin oro, sin reclutas, al tope | `reclutamientoMercenario.test.ts` |
 | Tropa prestada: se pide gratis una, dos o las tres, no gana experiencia; se repone gratis; al dejar de residir se retira, también de la columna, con evento | `session/__tests__/entrarSalirCampamento.test.ts`, `reclutamientoMercenario.test.ts` |
 | Planta: todo colocado, con calles, sin solapes y dentro de la empalizada; determinista y distinta por campamento | `engine/__tests__/layoutCampamento.test.ts`, `contratos/v1/__tests__/contratos.test.ts` |
 | Residir y reubicar de una ruina | `session/__tests__/residenciaMercenaria.test.ts` |

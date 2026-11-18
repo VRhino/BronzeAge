@@ -1001,8 +1001,8 @@ impl Nucleo {
         }
         if en_su_plaza {
             let mr = &self.estado.reglas.economia.militar;
-            let fuera = hn.heroe.escuadras.iter().filter(|e| e.contenedor != Contenedor::Campamento);
-            if !militar::liderazgo::puede_llevar(mr, hn.heroe.liderazgo_base, fuera.chain(vistas.iter().copied())) {
+            // En su plaza elige entre toda su tropa; solo cuentan las que entran (Víctor, 2026-11-18).
+            if !militar::liderazgo::puede_llevar(mr, hn.heroe.liderazgo_base, vistas.iter().copied()) {
                 return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
             }
         }

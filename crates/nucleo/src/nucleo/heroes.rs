@@ -340,8 +340,8 @@ impl Nucleo {
             Comando::RetirarGuarnicion { heroe, escuadra } => {
                 self.autorizar_heroe(p, *heroe, false)?;
                 // A la puerta (2026-11-10): la escuadra que guarnece esa plaza de su Facción vuelve a la columna.
-                if let Some((plaza, columna)) = self.plaza_propia_a_la_puerta(*heroe).filter(|&(plaza, _)| self.guarnece_la_plaza(*heroe, *escuadra, plaza)) {
-                    return self.recoger_a_la_columna(t, *heroe, plaza, columna, *escuadra).map(|()| vec![]);
+                if let Some((_, columna)) = self.plaza_propia_a_la_puerta(*heroe).filter(|&(plaza, _)| self.guarnece_la_plaza(*heroe, *escuadra, plaza)) {
+                    return self.recoger_a_la_columna(t, *heroe, columna, *escuadra).map(|()| vec![]);
                 }
                 if let Some(plaza) = self.heroe(*heroe).expect("existe").heroe.escuadra(*escuadra).and_then(|s| if let Contenedor::Plaza(x) = s.contenedor { Some(x) } else { None }) {
                     return self.recoger_de_visita(t, *heroe, plaza, *escuadra).map(|()| vec![]);
@@ -683,7 +683,7 @@ impl Nucleo {
     }
 
     /// `retirarGuarnicion` con la columna `cid` a la puerta de `plaza`: la escuadra que la guarnece vuelve a la columna, sin pasar del Liderazgo del héroe.
-    fn recoger_a_la_columna(&mut self, t: Instante, heroe: u64, plaza: u64, cid: u64, escuadra: u64) -> Result<(), Respuesta> {
+    fn recoger_a_la_columna(&mut self, t: Instante, heroe: u64, cid: u64, escuadra: u64) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let h = &self.heroe(heroe).expect("existe").heroe;
@@ -691,7 +691,7 @@ impl Nucleo {
             return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {escuadra} está reservada para una batalla")));
         }
         let mr = &self.estado.reglas.economia.militar;
-        let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Plaza(plaza) || s.id == escuadra);
+        let fuera = h.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) || s.id == escuadra);
         if !liderazgo::puede_llevar(mr, h.liderazgo_base, fuera) {
             return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
         }
@@ -725,7 +725,7 @@ impl Nucleo {
         }
         let cid = self.columna_que_lleva(heroe).ok_or_else(|| rechazo(rechazos::HEROE_SIN_COLUMNA, "el héroe no trajo columna".into()))?;
         let mr = &self.estado.reglas.economia.militar;
-        let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Plaza(plaza) || s.id == escuadra);
+        let fuera = h.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) || s.id == escuadra);
         if !liderazgo::puede_llevar(mr, h.liderazgo_base, fuera) {
             return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
         }
@@ -889,7 +889,7 @@ impl Nucleo {
             let h = &self.heroe(heroe).expect("existe").heroe;
             let suyas: Vec<u64> = self.estado.comercio.flota[ci].escolta.iter().filter(|e| e.heroe == heroe).map(|e| e.id).collect();
             let vuelven = escuadras.map_or(suyas, <[u64]>::to_vec);
-            let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Escolta(caravana) || vuelven.contains(&s.id));
+            let fuera = h.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) || vuelven.contains(&s.id));
             if !liderazgo::puede_llevar(mr, h.liderazgo_base, fuera) {
                 return Err(Respuesta::rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe", v));
             }
