@@ -144,8 +144,9 @@ impl Nucleo {
         if elegidas.is_empty() && exigir_escuadras {
             return Err(rechazo(rechazos::SALIDA_SIN_ESCUADRAS, "hay que llevarse al menos una escuadra".into()));
         }
-        // Liderazgo: lo que ya tiene fuera del campamento (en una columna o de escolta) más lo que saca, contra el suyo.
-        let fuera = hn.heroe.escuadras.iter().filter(|e| e.contenedor != Contenedor::Campamento && !vistas.contains(&e.id));
+        // Liderazgo: lo que ya lleva en una columna más lo que saca, contra el suyo. Lo prestado (guarniciones, avanzadas, pueblos, escoltas) tiene su propio cupo y no
+        // cuenta (Víctor, 2026-11-18).
+        let fuera = hn.heroe.escuadras.iter().filter(|e| matches!(e.contenedor, Contenedor::Ejercito(_)) && !vistas.contains(&e.id));
         let nuevas = hn.heroe.escuadras.iter().filter(|e| vistas.contains(&e.id));
         if !liderazgo::puede_llevar(&mr, hn.heroe.liderazgo_base, fuera.chain(nuevas)) {
             return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));

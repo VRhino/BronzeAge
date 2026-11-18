@@ -163,7 +163,7 @@ impl Nucleo {
                 return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {id} está reservada para una batalla")));
             }
         }
-        let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Pueblo(pueblo) || vistas.contains(&s.id));
+        let fuera = h.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) || vistas.contains(&s.id));
         if !liderazgo::puede_llevar(&mr, h.liderazgo_base, fuera) {
             return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
         }
