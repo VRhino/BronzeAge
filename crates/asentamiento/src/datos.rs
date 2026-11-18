@@ -211,6 +211,37 @@ pub struct Reglas {
     /// `OCUPACION.fraccionCosteReconstruccion` (de `Murallas.md`), en ppm: lo que cuesta y tarda reconstruir un edificio dañado por un saqueo,
     /// sobre su coste y su tiempo de catálogo (y lo que devuelve quitarlo de la cola).
     pub fraccion_reconstruccion: i64,
+    /// `ORILLA_RIO`: a qué distancia del trazo de un río se puede levantar cada cosa (Economia_Construccion §14.3, decisión del autor del 2026-11-18).
+    pub orilla: OrillaRio,
+}
+
+/// `ORILLA_RIO`, en milésimas: la media anchura del cauce dibujado y el radio de cada maqueta. Un sitio vale si su distancia al trazo de todo río
+/// es al menos la media anchura de ese río más el radio de lo que se levanta.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrillaRio {
+    pub media_anchura: Mil,
+    pub media_anchura_navegable: Mil,
+    pub plaza: Mil,
+    pub pueblo: Mil,
+    pub aldea: Mil,
+    pub avanzada: Mil,
+    pub bandidos: Mil,
+}
+
+impl OrillaRio {
+    pub fn de(b: &Value) -> Self {
+        let r = &b["radio"];
+        let m = |v: &Value, k: &str| mil(v[k].as_f64().unwrap_or_else(|| panic!("ORILLA_RIO.{k}")));
+        OrillaRio {
+            media_anchura: m(b, "mediaAnchura"),
+            media_anchura_navegable: m(b, "mediaAnchuraNavegable"),
+            plaza: m(r, "plaza"),
+            pueblo: m(r, "pueblo"),
+            aldea: m(r, "aldea"),
+            avanzada: m(r, "avanzada"),
+            bandidos: m(r, "bandidos"),
+        }
+    }
 }
 
 /// `TAMANOS_MAPA` (Economia_Construccion §14.1, decisión del autor del 2026-10-27): el diámetro, en milésimas de unidad de mapa, del disco que ocupa cada elemento en el mapa del mundo.
@@ -327,6 +358,7 @@ impl Reglas {
             densidad_bosque_maxima_fundar: mil(num(&fundacion, "densidadBosqueMaximaParaFundar")),
             pendiente_maxima_fundar: mil(num(&fundacion, "pendienteMaximaParaFundar")),
             fraccion_reconstruccion: ppm(num(&b("OCUPACION"), "fraccionCosteReconstruccion")),
+            orilla: OrillaRio::de(&b("ORILLA_RIO")),
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),

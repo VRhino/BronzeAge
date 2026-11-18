@@ -89,6 +89,7 @@ mod ciudadania;
 mod pueblos;
 mod pueblos_dentro;
 mod residentes;
+mod rios;
 mod salidas;
 mod taberna;
 mod logros;

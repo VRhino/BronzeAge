@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "asentamiento"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "base",
  "serde_json",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.45.0"
+version = "0.46.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -1112,7 +1112,7 @@ dependencies = [
 
 [[package]]
 name = "territorio"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base",
 ]

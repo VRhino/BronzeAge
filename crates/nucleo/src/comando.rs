@@ -3237,6 +3237,8 @@ pub mod rechazos {
     pub const PUEBLO_FUERA_DE_LA_ZONA: &str = "pueblo.fuera_de_la_zona";
     /// El nodo no tiene ruta por tierra hasta la plaza madre: su carro no podría acarrear.
     pub const PUEBLO_SIN_RUTA: &str = "pueblo.sin_ruta";
+    /// El nodo o el punto está tan cerca del trazo de un río que el pueblo o la aldea quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18).
+    pub const PUEBLO_JUNTO_AL_RIO: &str = "pueblo.junto_al_rio";
     pub const PUEBLO_TECNOLOGIA_FALTANTE: &str = "pueblo.tecnologia_faltante";
     pub const PUEBLO_NIVEL_INSUFICIENTE: &str = "pueblo.nivel_insuficiente";
     pub const PUEBLO_SIN_CUPO: &str = "pueblo.sin_cupo";
@@ -3284,6 +3286,8 @@ pub mod rechazos {
     pub const AVANZADA_FUERA_DEL_SITIO: &str = "avanzada.fuera_del_sitio";
     /// Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04).
     pub const AVANZADA_SIN_RUTA: &str = "avanzada.sin_ruta";
+    /// El sitio está tan cerca del trazo de un río que la avanzada quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18).
+    pub const AVANZADA_JUNTO_AL_RIO: &str = "avanzada.junto_al_rio";
     pub const AVANZADA_FACCION_AJENA: &str = "avanzada.faccion_ajena";
     pub const AVANZADA_FUERA_DE_LA_PUERTA: &str = "avanzada.fuera_de_la_puerta";
     pub const AVANZADA_NO_ESTA_PENDIENTE: &str = "avanzada.no_esta_pendiente";

@@ -6,6 +6,15 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### Nada encima del río (2026-11-18; nucleo 0.46.0, territorio 0.4.0, asentamiento 0.24.0, sin cambios en el contrato ni partida nueva)
+
+Lo pidió Víctor tras ver en Render una aldea de un bot encima del río. El motor ya no deja levantar nada donde su maqueta entraría en el cauce dibujado (`ORILLA_RIO`, Economia_Construccion §14.3). Qué cambia para el cliente:
+
+1. **Rechazos nuevos:** `fundacion.junto_al_rio` (fundar), `pueblo.junto_al_rio` (marcar pueblo o aldea) y `avanzada.junto_al_rio` (colocar avanzada). Hacen falta sus textos.  
+2. **El aviso de viabilidad** puede traer el motivo `fundacion.junto_al_rio`: el cliente lo enseña como los demás (rojo, «demasiado cerca del río»).  
+3. **Los candidatos de pueblo** ya no traen los nodos junto al río, y el sitio de aldea que propone el panel queda fuera del cauce con sus campos. Si el cliente deja elegir a mano el punto de una aldea o una avanzada, conviene que no ofrezca los que el motor rechazará (las distancias están en el bloque `ORILLA_RIO` de `GET /v1/datos`, catálogo de Economia_Construccion).  
+4. Lo levantado antes de la regla (la aldea de as-187 en Render) no se toca.
+
 ### Cambiar las escuadras elegidas en una batalla en que ya se combate (2026-11-16; contrato 0.29.0, nucleo 0.45.0, combate 0.12.0, sin partida nueva)
 
 **`OrdenElegirEscuadrasDeBatalla { battle_id, escuadron_ids }`** (campo 202 del oneof): quien ya combate (el residente que defiende su plaza entra de oficio con su loadout) cambia sus elegidas antes de que empiece la partida, con las mismas reglas que `OrdenUnirseABatalla.escuadron_ids`. Con la partida en curso, `batalla.ya_empezada`. Qué haría el cliente: en la preparación de una batalla en que ya combate, mandar esta orden con lo elegido (Batalla_Unity_Ciclo §7.3).

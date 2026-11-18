@@ -1970,6 +1970,24 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 ```
 <!-- /parametros -->
 
+**Nada encima del río (decisión del autor del 2026-11-18).** Ninguna maqueta del mapa puede quedar dentro del cauce que se ve. El río corta el paso solo en las celdas de 4 u que pisa su trazo (y no corta en el hueco de cada vado, [`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md)), así que «transitable» no bastaba: un pueblo, una aldea o una plaza podían caer a décimas del trazo, encima del agua dibujada (en la partida de Render, una aldea de trigo de un bot). Desde entonces, al **fundar**, **marcar un pueblo extractor**, **marcar una aldea**, **colocar una avanzada** y cuando el sistema **levanta un campamento de bandidos**, el motor mide la distancia del punto al trazo de cada río y la rechaza si es menor que la media anchura del cauce dibujado (`mediaAnchura`, 0,75 u; `mediaAnchuraNavegable`, 1,5 u en los ríos navegables) más el radio de lo que se levanta (`radio`): lo que ocupa su maqueta en el mapa 3D del cliente (escala 0,8 de las maquetas, ×1,6 pueblos y avanzadas, ×2 campamentos), redondeado hacia arriba. La plaza cuenta con la ciudad más grande que puede llegar a tener (la de la zona en su techo de 60 u: la ciudad del cliente es el 10 % del radio de la zona), para que al crecer tampoco entre en el agua. La aldea cuenta con sus campos, no solo con la empalizada. Rechazos: `fundacion.junto_al_rio` (también en el aviso de viabilidad), `pueblo.junto_al_rio` (pueblo y aldea; el nodo junto al río ya no sale entre los candidatos del panel, y el muestreo de sitios de aldea lo salta) y `avanzada.junto_al_rio`. Los nodos del mundo no se mueven (no cambia el mundo ni hace falta partida nueva): los que quedan junto al río simplemente no se pueden explotar (27 de 4.986 en el mundo de la semilla 42). Lo ya levantado antes de la regla no se toca.
+
+<!-- parametros:ORILLA_RIO -->
+```json
+{
+  "mediaAnchura": 0.75,
+  "mediaAnchuraNavegable": 1.5,
+  "radio": {
+    "plaza": 4.8,
+    "pueblo": 0.75,
+    "aldea": 1.8,
+    "avanzada": 0.65,
+    "bandidos": 0.8
+  }
+}
+```
+<!-- /parametros -->
+
 ### 14.4 Población
 
 <!-- parametros:POBLACION -->

@@ -91,3 +91,37 @@ pub fn fundar(n: &mut Nucleo, dueno: &str, faccion: u32, p: Punto) -> u64 {
     assert!(r.aceptada(), "{r:?}");
     r.creadas[0]
 }
+
+/// La distancia de `p` al trazo del río más cercano, en milésimas (`ORILLA_RIO`, 2026-11-18), y si ese río es navegable.
+#[allow(dead_code)]
+pub fn distancia_al_rio(m: &Mundo, p: Punto) -> (f64, bool) {
+    let mut mejor = (f64::MAX, false);
+    for r in m.rios() {
+        for w in r.puntos.windows(2) {
+            let (ax, ay, bx, by) = (w[0].x as f64, w[0].y as f64, w[1].x as f64, w[1].y as f64);
+            let (dx, dy) = (bx - ax, by - ay);
+            let l = dx * dx + dy * dy;
+            let t = if l == 0.0 { 0.0 } else { (((p.x as f64 - ax) * dx + (p.y as f64 - ay) * dy) / l).clamp(0.0, 1.0) };
+            let d = (p.x as f64 - ax - t * dx).hypot(p.y as f64 - ay - t * dy);
+            if d < mejor.0 {
+                mejor = (d, r.navegable);
+            }
+        }
+    }
+    mejor
+}
+
+/// Los nodos de recurso que el artefacto puso a menos de 0,5 u del trazo de un río y en una celda transitable (encima del agua dibujada): los que
+/// la orilla (`ORILLA_RIO`) deja sin explotar. Índices en `m.nodos()`.
+#[allow(dead_code)]
+pub fn nodos_encima_del_rio(m: &Mundo) -> Vec<usize> {
+    m.nodos()
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| {
+            let p = n.posicion.unwrap();
+            m.transitable_en(p.x, p.y) && distancia_al_rio(m, Punto::new(p.x, p.y)).0 < 500.0
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
