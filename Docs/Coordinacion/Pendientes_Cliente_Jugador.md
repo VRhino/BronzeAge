@@ -6,6 +6,14 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### El vado es un punto (2026-11-18; mundo 0.5.0, rutas 0.2.0, nucleo 0.47.0, mundo nuevo y partida nueva, sin cambios en el contrato)
+
+Lo pidió Víctor para que una columna parada en un vado esté en el camino de quien cruce. El cauce va cerrado entero y cada vado es un nodo del grafo en su punto, enlazado con hasta 3 nodos de cada orilla: toda ruta que cruza el río pasa exactamente por ese punto (Movimiento_Ejercitos §4.3, contrato 06). Qué cambia para el cliente:
+
+1. **Mundo nuevo:** la semilla 42 da ahora el artefacto `a98e65c7…` (versión del generador `regional-20-costas-2+estrategico-3+cauce-2`) y su paquete de relieve nuevo. Ríos, vados, nodos y campamentos siguen en el mismo sitio; cambian el grafo y la rejilla de paso alrededor de los vados. Con él hace falta partida nueva.  
+2. **Las rutas** que dibuja el cliente (plan de marcha de una columna) cruzan el río por el punto del vado, en vez de por cualquier sitio de una franja de unas 16 u. Si el cliente pinta el vado como una franja ancha, conviene que lo pinte como un paso estrecho.  
+3. **Parar en un vado:** se puede mandar una columna al punto de un vado (se pisa a 0,75 u de él aunque su celda sea cauce). Si el cliente valida a mano el destino con la transitabilidad del artefacto, tiene que admitir también ese radio alrededor de cada vado (`mundo::RADIO_VADO`).
+
 ### Nada encima del río (2026-11-18; nucleo 0.46.0, territorio 0.4.0, asentamiento 0.24.0, sin cambios en el contrato ni partida nueva)
 
 Lo pidió Víctor tras ver en Render una aldea de un bot encima del río. El motor ya no deja levantar nada donde su maqueta entraría en el cauce dibujado (`ORILLA_RIO`, Economia_Construccion §14.3). Qué cambia para el cliente:

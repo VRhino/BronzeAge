@@ -448,3 +448,104 @@ fn el_suavizado_conserva_los_vados() {
     assert_eq!((s.puntos[i - 1], s.puntos[i + 1]), (c(6, 4), c(6, 6)), "los dos tramos del vado se quedan");
     assert!(s.puntos.len() < r.ruta(o, d, &Opciones::default()).unwrap().puntos.len());
 }
+
+#[test]
+fn el_vado_es_un_punto_toda_ruta_que_cruza_pasa_por_el_y_se_puede_parar_en_el() {
+    // Río en y = 5 cerrado entero (2026-11-18). El vado es un nodo fuera de la retícula, en su punto (no en el centro de la celda),
+    // enlazado con las tres celdas de cada orilla, como lo deja el generador.
+    let (w, h) = (12, 12);
+    let coste = |_: i64, y: i64| if y == 5 { 0u16 } else { 1000 };
+    let mut g = reticula(w, h, |x, y| coste(x, y) > 0, |_, _| false);
+    let v = Punto::new(c(6, 5).x + 1_300, c(6, 5).y - 200);
+    let id = (w * h) as u32;
+    g.nodos.push(NodoGrafo { id, posicion: Some(PuntoPb { x: v.x, y: v.y }) });
+    for (x, y) in [(5, 4), (6, 4), (7, 4), (5, 6), (6, 6), (7, 6)] {
+        let largo = c(x, y).dist(v);
+        g.aristas.push(AristaGrafo { a: (y * w + x) as u32, b: id, coste_milesimas: (largo * 1000 / ESP) as u32, vado: true });
+    }
+    let mut r = Rutas::con_terreno(&g, 2 * w, 2 * h, |cx, cy| coste(cx / 2, cy / 2));
+    r.transitable.as_mut().unwrap().vados.push(v);
+    for o in [Opciones::default(), suave()] {
+        for (a, b) in [(c(1, 1), c(11, 10)), (c(10, 9), c(0, 2)), (c(6, 3), c(6, 7))] {
+            let cam = r.ruta(a, b, &o).expect("cruza por el vado");
+            assert!(cam.puntos.contains(&v), "{a:?} → {b:?} pasa justo por el punto del vado: {:?}", cam.puntos);
+        }
+    }
+    // Una columna se para justo en el vado (y a 0,75 u de él) y sale de allí; a 2 u, en el agua, no.
+    assert!(r.ruta(c(1, 1), v, &Opciones::default()).is_some());
+    assert!(r.ruta(v, c(11, 10), &suave()).is_some_and(|cam| cam.puntos[0] == v));
+    assert!(r.ruta(c(1, 1), Punto::new(v.x + 700, v.y), &Opciones::default()).is_some());
+    assert!(r.ruta(c(1, 1), Punto::new(v.x + 2_000, v.y), &Opciones::default()).is_none(), "el cauce fuera del vado no se pisa");
+}
+
+/// Con el artefacto real (se omite si no está): toda ruta entre dos orillas de un vado pasa justo por el punto de un vado, y se pisa el punto del
+/// vado pero no el cauce de al lado (2026-11-18: el cauce va cerrado entero y el vado es un nodo en su punto).
+#[test]
+fn mundo_real_las_rutas_cruzan_los_rios_por_el_punto_del_vado() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../generador/salida/mundo");
+    let Some(f) = std::fs::read_dir(&dir).ok().and_then(|d| d.flatten().find(|e| e.file_name().to_string_lossy().starts_with("mundo-"))) else {
+        eprintln!("sin artefacto en {dir:?}: se omite");
+        return;
+    };
+    let m = Mundo::cargar(&std::fs::read(f.path()).unwrap(), &mundo::OpcionesValidacion::default()).expect("artefacto válido");
+    let r = Rutas::desde_mundo(&m);
+    let t = r.transitable.as_ref().unwrap();
+    let pt = |p: &PuntoPb| Punto::new(p.x, p.y);
+    let vados: Vec<Punto> = m.rios().iter().flat_map(|x| &x.vados).map(pt).collect();
+    // Los tramos de todos los cauces dibujados, con su caja, para ver por dónde corta cada tramo de ruta.
+    let tramos: Vec<(usize, Punto, Punto)> = m.rios().iter().enumerate()
+        .flat_map(|(k, x)| x.puntos.windows(2).map(move |w| (k, Punto::new(w[0].x, w[0].y), Punto::new(w[1].x, w[1].y))))
+        .collect();
+    let orienta = |a: Punto, b: Punto, c: Punto| ((b.x - a.x) as i128 * (c.y - a.y) as i128 - (b.y - a.y) as i128 * (c.x - a.x) as i128).signum();
+    let entre = |a: Punto, b: Punto, c: Punto| c.x >= a.x.min(b.x) && c.x <= a.x.max(b.x) && c.y >= a.y.min(b.y) && c.y <= a.y.max(b.y);
+    let se_cortan = |p: Punto, q: Punto, a: Punto, b: Punto| {
+        if p.x.max(q.x) < a.x.min(b.x) || a.x.max(b.x) < p.x.min(q.x) || p.y.max(q.y) < a.y.min(b.y) || a.y.max(b.y) < p.y.min(q.y) {
+            return false;
+        }
+        let (d1, d2, d3, d4) = (orienta(a, b, p), orienta(a, b, q), orienta(p, q, a), orienta(p, q, b));
+        (d1 * d2 < 0 && d3 * d4 < 0)
+            || (d1 == 0 && entre(a, b, p)) || (d2 == 0 && entre(a, b, q)) || (d3 == 0 && entre(p, q, a)) || (d4 == 0 && entre(p, q, b))
+    };
+    // ¿Pasa el tramo `p`-`q` a `RADIO_VADO` de algún vado?
+    let por_un_vado = |p: Punto, q: Punto| {
+        vados.iter().any(|&v| {
+            let (dx, dy, vx, vy) = ((q.x - p.x) as f64, (q.y - p.y) as f64, (v.x - p.x) as f64, (v.y - p.y) as f64);
+            let t = if dx == 0.0 && dy == 0.0 { 0.0 } else { ((vx * dx + vy * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0) };
+            (vx - t * dx).hypot(vy - t * dy) <= mundo::RADIO_VADO as f64
+        })
+    };
+    let g = m.navegacion();
+    let pos: HashMap<u32, Punto> = g.nodos.iter().map(|n| (n.id, Punto::new(n.posicion.unwrap().x, n.posicion.unwrap().y))).collect();
+    let (mut cruces, mut por_el_vado, mut con_dos_orillas) = (0, 0, 0);
+    for (k, rio) in m.rios().iter().enumerate() {
+        for v in rio.vados.iter().map(pt) {
+            assert!(m.pisable_en(v.x, v.y) && !m.transitable_en(v.x, v.y), "el punto del vado se pisa y su celda (el cauce) no");
+            let orillas: Vec<Punto> = g.aristas.iter().filter(|e| e.vado && pos[&e.b] == v).map(|e| pos[&e.a]).collect();
+            let mut cruza = false;
+            for (i, &a) in orillas.iter().enumerate() {
+                for &b in &orillas[i + 1..] {
+                    // Solo los pares de orillas opuestas: la recta entre ellos corta el cauce del propio vado.
+                    if !tramos.iter().any(|&(j, c, d)| j == k && se_cortan(a, b, c, d)) {
+                        continue;
+                    }
+                    cruza = true;
+                    cruces += 1;
+                    for o in [Opciones::default(), Opciones { suavizar: true, ..Default::default() }] {
+                        let cam = r.ruta(a, b, &o).expect("las dos orillas de un vado se unen");
+                        por_el_vado += usize::from(cam.puntos.iter().any(|p| vados.contains(p)));
+                        // La regla: ningún tramo de la ruta corta un cauce si no es por el punto de un vado.
+                        for w in cam.puntos.windows(2) {
+                            if let Some(&(j, c, d)) = tramos.iter().find(|&&(_, c, d)| se_cortan(w[0], w[1], c, d)) {
+                                assert!(por_un_vado(w[0], w[1]), "{a:?} → {b:?}: el tramo {:?} → {:?} corta el río {} ({c:?} → {d:?}) fuera de un vado: {:?}",
+                                    w[0], w[1], m.rios()[j].id, cam.puntos);
+                            }
+                        }
+                    }
+                }
+            }
+            con_dos_orillas += usize::from(cruza);
+        }
+    }
+    eprintln!("{} vados, {con_dos_orillas} con las dos orillas, {cruces} cruces probados, {por_el_vado} rutas por el punto de un vado", vados.len());
+    assert!(con_dos_orillas * 4 >= vados.len() * 3, "la mayoría de los vados unen sus dos orillas");
+}

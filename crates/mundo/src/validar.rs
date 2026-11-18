@@ -69,9 +69,16 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
         }
     }
 
+    let mut vados: HashMap<usize, Vec<(i64, i64)>> = HashMap::new();
+    for v in a.rios.iter().flat_map(|r| &r.vados) {
+        let (c, f) = (v.x.div_euclid(TAMANO_CELDA as i64), v.y.div_euclid(TAMANO_CELDA as i64));
+        if c >= 0 && f >= 0 && (c as usize) < columnas && (f as usize) < filas {
+            vados.entry(f as usize * columnas + c as usize).or_default().push((v.x, v.y));
+        }
+    }
     let mundo = Mundo {
         artefacto: a, columnas, filas, altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, fertilidad_cebada, fertilidad_sesamo, region, humedad, densidad_bosque, anillos,
-        transitable, coste,
+        transitable, coste, vados,
     };
 
     // 4. Regiones y vectoriales.
@@ -161,7 +168,8 @@ fn grafo(m: &Mundo) -> R<()> {
     for e in &g.aristas {
         for nodo in [e.a, e.b] {
             let &(x, y) = pos.get(&nodo).ok_or(ErrorMundo::AristaConNodoInexistente { a: e.a, b: e.b, nodo })?;
-            if !m.transitable_en(x, y) {
+            // El nodo de un vado está en el cauce (cerrado) justo en el punto del vado (2026-11-18).
+            if !m.pisable_en(x, y) {
                 return Err(ErrorMundo::AristaNoTransitable { a: e.a, b: e.b, nodo, posicion: (x, y) });
             }
         }
