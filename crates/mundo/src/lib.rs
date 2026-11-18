@@ -23,7 +23,7 @@
 //!
 //! hash del contenido; tamaño (si `tamano_esperado`); sha256 y dimensiones/encoding/longitud de cada capa; todo id de `region` existe en `regiones`; coste mayor que
 //! 0 justo en las celdas transitables (si trae la capa); ids únicos
-//! por colección; aristas del grafo (nodos existentes, origen y destino transitables); nodos de recurso, campamentos
+//! por colección; aristas del grafo (nodos existentes, origen y destino transitables o en el punto de un vado); nodos de recurso, campamentos
 //! (mercenarios y bandidos) y alijos en tierra transitable y fuera del agua; cuotas por anillo de estaño y oro
 //! (5/25/70 % por resto mayor sobre el total presente, según el `anillo` declarado de cada nodo); parcelas con bosque
 //! existente y separadas ≥ 2·rp; campamentos de mercenarios separados ≥ 600 estratégicas.
@@ -39,6 +39,7 @@ pub use relieve::{validar_relieve, ErrorRelieve};
 
 use contrato::v1::*;
 use prost::Message;
+use std::collections::HashMap;
 use sha2::{Digest, Sha256};
 
 /// Milésimas por unidad estratégica.
@@ -82,7 +83,14 @@ pub struct Mundo {
     anillos: Vec<u8>,
     transitable: Vec<u8>, // bits
     coste: Vec<u16>,      // vacío si el artefacto no trae la capa
+    /// Los puntos de los vados de todos los ríos, por la celda en la que caen ([`Mundo::en_vado`]).
+    vados: HashMap<usize, Vec<(i64, i64)>>,
 }
+
+/// Lo que se pisa alrededor del punto de un vado, en milésimas (0,75 u: la media anchura del río dibujado). Desde el 2026-11-18 (decisión
+/// del autor) el cauce va cerrado entero y el vado es un punto: un nodo del grafo en su punto, enlazado con las dos orillas. Este radio deja
+/// que una columna se pare justo en el vado y salga de él, y que una ruta guardada que pasa por él siga valiendo.
+pub const RADIO_VADO: i64 = 750;
 
 /// sha256 en hex minúsculas.
 pub fn sha256_hex(datos: &[u8]) -> String {
@@ -106,9 +114,32 @@ impl Mundo {
         (c < self.columnas && f < self.filas).then_some(f * self.columnas + c)
     }
 
-    /// Autoridad única de transitabilidad.
+    /// Autoridad única de transitabilidad del terreno: la celda. El cauce de los ríos no es transitable, tampoco en los vados
+    /// (ver [`Mundo::pisable_en`]).
     pub fn transitable_en(&self, x: i64, y: i64) -> bool {
         self.celda(x, y).is_some_and(|i| self.transitable[i >> 3] >> (i & 7) & 1 == 1)
+    }
+
+    /// ¿Está `(x, y)` a [`RADIO_VADO`] o menos del punto de un vado?
+    pub fn en_vado(&self, x: i64, y: i64) -> bool {
+        let t = TAMANO_CELDA as i64;
+        if x < -t || y < -t {
+            return false;
+        }
+        let (c, f) = (x.div_euclid(t), y.div_euclid(t));
+        (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| (c + dx, f + dy))).any(|(c, f)| {
+            c >= 0
+                && f >= 0
+                && (c as usize) < self.columnas
+                && self.vados.get(&(f as usize * self.columnas + c as usize)).is_some_and(|v| {
+                    v.iter().any(|&(vx, vy)| ((vx - x) as i128).pow(2) + ((vy - y) as i128).pow(2) <= (RADIO_VADO as i128).pow(2))
+                })
+        })
+    }
+
+    /// Lo que pisa una columna: una celda transitable o el punto de un vado ([`RADIO_VADO`]). Es lo que miran las rutas.
+    pub fn pisable_en(&self, x: i64, y: i64) -> bool {
+        self.transitable_en(x, y) || self.en_vado(x, y)
     }
 
     pub fn anillo_en(&self, x: i64, y: i64) -> Option<Anillo> {

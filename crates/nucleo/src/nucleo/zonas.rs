@@ -105,9 +105,10 @@ impl Geografia {
         self.mundo.region_en(p.x, p.y)
     }
 
-    /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable.
+    /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable: una celda transitable o el punto de un vado (desde el 2026-11-18 el
+    /// cauce va cerrado entero y el vado es un punto).
     pub(super) fn transitable(&self, p: Punto) -> bool {
-        self.mundo.transitable_en(p.x, p.y)
+        self.mundo.pisable_en(p.x, p.y)
     }
 
     /// ¿Se puede pisar `p`? Tierra firme dentro del mapa y transitable (ni agua ni río sin vado ni ladera de más de 35°).

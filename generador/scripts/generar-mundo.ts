@@ -6,7 +6,7 @@ import { generarMundoEstrategico } from '../src/mundoEstrategico';
 import { metalesARecursos, generarRecursosNoMetalicos } from '../src/recursos';
 import { colocarBandidosYAlijos } from '../src/contenidoVivo';
 import { componentes, construirGrafo, estadisticasGrafo, nodoMasCercano } from '../src/navegacion';
-import { bloquearRios, colocarVados, PARAMETROS_VADOS } from '../src/vados';
+import { bloquearRios, colocarVados, enlazarVados } from '../src/vados';
 import { escribirArtefacto } from '../src/artefacto';
 import { costeEnPunto, esTransitable } from '../src/costeMovimiento';
 import { evaluarElevacion, evaluarTerreno } from '../src/elevacion';
@@ -46,9 +46,10 @@ const aCeldaTransitable = (p: Point): Point => {
   if (!mejor) throw new Error(`Sin celda transitable cerca de (${p.x}, ${p.y})`);
   return mejor;
 };
-// Los ríos cortan el paso salvo en los vados: se trazan como barrera en la misma rejilla.
+// Los ríos cortan el paso salvo en los vados: el cauce entero va como barrera en la misma rejilla, y cada vado es un nodo del grafo en
+// su punto, enlazado con las dos orillas (2026-11-18).
 const vadosPorRio = colocarVados(r.rios);
-const bloqueoRios = bloquearRios({ ancho, alto }, r.rios, [...vadosPorRio.values()].flat(), lado);
+const bloqueoRios = bloquearRios({ ancho, alto }, r.rios, lado);
 // Parcelas, transitabilidad y artefacto muestrean el relieve en los mismos centros de celda de 48 unidades: los evaluó el
 // relieve una sola vez (también mide con ellos la conexión).
 const celdas = r.celdas;
@@ -75,8 +76,20 @@ const costeCelda = medir('coste por celda', () => {
   return c;
 });
 const costeEn = (p: Point): number => { const i = celdas.indice(p); return i >= 0 ? costeCelda[i]! : transitableCelda(p) ? costeEnPunto(r.elevacion, p) : 0; };
-const grafo = medir('grafo de navegación', () => construirGrafo({ ancho, alto }, transitableCelda, costeEn, rios.flatMap(x => x.vados),
-  { radioVado: PARAMETROS_VADOS.radioHueco, espaciado: lado, costePorExtremos: true }));
+const grafo = medir('grafo de navegación', () => {
+  const g = construirGrafo({ ancho, alto }, transitableCelda, costeEn, [], { espaciado: lado, costePorExtremos: true });
+  // Los nodos de la retícula, por celda (los ids van en orden fila-mayor sobre las celdas transitables).
+  const nodoDeCelda = new Int32Array(nx * ny).fill(-1);
+  for (const n of g.nodos) nodoDeCelda[Math.floor(n.y / lado) * nx + Math.floor(n.x / lado)] = n.id;
+  const celdaDe = (p: Point) => { const cx = Math.floor(p.x / lado), cy = Math.floor(p.y / lado); return cx < 0 || cy < 0 || cx >= nx || cy >= ny ? -1 : cy * nx + cx; };
+  const cojos = enlazarVados(g, rios.flatMap(x => x.vados.map(punto => ({ rio: x.id, punto }))), r.rios, {
+    pisableSinRios: p => { const i = celdaDe(p); return i >= 0 && celdas.transitable[i] === 1; },
+    coste: p => { const i = celdaDe(p); return i >= 0 && costeCelda[i]! > 0 ? costeCelda[i]! : costeEnPunto(r.elevacion, p); },
+    nodoEn: (cx, cy) => (cx < 0 || cy < 0 || cx >= nx || cy >= ny ? -1 : nodoDeCelda[cy * nx + cx]!),
+  });
+  if (cojos > 0) console.log(`vados sin alguna de sus dos orillas: ${cojos}`);
+  return g;
+});
 
 const comp = componentes(grafo), est = estadisticasGrafo(grafo, comp);
 const fuera = (puntos: Point[]) => puntos.filter(p => { const n = nodoMasCercano(grafo, p); return !n || comp.componenteDe[n.id] !== est.mayor; }).length;
@@ -96,7 +109,7 @@ const trigoEn = (p: Point): number => {
     { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! });
 };
 const mundo: MundoGenerado = {
-  seed, ancho, alto, generador: 'regional-20-costas-2+estrategico-3+cauce-1',
+  seed, ancho, alto, generador: 'regional-20-costas-2+estrategico-3+cauce-2',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
   regiones: r.elevacion.regional.areas.map(a => ({ id: a.id, nombre: a.nombre })),
   muestras: {
