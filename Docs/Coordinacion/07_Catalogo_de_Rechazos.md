@@ -196,6 +196,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.nodo_ocupado` | `PUEBLO_NODO_OCUPADO` | — |
 | `pueblo.fuera_de_la_zona` | `PUEBLO_FUERA_DE_LA_ZONA` | — |
 | `pueblo.sin_ruta` | `PUEBLO_SIN_RUTA` | El nodo no tiene ruta por tierra hasta la plaza madre: su carro no podría acarrear. |
+| `pueblo.junto_al_rio` | `PUEBLO_JUNTO_AL_RIO` | El nodo o el punto está tan cerca del trazo de un río que el pueblo o la aldea quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18). |
 | `pueblo.tecnologia_faltante` | `PUEBLO_TECNOLOGIA_FALTANTE` | — |
 | `pueblo.nivel_insuficiente` | `PUEBLO_NIVEL_INSUFICIENTE` | — |
 | `pueblo.sin_cupo` | `PUEBLO_SIN_CUPO` | — |
@@ -236,6 +237,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `avanzada.nada_que_cancelar` | `AVANZADA_NADA_QUE_CANCELAR` | No hay una mejora ni una reparación que cancelar. |
 | `avanzada.fuera_del_sitio` | `AVANZADA_FUERA_DEL_SITIO` | El sitio donde se pide colocarla no es tierra firme (desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea; antes: la columna del héroe no estaba en el sitio). |
 | `avanzada.sin_ruta` | `AVANZADA_SIN_RUTA` | Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04). |
+| `avanzada.junto_al_rio` | `AVANZADA_JUNTO_AL_RIO` | El sitio está tan cerca del trazo de un río que la avanzada quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18). |
 | `avanzada.faccion_ajena` | `AVANZADA_FACCION_AJENA` | — |
 | `avanzada.fuera_de_la_puerta` | `AVANZADA_FUERA_DE_LA_PUERTA` | — |
 | `avanzada.no_esta_pendiente` | `AVANZADA_NO_ESTA_PENDIENTE` | — |

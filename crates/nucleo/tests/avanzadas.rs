@@ -2265,3 +2265,19 @@ fn tras_la_convocatoria(n: &mut Nucleo) {
         n.avanzar_hasta(h);
     }
 }
+
+// ───────────────────────────── La orilla del río (ORILLA_RIO, 2026-11-18) ─────────────────────────────
+
+#[test]
+fn la_avanzada_no_se_coloca_donde_quedaria_dentro_del_cauce() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    // Un punto de tierra firme encima del agua dibujada (la celda de al lado del cauce o el hueco de un vado). La orilla se mira justo después de
+    // la tierra firme, antes que la zona.
+    let i = comun::real::nodos_encima_del_rio(&m.0)[0];
+    let q = m.0.nodos()[i].posicion.unwrap();
+    let pos = Punto::new(q.x, q.y);
+    let (_, heroe) = e.colocador(e.sitio());
+    assert_eq!(e.rechazada("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion: pos }), rechazos::AVANZADA_JUNTO_AL_RIO);
+}

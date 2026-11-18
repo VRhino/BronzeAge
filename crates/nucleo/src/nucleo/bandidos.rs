@@ -295,7 +295,11 @@ impl Nucleo {
         if cuantos == 0 {
             return;
         }
-        let valido = |s: &Self, p: Punto| s.geografia.as_ref().is_some_and(|g| g.es_tierra_firme(p)) && s.zona_en(p, None) == Zona::Ninguna && !s.en_proteccion_de_campamento(p);
+        // Fuera del cauce de los ríos con su maqueta (`ORILLA_RIO`, 2026-11-18).
+        let orilla = self.estado.reglas.economia.datos.orilla;
+        let valido = |s: &Self, p: Punto| {
+            s.geografia.as_ref().is_some_and(|g| g.es_tierra_firme(p) && !g.junto_al_rio(p, orilla.bandidos, &orilla)) && s.zona_en(p, None) == Zona::Ninguna && !s.en_proteccion_de_campamento(p)
+        };
         let mut creados = vec![];
         for _ in 0..cuantos {
             // El sorteo del punto presta el generador de la partida: se saca del estado mientras se mira el mapa y se devuelve con lo que gastó.
