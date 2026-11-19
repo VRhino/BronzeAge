@@ -283,10 +283,10 @@ pub fn campamento(n: &Nucleo, c: u32) -> Option<pb::CampamentoMercenarios> {
         version: n.version_de(Clase::Campamento, u64::from(c)),
         posicion: Some(punto(puerta)),
         origen,
-        // Los fijos y el militar, en el orden del TypeScript (`[...edificiosFijos, militar]`: taberna, las viviendas y el mercado; paridad P7).
+        // Los fijos y el militar, en el orden del TypeScript (`[...edificiosFijos, militar]`: taberna, las viviendas y el mercado; paridad P7), y la Armería de nivel 1 (2026-11-19).
         edificios: std::iter::once("taberna".to_owned())
             .chain(std::iter::repeat_n("vivienda".to_owned(), mr.mercenarios.viviendas))
-            .chain(["mercado".to_owned(), militar])
+            .chain(["mercado".to_owned(), militar, "armeria".to_owned()])
             .collect(),
         residentes_ids: n.heroes().filter(|h| residente(h)).map(|h| ids::heroe(h.heroe.id)).collect(),
         eligieron_como_inicial: n.eligieron_como_inicial(c),

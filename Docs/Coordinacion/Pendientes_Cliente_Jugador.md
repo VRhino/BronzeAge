@@ -6,6 +6,11 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### La Armería y seis viviendas más en la planta del campamento (2026-11-19; nucleo 0.51.0, militar 0.12.0, sin cambio de contrato ni partida nueva)
+
+1. **`CampamentoMercenarios.planta`** trae una pieza `armeria` de nivel 1 (colocada tras el edificio militar) y 16 viviendas en vez de 10; `edificios` termina en `armeria`. Las plantas de los campamentos que ya existían cambian (no se guardan). Qué haría el cliente: dibujar la Armería en la vista 3D del campamento (modelo de Armería, estilo de campamento) y comprobar que las 16 tiendas caben en la vista.
+2. **El tope de reclutas** del campamento pasa de 100 a 160 (`poblacion.maximo`); el cliente ya lo lee del ritmo, no tiene que cambiar nada salvo textos que digan 100.
+
 ### La tanda del 19: al carro desde la puerta, cancelar obras de pueblo, juego de recluta, Armería de los campamentos y lo que come la plaza (2026-11-19; contrato 0.30.0, nucleo 0.49.0, asentamiento 0.25.0, objetos 0.2.0, `OBJETOS` `bronzeage-objetos-2`, sin foto nueva ni partida nueva)
 
 Lo pidió Víctor el 2026-11-19. **El cliente TypeScript lo recoge en la misma tanda** (lo pidió él); esta entrada queda para el cliente de Unity.
