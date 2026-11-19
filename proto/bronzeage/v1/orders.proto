@@ -1171,6 +1171,11 @@ message OrdenSolicitarIngreso {
   string faccion_id = 1;
 }
 
+// El solicitante retira su solicitud de ingreso en esa Facción (2026-11-19); las que tenga en otras siguen. Sin haberla pedido, `faccion.no_ha_pedido`.
+message OrdenCancelarSolicitud {
+  string faccion_id = 1;
+}
+
 message OrdenSoltarCaravana {
   string ejercito_id = 1;
   string caravana_id = 2;
@@ -1483,5 +1488,6 @@ message Orden {
     OrdenConfigurarForja configurar_forja = 200;
     OrdenBajarseDeBatalla bajarse_de_batalla = 201;
     OrdenElegirEscuadrasDeBatalla elegir_escuadras_de_batalla = 202;
+    OrdenCancelarSolicitud cancelar_solicitud = 203;
   }
 }

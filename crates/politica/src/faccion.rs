@@ -77,8 +77,8 @@ pub enum ErrorFaccion {
     SigiloDuplicado,
     /// Ya es ciudadano de una Facción: 1 héroe, 1 Facción.
     YaPertenece,
-    /// Dejó una Facción hace menos de `cooldownCreacionFaccionDias`.
-    CooldownCreacion { libre_en: Instante },
+    /// Dejó una Facción hace menos de `cooldownIngresoFaccionHoras`: aún no pide el ingreso en ninguna (2026-11-19; antes bloqueaba crear).
+    CooldownIngreso { libre_en: Instante },
     /// No ha pedido entrar en esa Facción.
     NoHaPedido,
     /// No es ciudadano de ninguna Facción (o no de esa).
@@ -157,10 +157,10 @@ impl Facciones {
     }
 
     /// `crearFaccion` (§3.1). Validaciones en este orden: nombre no vacío y libre, sigilo del catálogo y no duplicado (si lo trae), el actor no es
-    /// ciudadano de ninguna, cooldown de creación. La Facción nace con el actor como primer ciudadano y Rey, nivel 1, sin Embajador, y sin
+    /// ciudadano de ninguna. Haber dejado otra hace poco no lo impide (2026-11-19: el cooldown es del ingreso, no de crear). La Facción nace con el actor como primer ciudadano y Rey, nivel 1, sin Embajador, y sin
     /// solicitar en ninguna otra; sin sigilo recibe [`crate::sigilo::Catalogo::sigilo_libre`] con la semilla `f-{id}` (el id del contrato).
     /// La memoria del héroe sin bandera, su columna y su reputación (0) son del núcleo.
-    pub fn crear(&mut self, r: &Reglas, id: FaccionId, actor: HeroeId, nombre: &str, sigilo: Option<Sigilo>, ahora: Instante) -> Result<&Faccion, ErrorFaccion> {
+    pub fn crear(&mut self, r: &Reglas, id: FaccionId, actor: HeroeId, nombre: &str, sigilo: Option<Sigilo>) -> Result<&Faccion, ErrorFaccion> {
         let nombre = nombre.trim();
         if nombre.is_empty() {
             return Err(ErrorFaccion::NombreVacio);
@@ -177,11 +177,6 @@ impl Facciones {
         }
         if self.de_heroe.contains_key(&actor) {
             return Err(ErrorFaccion::YaPertenece);
-        }
-        if let Some(&salio) = self.salidas.get(&actor) {
-            if ahora < salio + r.cooldown_creacion {
-                return Err(ErrorFaccion::CooldownCreacion { libre_en: salio + r.cooldown_creacion });
-            }
         }
         let sigilo = sigilo.unwrap_or_else(|| r.sigilo.sigilo_libre(&format!("f-{id}"), self.por_id.values().map(|f| &f.sigilo)));
         self.sin_solicitudes_de(actor);
@@ -233,8 +228,9 @@ impl Facciones {
     }
 
     /// `solicitarIngreso` (§3.2): entra en la lista de esa Facción; pedir dos veces es pedir lo mismo (`Ok(false)`). Se puede pedir a varias a la vez. 5B-6 (2026-10-24): se
-    /// rechaza yendo en un ejército (`en_ejercito`, como al dejarla): un ejército es siempre de una sola Facción.
-    pub fn solicitar(&mut self, faccion: FaccionId, h: HeroeId, en_ejercito: bool) -> Result<bool, ErrorFaccion> {
+    /// rechaza yendo en un ejército (`en_ejercito`, como al dejarla): un ejército es siempre de una sola Facción. Decisión del autor (2026-11-19): quien dejó una Facción hace
+    /// menos de `cooldownIngresoFaccionHoras` no pide el ingreso en ninguna, tampoco en la que deja (`CooldownIngreso`).
+    pub fn solicitar(&mut self, r: &Reglas, faccion: FaccionId, h: HeroeId, en_ejercito: bool, ahora: Instante) -> Result<bool, ErrorFaccion> {
         if self.de_heroe.contains_key(&h) {
             return Err(ErrorFaccion::YaPertenece);
         }
@@ -242,11 +238,27 @@ impl Facciones {
         if en_ejercito {
             return Err(ErrorFaccion::EnEjercito);
         }
+        if let Some(&salio) = self.salidas.get(&h) {
+            if ahora < salio + r.cooldown_ingreso {
+                return Err(ErrorFaccion::CooldownIngreso { libre_en: salio + r.cooldown_ingreso });
+            }
+        }
         if f.solicitudes.contains(&h) {
             return Ok(false);
         }
         f.solicitudes.push(h);
         Ok(true)
+    }
+
+    /// `cancelarSolicitud` (decisión del autor, 2026-11-19): el solicitante retira su solicitud de esa Facción; las que tenga en otras siguen. Sin más condiciones (también
+    /// yendo en un ejército, como denegarla). No haberla pedido es `NoHaPedido`.
+    pub fn cancelar_solicitud(&mut self, faccion: FaccionId, h: HeroeId) -> Result<(), ErrorFaccion> {
+        let f = self.por_id.get_mut(&faccion).ok_or(ErrorFaccion::NoExiste)?;
+        if !f.solicitudes.contains(&h) {
+            return Err(ErrorFaccion::NoHaPedido);
+        }
+        f.solicitudes.retain(|&x| x != h);
+        Ok(())
     }
 
     /// `responderSolicitud` (§3.2): aceptar lo hace ciudadano (al final de la lista) y lo quita de **todas** las listas; denegar solo lo quita de esta.
@@ -329,7 +341,7 @@ impl Facciones {
     }
 
     /// `dejarFaccion` (§3.3): solo la propia. Q7 (y 5A-4, 2026-10-24): se rechaza **siempre** que vaya en un ejército, aunque sea de un solo héroe, y en una
-    /// convocatoria con otros héroes (`en_ejercito`: lo sabe el núcleo). Un marcado no la deja: sale cuando acaba su contrato (entrada 48). Estampa `salidasFaccionPorHeroe` (el cooldown de creación). Dejar la residencia, los
+    /// convocatoria con otros héroes (`en_ejercito`: lo sabe el núcleo). Un marcado no la deja: sale cuando acaba su contrato (entrada 48). Estampa `salidasFaccionPorHeroe` (el cooldown de ingreso). Dejar la residencia, los
     /// cargos locales y la guarnición, y pasar al campamento más cercano (decisión 10), es del núcleo.
     pub fn dejar(&mut self, h: HeroeId, ahora: Instante, en_ejercito: bool) -> Result<Salida, ErrorFaccion> {
         if !self.de_heroe.contains_key(&h) {
@@ -465,7 +477,7 @@ pub(crate) mod pruebas {
 
     /// Una Facción `id` creada por `rey` con estos ciudadanos más, en orden.
     pub(crate) fn con_faccion(fs: &mut Facciones, id: FaccionId, nombre: &str, rey: HeroeId, mas: &[HeroeId]) {
-        fs.crear(&r(), id, rey, nombre, None, 0).unwrap();
+        fs.crear(&r(), id, rey, nombre, None).unwrap();
         for &h in mas {
             fs.otorgar(id, h).unwrap();
         }
@@ -514,7 +526,7 @@ pub(crate) mod pruebas {
     #[test]
     fn crear_hace_al_actor_primer_ciudadano_y_rey() {
         let mut fs = Facciones::default();
-        let f = fs.crear(&r(), 1, 10, "  Micenas ", None, 0).unwrap();
+        let f = fs.crear(&r(), 1, 10, "  Micenas ", None).unwrap();
         assert_eq!((f.nombre.as_str(), f.rey, f.embajador, f.ciudadanos.clone(), f.experiencia), ("Micenas", Some(10), None, vec![10], 0));
         assert_eq!(f.nivel(&r()), 1);
         assert_eq!(f.sigilo, r().sigilo.sigilo_libre("f-1", [].iter()));
@@ -525,35 +537,66 @@ pub(crate) mod pruebas {
     fn crear_valida_nombre_sigilo_pertenencia_y_cooldown_en_orden() {
         let mut fs = Facciones::default();
         let r = r();
-        assert_eq!(fs.crear(&r, 1, 10, "   ", None, 0).unwrap_err(), ErrorFaccion::NombreVacio);
-        fs.crear(&r, 1, 10, "Micenas", None, 0).unwrap();
-        assert_eq!(fs.crear(&r, 2, 11, " MICENAS", None, 0).unwrap_err(), ErrorFaccion::NombreDuplicado, "sin mirar mayúsculas");
+        assert_eq!(fs.crear(&r, 1, 10, "   ", None).unwrap_err(), ErrorFaccion::NombreVacio);
+        fs.crear(&r, 1, 10, "Micenas", None).unwrap();
+        assert_eq!(fs.crear(&r, 2, 11, " MICENAS", None).unwrap_err(), ErrorFaccion::NombreDuplicado, "sin mirar mayúsculas");
         let ocupado = fs.get(1).unwrap().sigilo.clone();
-        assert_eq!(fs.crear(&r, 2, 11, "Troya", Some(ocupado.clone()), 0).unwrap_err(), ErrorFaccion::SigiloDuplicado);
+        assert_eq!(fs.crear(&r, 2, 11, "Troya", Some(ocupado.clone())).unwrap_err(), ErrorFaccion::SigiloDuplicado);
         let mut malo = ocupado;
         malo.forma = "inventada".into();
-        assert_eq!(fs.crear(&r, 2, 11, "Troya", Some(malo), 0).unwrap_err(), ErrorFaccion::SigiloInvalido);
-        assert_eq!(fs.crear(&r, 2, 10, "Troya", None, 0).unwrap_err(), ErrorFaccion::YaPertenece, "1 héroe, 1 Facción");
-        // Dejarla estampa el cooldown de creación (7 días); pedir el ingreso en otra sigue libre.
-        fs.crear(&r, 2, 11, "Troya", None, 0).unwrap();
+        assert_eq!(fs.crear(&r, 2, 11, "Troya", Some(malo)).unwrap_err(), ErrorFaccion::SigiloInvalido);
+        assert_eq!(fs.crear(&r, 2, 10, "Troya", None).unwrap_err(), ErrorFaccion::YaPertenece, "1 héroe, 1 Facción");
+        // Dejarla no impide crear otra al instante (2026-11-19), y crear borra sus solicitudes en otras.
+        fs.crear(&r, 2, 11, "Troya", None).unwrap();
         fs.dejar(10, 5 * DIA, false).unwrap();
-        assert_eq!(fs.crear(&r, 3, 10, "Tebas", None, 6 * DIA).unwrap_err(), ErrorFaccion::CooldownCreacion { libre_en: 12 * DIA });
-        assert_eq!(fs.solicitar(2, 10, false), Ok(true));
-        assert!(fs.crear(&r, 3, 10, "Tebas", None, 12 * DIA).is_ok());
+        fs.dejar(11, 5 * DIA, false).unwrap();
+        fs.otorgar(2, 12).unwrap();
+        fs.get_mut(2).unwrap().solicitudes.push(10);
+        assert!(fs.crear(&r, 3, 10, "Tebas", None).is_ok(), "sin cooldown de creación");
         assert_eq!(fs.get(2).unwrap().solicitudes, Vec::<HeroeId>::new(), "crear borra sus solicitudes en otras");
+    }
+
+    #[test]
+    fn tras_dejarla_no_pide_el_ingreso_en_ninguna_hasta_que_pasa_el_cooldown() {
+        let mut fs = Facciones::default();
+        let r = r();
+        con_faccion(&mut fs, 1, "Micenas", 10, &[11]);
+        con_faccion(&mut fs, 2, "Troya", 20, &[]);
+        fs.dejar(11, 5 * DIA, false).unwrap();
+        let libre_en = 5 * DIA + r.cooldown_ingreso;
+        assert_eq!(fs.solicitar(&r, 2, 11, false, 5 * DIA), Err(ErrorFaccion::CooldownIngreso { libre_en }), "en otra");
+        assert_eq!(fs.solicitar(&r, 1, 11, false, libre_en - 1), Err(ErrorFaccion::CooldownIngreso { libre_en }), "tampoco en la que deja");
+        assert_eq!(fs.solicitar(&r, 1, 11, false, libre_en), Ok(true));
+    }
+
+    #[test]
+    fn el_solicitante_cancela_su_solicitud_y_las_demas_siguen() {
+        let mut fs = Facciones::default();
+        let r = r();
+        con_faccion(&mut fs, 1, "Micenas", 10, &[]);
+        con_faccion(&mut fs, 2, "Troya", 20, &[]);
+        fs.solicitar(&r, 1, 30, false, 0).unwrap();
+        fs.solicitar(&r, 2, 30, false, 0).unwrap();
+        assert_eq!(fs.cancelar_solicitud(1, 30), Ok(()));
+        assert_eq!(fs.get(1).unwrap().solicitudes, Vec::<HeroeId>::new());
+        assert_eq!(fs.get(2).unwrap().solicitudes, vec![30]);
+        assert_eq!(fs.cancelar_solicitud(1, 30), Err(ErrorFaccion::NoHaPedido), "ya no la tiene");
+        assert_eq!(fs.cancelar_solicitud(9, 30), Err(ErrorFaccion::NoExiste));
+        // Con la solicitud abierta sigue pudiendo pedir otra vez.
+        assert_eq!(fs.solicitar(&r, 1, 30, false, 0), Ok(true));
     }
 
     #[test]
     fn pedir_entra_en_la_lista_una_vez_y_un_ciudadano_no_pide() {
         let mut fs = Facciones::default();
         con_faccion(&mut fs, 1, "Micenas", 10, &[11]);
-        assert_eq!(fs.solicitar(1, 20, false), Ok(true));
-        assert_eq!(fs.solicitar(1, 20, false), Ok(false), "pedir dos veces es pedir lo mismo");
+        assert_eq!(fs.solicitar(&r(), 1, 20, false, 0), Ok(true));
+        assert_eq!(fs.solicitar(&r(), 1, 20, false, 0), Ok(false), "pedir dos veces es pedir lo mismo");
         assert_eq!(fs.get(1).unwrap().solicitudes, vec![20]);
-        assert_eq!(fs.solicitar(1, 11, false), Err(ErrorFaccion::YaPertenece));
-        assert_eq!(fs.solicitar(9, 21, false), Err(ErrorFaccion::NoExiste));
+        assert_eq!(fs.solicitar(&r(), 1, 11, false, 0), Err(ErrorFaccion::YaPertenece));
+        assert_eq!(fs.solicitar(&r(), 9, 21, false, 0), Err(ErrorFaccion::NoExiste));
         // 5B-6: en un ejército ni se pide ni se acepta; denegar sí.
-        assert_eq!(fs.solicitar(1, 22, true), Err(ErrorFaccion::EnEjercito));
+        assert_eq!(fs.solicitar(&r(), 1, 22, true, 0), Err(ErrorFaccion::EnEjercito));
         assert_eq!(fs.responder(1, 20, true, true), Err(ErrorFaccion::EnEjercito));
         assert_eq!(fs.responder(1, 20, false, true), Ok(()));
     }
@@ -563,9 +606,9 @@ pub(crate) mod pruebas {
         let mut fs = Facciones::default();
         con_faccion(&mut fs, 1, "Micenas", 10, &[]);
         con_faccion(&mut fs, 2, "Troya", 30, &[]);
-        fs.solicitar(1, 20, false).unwrap();
-        fs.solicitar(2, 20, false).unwrap();
-        fs.solicitar(1, 21, false).unwrap();
+        fs.solicitar(&r(), 1, 20, false, 0).unwrap();
+        fs.solicitar(&r(), 2, 20, false, 0).unwrap();
+        fs.solicitar(&r(), 1, 21, false, 0).unwrap();
         fs.responder(1, 21, false, false).unwrap();
         assert_eq!(fs.get(1).unwrap().solicitudes, vec![20]);
         assert_eq!(fs.faccion_de(21), None);

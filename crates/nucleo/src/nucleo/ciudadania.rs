@@ -55,8 +55,8 @@ fn rechazo_de_faccion(e: ErrorFaccion) -> (&'static str, String) {
         ErrorFaccion::SigiloInvalido => (FACCION_SIGILO_INVALIDO, "el sigilo lleva piezas que no son del catálogo o repite el color del fondo".into()),
         ErrorFaccion::SigiloDuplicado => (FACCION_SIGILO_DUPLICADO, "otra Facción lleva ese mismo sigilo".into()),
         ErrorFaccion::YaPertenece => (FACCION_YA_PERTENECE, "ya es ciudadano de una Facción: 1 héroe, 1 Facción".into()),
-        ErrorFaccion::CooldownCreacion { libre_en } => (FACCION_COOLDOWN_CREACION, format!("dejó una Facción hace poco: puede crear otra desde {libre_en}")),
-        ErrorFaccion::NoHaPedido => (FACCION_NO_HA_PEDIDO, "ese héroe no ha pedido entrar".into()),
+        ErrorFaccion::CooldownIngreso { libre_en } => (FACCION_COOLDOWN_INGRESO, format!("dejó una Facción hace poco: puede pedir el ingreso desde {libre_en}")),
+        ErrorFaccion::NoHaPedido => (FACCION_NO_HA_PEDIDO, "ese héroe no ha pedido entrar en esa Facción".into()),
         ErrorFaccion::NoPertenece => (FACCION_NO_PERTENECE, "no es ciudadano de ninguna Facción".into()),
         ErrorFaccion::EnEjercito => (FACCION_EN_EJERCITO, "va en un ejército o en un ejército en preparación: primero se separa (y si es el Líder, cede antes el mando)".into()),
         ErrorFaccion::NoCiudadano => (FACCION_NO_CIUDADANO, "el designado no es ciudadano de la Facción".into()),
@@ -215,7 +215,7 @@ impl Nucleo {
                 self.autorizar_heroe(p, *heroe, false)?;
                 self.exigir_nombre_de_jugador(nombre, "una Facción", rechazos::FACCION_NOMBRE_LARGO, rechazos::FACCION_NOMBRE_CONTROL)?;
                 let (id, pidio) = (self.siguiente_faccion(), self.pedidas_por(*heroe));
-                self.estado.politica.facciones.crear(&r, id, *heroe, nombre, sigilo.clone(), t).map_err(de_faccion)?;
+                self.estado.politica.facciones.crear(&r, id, *heroe, nombre, sigilo.clone()).map_err(de_faccion)?;
                 self.asegurar_tablon(t, crate::misiones::Dueno::Faccion(id));
                 self.tr.tocar_todos(Clase::Faccion, pidio);
                 self.tras_cambiar_de_faccion(t, *heroe, None);
@@ -230,11 +230,20 @@ impl Nucleo {
                 existe(self, *faccion)?;
                 self.misma_clase_que_la_faccion(*heroe, *faccion)?;
                 let en_ejercito = self.en_ejercito(*heroe);
-                if !self.estado.politica.facciones.solicitar(*faccion, *heroe, en_ejercito).map_err(de_faccion)? {
+                if !self.estado.politica.facciones.solicitar(&r, *faccion, *heroe, en_ejercito, t).map_err(de_faccion)? {
                     return Err(sin_cambios());
                 }
                 self.tr.tocar(Clase::Faccion, u64::from(*faccion));
                 self.emitir_propio(t, "faccion.solicitud_ingreso", vec![], vec![("faccion", i64::from(*faccion)), ("heroe", *heroe as i64)]);
+                Ok(vec![])
+            }
+            // Decisión del autor (2026-11-19): el solicitante retira su solicitud; sin más condiciones (también yendo en un ejército, como denegarla; combatiendo, el candado de la batalla la para como a todo).
+            Comando::CancelarSolicitud { heroe, faccion } => {
+                self.autorizar_heroe(p, *heroe, false)?;
+                existe(self, *faccion)?;
+                self.estado.politica.facciones.cancelar_solicitud(*faccion, *heroe).map_err(de_faccion)?;
+                self.tr.tocar(Clase::Faccion, u64::from(*faccion));
+                self.emitir_propio(t, "faccion.solicitud_cancelada", vec![], vec![("faccion", i64::from(*faccion)), ("heroe", *heroe as i64)]);
                 Ok(vec![])
             }
             Comando::ResponderSolicitud { heroe, faccion, solicitante, aceptar } => {

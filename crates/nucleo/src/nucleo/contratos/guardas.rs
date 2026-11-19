@@ -302,6 +302,7 @@ impl Nucleo {
             | Comando::ReclamarCaravana { .. }
             | Comando::SoltarCaravana { .. }
             | Comando::ResponderSolicitud { .. }
+            | Comando::CancelarSolicitud { .. }
             | Comando::DejarFaccion { .. }
             | Comando::AsignarRey { .. }
             | Comando::AsignarEmbajador { .. }

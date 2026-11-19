@@ -6,6 +6,13 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### Cancelar la solicitud de ingreso y el enfriamiento de ingreso (2026-11-19; contrato 0.31.0, nucleo 0.51.0, politica 0.8.0, sin foto nueva ni partida nueva)
+
+Lo pidió Víctor el 2026-11-19. **El cliente TypeScript lo recoge en la misma tanda** (0.224.0, lo pidió él); esta entrada queda para el cliente de Unity.
+
+1. **Cancelar la solicitud.** Orden nueva `cancelar_solicitud { faccion_id }` (campo 203 del oneof): el solicitante retira su solicitud de esa Facción; las demás siguen. Sin tenerla, `faccion.no_ha_pedido`. Hecho `CiudadaniaCambiada` con `como = "cancelada"` (`faccion.solicitud_cancelada`). Donde se muestra «pedido», un botón «Cancelar».
+2. **El enfriamiento al salir pasa de crear a entrar.** Dejar una Facción ya no impide crear otra (también con una solicitud abierta, que se cancela sola). Durante 24 h (`CIUDADANIA.cooldownIngresoFaccionHoras`) no se pide el ingreso en ninguna, tampoco en la que se dejó: rechazo `faccion.cooldown_ingreso`, que sustituye a `faccion.cooldown_creacion`. Los textos que hablaban de los 7 días de creación cambian.
+
 ### La tanda del 19: al carro desde la puerta, cancelar obras de pueblo, juego de recluta, Armería de los campamentos y lo que come la plaza (2026-11-19; contrato 0.30.0, nucleo 0.49.0, asentamiento 0.25.0, objetos 0.2.0, `OBJETOS` `bronzeage-objetos-2`, sin foto nueva ni partida nueva)
 
 Lo pidió Víctor el 2026-11-19. **El cliente TypeScript lo recoge en la misma tanda** (lo pidió él); esta entrada queda para el cliente de Unity.

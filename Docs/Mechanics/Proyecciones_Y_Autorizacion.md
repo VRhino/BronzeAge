@@ -458,12 +458,13 @@ Las **190 órdenes del jugador del contrato 05** (`orders.proto`, cuenta al día
 | `asignar_embajador` | `AsignarEmbajador` | la cuenta del héroe, Rey de la Facción | el designado es ciudadano (`faccion.no_ciudadano`); la Facción existe (`faccion.no_existe`) |
 | `asignar_rey` | `AsignarRey` | la cuenta del héroe, ciudadano de la Facción (con Rey, solo él) | el designado es ciudadano (`faccion.no_ciudadano`) |
 | `cambiar_residencia` | `CambiarResidencia` | la cuenta del héroe | una plaza de su Facción (`residencia.plaza_ajena`) donde aún no reside (`residencia.ya_reside`); sin cooldown (`residencia.cooldown`) ni ejército en preparación (`heroe.en_convocatoria`); ni la plaza de destino ni la suya están en batalla (`batalla.bloqueado`, 5B-10) |
-| `crear_faccion` | `CrearFaccion` | la cuenta del héroe | nombre (`faccion.nombre_vacio`, `faccion.nombre_duplicado`), sigilo (`faccion.sigilo_invalido`, `faccion.sigilo_duplicado`), sin Facción (`faccion.ya_pertenece`) ni cooldown de creación (`faccion.cooldown_creacion`) |
+| `crear_faccion` | `CrearFaccion` | la cuenta del héroe | nombre (`faccion.nombre_vacio`, `faccion.nombre_duplicado`), sigilo (`faccion.sigilo_invalido`, `faccion.sigilo_duplicado`), sin Facción (`faccion.ya_pertenece`); desde el 2026-11-19 sin enfriamiento tras dejar otra |
 | `dejar_faccion` | `DejarFaccion` | la cuenta del héroe | es ciudadano (`faccion.no_pertenece`); no va en un ejército ni en uno en preparación (`faccion.en_ejercito`, Q7); su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
 | `dejar_residencia` | `DejarResidencia` | la cuenta del héroe | reside en una plaza (`residencia.sin_plaza`); sin cooldown ni ejército en preparación; su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
 | `residir_en_campamento` | `ResidirEnCampamento` | la cuenta del héroe | el campamento existe y aún no reside en él (`residencia.ya_reside`); sin cooldown ni ejército en preparación; su plaza no está en batalla (`batalla.bloqueado`, 5B-10) |
 | `responder_solicitud` | `ResponderSolicitud` | la cuenta del héroe, Rey de la Facción | sin excepción: si la Facción no existe, `faccion.no_existe`; el héroe lo pidió (`faccion.no_ha_pedido`) y no es ciudadano de otra; aceptar a quien va en un ejército, `faccion.en_ejercito` (5B-6) |
-| `solicitar_ingreso` | `SolicitarIngreso` | la cuenta del héroe | la Facción existe y no es ciudadano de ninguna (`faccion.ya_pertenece`); no va en un ejército (`faccion.en_ejercito`, 5B-6); pedir dos veces no cambia nada |
+| `solicitar_ingreso` | `SolicitarIngreso` | la cuenta del héroe | la Facción existe y no es ciudadano de ninguna (`faccion.ya_pertenece`); no va en un ejército (`faccion.en_ejercito`, 5B-6); no dejó una Facción hace menos de `cooldownIngresoFaccionHoras`, tampoco esa (`faccion.cooldown_ingreso`, 2026-11-19); pedir dos veces no cambia nada |
+| `cancelar_solicitud` | `CancelarSolicitud` | la cuenta del héroe | solo la suya; la Facción existe (`faccion.no_existe`) y tiene su solicitud abierta (`faccion.no_ha_pedido`); 2026-11-19 |
 
 **La capital y el nombre de la plaza (sistema 5, 5C)**
 
@@ -558,7 +559,7 @@ El actor es siempre el héroe de la sesión: estos comandos no reciben un `heroe
 | `repartirPuntos`, `guardarLoadout`, `borrarLoadout`, `ordenarEscuadras`, `pasarAViveres` | siempre sobre el héroe del actor | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md), [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) |
 | `asignarGuarnicion`, `retirarGuarnicion` | residir donde guarnece y el cupo | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) |
 | `guardarEnAlmacenPersonal`, `sacarDelAlmacenPersonal` | ser el Líder de su columna | [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) |
-| `crearFaccion`, `solicitarIngreso`, `dejarFaccion` | «1 jugador, 1 Facción» y el cooldown son reglas de negocio de la partida (qué transición es válida), no de autorización | [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) |
+| `crearFaccion`, `solicitarIngreso`, `cancelarSolicitud`, `dejarFaccion` | «1 jugador, 1 Facción» y el enfriamiento de ingreso son reglas de negocio de la partida (qué transición es válida), no de autorización | [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) |
 | `fundar` | ser el titular de la Caravana de Fundación que lleva (lo mira el comando) | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) |
 | `aportarARefundacion`, `retirarDeRefundacion`, `comprarCaravanaDeRefundacion` | dónde está, que su Facción no tenga plazas y el fondo | [`Fundacion_Y_Refundacion.md`](Fundacion_Y_Refundacion.md) |
 | `reclutarEnCampamento`, `pedirPrestamo`, `reponerPrestamo`, `comprarEnCampamento`, `repostarEnCampamento` | residir en el campamento / estar dentro o a su puerta (`campamento.lejos`) y el pago | [`Campamentos_Mercenarios.md`](Campamentos_Mercenarios.md) |

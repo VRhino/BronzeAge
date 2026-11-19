@@ -848,6 +848,7 @@ impl Ctx<'_> {
             // ── La Facción, la ciudadanía y la residencia (sistema 5, 5B) ──
             Cuerpo::CrearFaccion(o) => Comando::CrearFaccion { heroe: self.mi_heroe()?, nombre: o.nombre.clone(), sigilo: o.sigilo.as_ref().map(sigilo) },
             Cuerpo::SolicitarIngreso(o) => Comando::SolicitarIngreso { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)? },
+            Cuerpo::CancelarSolicitud(o) => Comando::CancelarSolicitud { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)? },
             Cuerpo::DejarFaccion(_) => Comando::DejarFaccion { heroe: self.mi_heroe()? },
             Cuerpo::ResponderSolicitud(o) => Comando::ResponderSolicitud { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, solicitante: self.heroe(&o.heroe_id)?, aceptar: o.aceptar },
             Cuerpo::AsignarRey(o) => Comando::AsignarRey { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, designado: self.heroe(&o.heroe_id)? },

@@ -629,8 +629,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `faccion.sigilo_invalido` | `FACCION_SIGILO_INVALIDO` | Alguna pieza del sigilo no es del catálogo, o los dos colores del fondo son el mismo. |
 | `faccion.sigilo_duplicado` | `FACCION_SIGILO_DUPLICADO` | Otra Facción lleva un sigilo idéntico. |
 | `faccion.ya_pertenece` | `FACCION_YA_PERTENECE` | Ya es ciudadano de una Facción: 1 héroe, 1 Facción. |
-| `faccion.cooldown_creacion` | `FACCION_COOLDOWN_CREACION` | Dejó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`. |
-| `faccion.no_ha_pedido` | `FACCION_NO_HA_PEDIDO` | Responder a quien no ha pedido entrar. |
+| `faccion.cooldown_ingreso` | `FACCION_COOLDOWN_INGRESO` | Pide el ingreso habiendo dejado una Facción hace menos de `CIUDADANIA.cooldownIngresoFaccionHoras` (también en la que dejó; 2026-11-19, sustituye a `faccion.cooldown_creacion`). |
+| `faccion.no_ha_pedido` | `FACCION_NO_HA_PEDIDO` | Responder a quien no ha pedido entrar, o cancelar una solicitud que no se tiene. |
 | `faccion.no_pertenece` | `FACCION_NO_PERTENECE` | No es ciudadano de ninguna Facción. |
 | `faccion.en_ejercito` | `FACCION_EN_EJERCITO` | Dejar la Facción yendo en un ejército (aunque sea solo) o en uno en preparación (Q7): primero se separa. |
 | `faccion.no_ciudadano` | `FACCION_NO_CIUDADANO` | El designado para Rey o Embajador no es ciudadano de la Facción. |
