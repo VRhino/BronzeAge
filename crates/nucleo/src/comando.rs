@@ -480,6 +480,8 @@ pub enum Comando {
     CrearFaccion { heroe: u64, nombre: String, sigilo: Option<Sigilo> },
     /// Pide el ingreso en una Facción (§3.2): entra en su lista de solicitantes. Se puede pedir a varias a la vez.
     SolicitarIngreso { heroe: u64, faccion: u32 },
+    /// El solicitante retira su solicitud de ingreso en esa Facción (decisión del autor, 2026-11-19); las que tenga en otras siguen.
+    CancelarSolicitud { heroe: u64, faccion: u32 },
     /// El Rey (`heroe`) acepta o deniega la solicitud de `solicitante` (§3.2). Aceptada, es ciudadano y sus solicitudes en las demás caen.
     ResponderSolicitud { heroe: u64, faccion: u32, solicitante: u64, aceptar: bool },
     /// Deja su Facción, con la sucesión del trono (§3.3). No se deja yendo en un ejército (Q7). Si reside en una plaza, pasa al campamento de mercenarios más cercano.
@@ -851,6 +853,7 @@ impl Comando {
             | Comando::ReclamarCaravana { .. }
             | Comando::CrearFaccion { .. }
             | Comando::SolicitarIngreso { .. }
+            | Comando::CancelarSolicitud { .. }
             | Comando::DejarFaccion { .. }
             | Comando::CambiarResidencia { .. }
             | Comando::ResidirEnCampamento { .. }
@@ -1271,6 +1274,7 @@ impl Comando {
             | Comando::ElegirEscuadrasDeBatalla { heroe, .. }
             | Comando::CrearFaccion { heroe, .. }
             | Comando::SolicitarIngreso { heroe, .. }
+            | Comando::CancelarSolicitud { heroe, .. }
             | Comando::DejarFaccion { heroe }
             | Comando::AsignarRey { heroe, .. }
             | Comando::AsignarEmbajador { heroe, .. }
@@ -1372,6 +1376,7 @@ impl Comando {
             Comando::ProponerAnexion { absorbente: a, absorbida: b, .. } | Comando::ProponerFusion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b))]),
             Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. }
             | Comando::SolicitarIngreso { faccion, .. }
+            | Comando::CancelarSolicitud { faccion, .. }
             | Comando::ResponderSolicitud { faccion, .. }
             | Comando::AsignarRey { faccion, .. }
             | Comando::AsignarEmbajador { faccion, .. }
@@ -2600,6 +2605,11 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*faccion);
             }
+            Comando::CancelarSolicitud { heroe, faccion } => {
+                w.u8(238);
+                w.u64(*heroe);
+                w.u32(*faccion);
+            }
             Comando::ResponderSolicitud { heroe, faccion, solicitante, aceptar } => {
                 w.u8(130);
                 w.u64(*heroe);
@@ -2958,6 +2968,7 @@ impl Peticion {
                 Comando::CrearFaccion { heroe, nombre, sigilo: if r.bool()? { Some(sigilo_leer(&mut r)?) } else { None } }
             }
             129 => Comando::SolicitarIngreso { heroe: r.u64()?, faccion: r.u32()? },
+            238 => Comando::CancelarSolicitud { heroe: r.u64()?, faccion: r.u32()? },
             130 => Comando::ResponderSolicitud { heroe: r.u64()?, faccion: r.u32()?, solicitante: r.u64()?, aceptar: r.bool()? },
             131 => Comando::DejarFaccion { heroe: r.u64()? },
             132 => Comando::AsignarRey { heroe: r.u64()?, faccion: r.u32()?, designado: r.u64()? },
@@ -3753,9 +3764,9 @@ pub mod rechazos {
     pub const FACCION_SIGILO_DUPLICADO: &str = "faccion.sigilo_duplicado";
     /// Ya es ciudadano de una Facción: 1 héroe, 1 Facción.
     pub const FACCION_YA_PERTENECE: &str = "faccion.ya_pertenece";
-    /// Dejó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`.
-    pub const FACCION_COOLDOWN_CREACION: &str = "faccion.cooldown_creacion";
-    /// Responder a quien no ha pedido entrar.
+    /// Pide el ingreso habiendo dejado una Facción hace menos de `CIUDADANIA.cooldownIngresoFaccionHoras` (también en la que dejó; 2026-11-19, sustituye a `faccion.cooldown_creacion`).
+    pub const FACCION_COOLDOWN_INGRESO: &str = "faccion.cooldown_ingreso";
+    /// Responder a quien no ha pedido entrar, o cancelar una solicitud que no se tiene.
     pub const FACCION_NO_HA_PEDIDO: &str = "faccion.no_ha_pedido";
     /// No es ciudadano de ninguna Facción.
     pub const FACCION_NO_PERTENECE: &str = "faccion.no_pertenece";
@@ -4165,6 +4176,7 @@ mod pruebas {
             Comando::CrearFaccion { heroe: 2, nombre: "Micenas".into(), sigilo: None },
             Comando::CrearFaccion { heroe: 2, nombre: "Troya".into(), sigilo: Some(sigilo) },
             Comando::SolicitarIngreso { heroe: 2, faccion: 3 },
+            Comando::CancelarSolicitud { heroe: 2, faccion: 3 },
             Comando::ResponderSolicitud { heroe: 2, faccion: 3, solicitante: 9, aceptar: true },
             Comando::ResponderSolicitud { heroe: 2, faccion: 3, solicitante: 9, aceptar: false },
             Comando::DejarFaccion { heroe: 2 },

@@ -1233,6 +1233,7 @@ impl Nucleo {
             },
             Comando::CrearFaccion { .. }
             | Comando::SolicitarIngreso { .. }
+            | Comando::CancelarSolicitud { .. }
             | Comando::ResponderSolicitud { .. }
             | Comando::DejarFaccion { .. }
             | Comando::AsignarRey { .. }

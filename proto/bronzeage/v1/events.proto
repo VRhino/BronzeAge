@@ -234,7 +234,7 @@ message SolicitudDeIngreso {
 message CiudadaniaCambiada {
   string heroe_id = 1;
   string faccion_id = 2;
-  string como = 3;                       // creada | ingreso | denegada | abandono
+  string como = 3;                       // creada | ingreso | denegada | cancelada (2026-11-19) | abandono
 }
 
 // ───────────────────────────── La tecnología y los Aedas (6G) ─────────────────────────────

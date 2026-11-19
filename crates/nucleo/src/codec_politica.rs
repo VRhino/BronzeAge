@@ -274,13 +274,13 @@ mod pruebas {
     fn la_politica_da_la_vuelta_entera() {
         let reglas = politica::Reglas::default();
         let mut fs = Facciones::default();
-        fs.crear(&reglas, 1, 10, "Micenas", None, 5).unwrap();
+        fs.crear(&reglas, 1, 10, "Micenas", None).unwrap();
         fs.otorgar(1, 11).unwrap();
         fs.asignar_embajador(1, 11).unwrap();
         fs.otorgar_marcado(1, 12, Marca::Temporal).unwrap();
         fs.otorgar_marcado(1, 13, Marca::Permanente).unwrap();
-        fs.crear(&reglas, 2, 20, "Troya", None, 5).unwrap();
-        fs.solicitar(2, 30, false).unwrap();
+        fs.crear(&reglas, 2, 20, "Troya", None).unwrap();
+        fs.solicitar(&reglas, 2, 30, false, 0).unwrap();
         fs.registrar_derrota(2, Some(1));
         fs.crear_vacia(&reglas, 3);
         fs.registrar_derrota(3, None);

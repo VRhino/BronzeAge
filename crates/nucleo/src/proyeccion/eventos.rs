@@ -29,7 +29,7 @@
 //! | `CargoAsignado` (5H) | `cargo.local_asignado`, `cargo.rey_asignado`, `cargo.embajador_asignado` |
 //! | `TituloCambiado` (5H) | `titulo.nace`, `titulo.cambia_manos` |
 //! | `SolicitudDeIngreso` (5H) | `faccion.solicitud_ingreso` |
-//! | `CiudadaniaCambiada` (5H) | `faccion.creada`, `faccion.ciudadania_union`, `faccion.solicitud_denegada`, `faccion.abandonada` |
+//! | `CiudadaniaCambiada` (5H) | `faccion.creada`, `faccion.ciudadania_union`, `faccion.solicitud_denegada`, `faccion.solicitud_cancelada` (2026-11-19), `faccion.abandonada` |
 //! | `LogroCumplido` (6G) | `tecnologia.logro` (público) |
 //! | `EraComenzada` (6G) | `era.comienza` (público) |
 //! | `TecnologiaAparecida`, `TecnologiaAdoptada` (6G) | `tecnologia.aparece`, `tecnologia.adoptada` |
@@ -340,13 +340,14 @@ fn tipado(n: &Nucleo, ev: &EventoNucleo) -> Option<Tipado> {
         }),
         ("titulo.nace" | "titulo.cambia_manos", _) => Tipado::TituloCambiado(pb::TituloCambiado { titulo_id: texto_de(ev, "titulo")?, faccion_id: faccion("faccion")?, faccion_anterior_id: faccion("faccionAnterior") }),
         ("faccion.solicitud_ingreso", _) => Tipado::SolicitudDeIngreso(pb::SolicitudDeIngreso { heroe_id: heroe("heroe"), faccion_id: faccion("faccion")? }),
-        ("faccion.creada" | "faccion.ciudadania_union" | "faccion.solicitud_denegada" | "faccion.abandonada", _) => Tipado::CiudadaniaCambiada(pb::CiudadaniaCambiada {
+        ("faccion.creada" | "faccion.ciudadania_union" | "faccion.solicitud_denegada" | "faccion.solicitud_cancelada" | "faccion.abandonada", _) => Tipado::CiudadaniaCambiada(pb::CiudadaniaCambiada {
             heroe_id: heroe("heroe"),
             faccion_id: faccion("faccion")?,
             como: match codigo {
                 "faccion.creada" => "creada",
                 "faccion.ciudadania_union" => "ingreso",
                 "faccion.solicitud_denegada" => "denegada",
+                "faccion.solicitud_cancelada" => "cancelada",
                 _ => "abandono",
             }
             .into(),
