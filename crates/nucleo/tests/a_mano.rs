@@ -478,16 +478,18 @@ fn dentro_de_una_plaza_o_a_su_puerta_el_ciudadano_carga_su_carro_del_almacen_y_s
     let ConCaravana { mut e, a, c, ana, ej, .. } = con_caravana(m);
     let cargar = |heroe, plaza, recurso, cantidad| Comando::CargarDePlaza { heroe, asentamiento: plaza, recurso, cantidad };
     let dejar = |heroe, plaza, recurso, cantidad| Comando::DejarEnPlaza { heroe, asentamiento: plaza, recurso, cantidad };
-    // A la puerta (2026-11-19): su Líder saca al carro de la columna sin entrar; dejar, no.
+    // A la puerta (2026-11-19): su Líder saca al carro de la columna y deja en el almacén sin entrar.
     e.dar(a, Madera, 10_000);
     let (almacen, carro) = (e.almacen(a, Madera), e.carro(ej, Madera));
     e.ok("ana", cargar(ana, a, Madera, 10_000));
     assert_eq!((e.almacen(a, Madera), e.carro(ej, Madera)), (almacen - 10_000, carro + 10_000));
-    assert_eq!(e.no("ana", dejar(ana, a, Madera, 10_000)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA);
-    // Lejos de la puerta, tampoco saca.
+    e.ok("ana", dejar(ana, a, Madera, 4_000));
+    assert_eq!((e.almacen(a, Madera), e.carro(ej, Madera)), (almacen - 6_000, carro + 6_000), "a la puerta también se deja");
+    // Lejos de la puerta, ni saca ni deja.
     let lejos = en_tierra(&m.0, e.n.estado().asentamientos[&a].posicion, 20_000, 0);
     e.llevar("ana", ej, lejos);
     assert_eq!(e.no("ana", cargar(ana, a, Madera, 1_000)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA);
+    assert_eq!(e.no("ana", dejar(ana, a, Madera, 1_000)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA);
 
     // De visita en C (de su Facción, no reside): carga en el carro de la columna con la que entró, en unidades enteras, y lo deja de vuelta.
     let pc = e.n.estado().asentamientos[&c].posicion;
