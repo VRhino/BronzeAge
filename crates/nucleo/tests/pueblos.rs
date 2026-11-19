@@ -1865,9 +1865,10 @@ fn dentro_se_deja_en_el_almacen_local_solo_lo_que_produce_el_pueblo_y_se_carga_l
     // Y sale con ello.
     e.ok("ana", Comando::SalirDePueblo { pueblo, heroe: h0 });
     assert_eq!(e.carga(c0)[&Cobre], capacidad);
-    // A la puerta (2026-11-19) se carga como dentro (aquí ya no cabe nada); dejar, solo dentro.
+    // A la puerta (2026-11-19) se carga y se deja como dentro (aquí ya no cabe nada en el carro; en el almacén, lo que se sacó).
     assert_eq!(e.rechazada("ana", cargar(Cobre, 1_000)), rechazos::CARRO_LLENO, "a la puerta vale: lo que falla es el sitio del carro");
-    assert_eq!(e.rechazada("ana", dejar(Cobre, 1_000)), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO);
+    e.ok("ana", dejar(Cobre, 1_000));
+    assert_eq!((e.carga(c0)[&Cobre], e.pueblo(pueblo).almacen.cantidad(Cobre)), (capacidad - 1_000, 2_000), "a la puerta se deja");
 }
 
 #[test]
