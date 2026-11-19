@@ -9,6 +9,8 @@
 //!   piden su Era del mundo. El plano y los crisoles salen de su mochila. Los materiales, en la plaza donde reside, de su almacén personal y lo que falte del carro; en cualquier
 //!   otra, del carro con el que entró ([`Nucleo::carro_dentro`]). El impuesto sale de sus monedas y entra en el fondo de la plaza. La calidad sale del generador del estado y la
 //!   pieza lleva `obj-N` del contador de ids del estado, que solo se gasta si la forja se acepta. Todo o nada.
+//! - **La tienda de los campamentos de mercenarios** (2026-11-19): todos tienen una Armería de nivel 1 en la que se compra y se vende como en una plaza, pero sin Facción no
+//!   abren ningún metal: venden lo que no pide tecnología (el tier I y las monturas). No se forja.
 //! - **Configurar la forja**: el Tesorero o el Gobernador, residente y dentro, abre o cierra la forja a un grupo de fuera con un recargo de `OBJETOS.forja.recargosPct`.
 //! - **Usar** (D2): donde se equipa. Una medalla de tropa, sobre una escuadra suya que no sea prestada ni esté en el nivel máximo, sin el bonus de Ejército permanente (lo que sobra
 //!   al llegar al máximo se pierde); una del héroe, su porcentaje de lo que pide su nivel para el siguiente; el cofre, una montura que llega como lo que llega sin pedirlo (D17 y
@@ -78,6 +80,23 @@ fn escuadra_para_medalla(r: &militar::Reglas, h: &Heroe, escuadra: Option<u64>) 
     Ok(e.id)
 }
 
+/// Dónde está la tienda en la que compra o vende el héroe.
+#[derive(Clone, Copy)]
+enum Tienda {
+    Plaza(u64),
+    Campamento(u32),
+}
+
+impl Tienda {
+    /// El dato del hecho: `plaza` o `campamento`.
+    fn dato(self) -> (&'static str, i64) {
+        match self {
+            Tienda::Plaza(p) => ("plaza", p as i64),
+            Tienda::Campamento(c) => ("campamento", i64::from(c)),
+        }
+    }
+}
+
 impl Nucleo {
     pub(super) fn ejecutar_armeria(&mut self, t: Instante, p: &Peticion) -> Result<(), Respuesta> {
         let v = self.estado.version;
@@ -86,23 +105,27 @@ impl Nucleo {
         let cat = &mr.objetos;
         match &p.comando {
             Comando::ComprarObjeto { heroe, objeto } => {
-                let plaza = self.armeria_donde_esta(p, *heroe)?;
-                let faccion = self.estado.asentamientos[&plaza].faccion;
+                let tienda = self.tienda_donde_esta(p, *heroe)?;
+                // El metal lo abre la Facción de la plaza; un campamento de mercenarios no tiene Facción: solo lo que no pide tecnología (2026-11-19).
+                let faccion = match tienda {
+                    Tienda::Plaza(plaza) => Some(self.estado.asentamientos[&plaza].faccion),
+                    Tienda::Campamento(_) => None,
+                };
                 let h = &self.heroe(*heroe).expect("existe").heroe;
                 let (mut mochila, mut monedas) = (h.mochila.clone(), h.monedas);
-                comprar(&mut mochila, cat, objeto, &mut monedas, |tec| self.estado.tiene_tecnologia(faccion, tec)).map_err(|e| rechazo(rechazo_de_tienda(e)))?;
+                comprar(&mut mochila, cat, objeto, &mut monedas, |tec| faccion.is_some_and(|f| self.estado.tiene_tecnologia(f, tec))).map_err(|e| rechazo(rechazo_de_tienda(e)))?;
                 let precio = h.monedas - monedas;
                 let h = &mut self.heroe_mut(*heroe).heroe;
                 (h.mochila, h.monedas) = (mochila, monedas);
-                self.hecho_de_objeto(t, "heroe.objeto_comprado", vec![("heroe", *heroe as i64), ("plaza", plaza as i64), ("precio", precio)], objeto, vec![]);
+                self.hecho_de_objeto(t, "heroe.objeto_comprado", vec![("heroe", *heroe as i64), tienda.dato(), ("precio", precio)], objeto, vec![]);
             }
             Comando::VenderObjeto { heroe, casilla, cantidad } => {
-                let plaza = self.armeria_donde_esta(p, *heroe)?;
+                let tienda = self.tienda_donde_esta(p, *heroe)?;
                 let h = &mut self.heroe_mut(*heroe).heroe;
                 let objeto = h.mochila.casillas.get(casilla).map(|c| c.pieza.objeto.clone());
                 let cobro = vender(&mut h.mochila, cat, *casilla, *cantidad, &mut h.monedas).map_err(|e| rechazo(rechazo_de_tienda(e)))?;
                 let objeto = objeto.expect("se vendió de una casilla con pieza");
-                let datos = vec![("heroe", *heroe as i64), ("plaza", plaza as i64), ("cantidad", i64::from(*cantidad)), ("cobro", cobro)];
+                let datos = vec![("heroe", *heroe as i64), tienda.dato(), ("cantidad", i64::from(*cantidad)), ("cobro", cobro)];
                 self.hecho_de_objeto(t, "heroe.objeto_vendido", datos, &objeto, vec![]);
             }
             Comando::ForjarObjeto { heroe, objeto } => {
@@ -241,6 +264,16 @@ impl Nucleo {
         match self.heroe(heroe).expect("existe").heroe.presencia.ubicacion {
             Ubicacion::Asentamiento(a) if self.con_armeria(u64::from(a)) => Ok(u64::from(a)),
             _ => Err(Respuesta::rechazo(rechazos::ARMERIA_SIN_ARMERIA, "se compra, se vende y se forja dentro de una plaza con la Armería activa", self.estado.version)),
+        }
+    }
+
+    /// La tienda de la Armería (comprar y vender): dentro de una plaza con la Armería activa o, desde el 2026-11-19, dentro de cualquier campamento de mercenarios, que tiene
+    /// la suya de nivel 1 (solo tienda: no se forja).
+    fn tienda_donde_esta(&self, p: &Peticion, heroe: u64) -> Result<Tienda, Respuesta> {
+        self.autorizar_heroe(p, heroe, false)?;
+        match self.heroe(heroe).expect("existe").heroe.presencia.ubicacion {
+            Ubicacion::Mercenarios(c) => Ok(Tienda::Campamento(c)),
+            _ => self.armeria_donde_esta(p, heroe).map(Tienda::Plaza),
         }
     }
 
@@ -421,8 +454,8 @@ mod pruebas {
         heroe(&mut n).heroe.monedas = 10_000;
         heroe(&mut n).heroe.mochila.capacidad = 2;
         assert_eq!(orden(&mut n, comprar("dagas_cobre")), Err(rechazos::MOCHILA_LLENA), "sin cobrar (D17)");
-        // Sin Armería activa, o fuera de una plaza, no hay tienda.
-        heroe(&mut n).heroe.presencia.ubicacion = Ubicacion::Mercenarios(0);
+        // Sin Armería activa, o fuera de una plaza y de un campamento de mercenarios, no hay tienda.
+        heroe(&mut n).heroe.presencia.ubicacion = Ubicacion::Pueblo(0);
         assert_eq!(orden(&mut n, comprar("montura_tiro")), Err(rechazos::ARMERIA_SIN_ARMERIA));
         heroe(&mut n).heroe.presencia.ubicacion = Ubicacion::Asentamiento(PLAZA as u32);
         n.estado.asentamientos.get_mut(&PLAZA).unwrap().economia.edificios.last_mut().unwrap().estado = EstadoEdificio::EnConstruccion;
@@ -621,10 +654,10 @@ mod pruebas {
             fondo: 75,
         });
         let dentro = crate::proyeccion::vista::plaza_desde_dentro(&n, PLAZA);
-        assert_eq!((dentro.armeria_activa, &dentro.forja, &dentro.metales_armeria[..]), (true, &esperada, &["inicio".to_owned()][..]), "sin tecnologías, solo el de inicio");
+        assert_eq!((dentro.armeria_activa, &dentro.forja, &dentro.metales_armeria[..]), (true, &esperada, &["inicio".to_owned(), "recluta".to_owned()][..]), "sin tecnologías, solo el de inicio y el de recluta");
         abrir(&mut n, FACCION, &["metalurgia_cobre", "aleacion_bronce"]);
         let interior = crate::proyeccion::interior::asentamiento(&n, PLAZA).unwrap();
-        assert_eq!((&interior.forja, interior.metales_armeria), (&esperada, vec!["bronce".to_owned(), "cobre".to_owned(), "inicio".to_owned()]));
+        assert_eq!((&interior.forja, interior.metales_armeria), (&esperada, vec!["bronce".to_owned(), "cobre".to_owned(), "inicio".to_owned(), "recluta".to_owned()]));
         // Sin Armería activa, ningún metal.
         n.estado.asentamientos.get_mut(&PLAZA).unwrap().economia.edificios.last_mut().unwrap().estado = EstadoEdificio::EnConstruccion;
         let dentro = crate::proyeccion::vista::plaza_desde_dentro(&n, PLAZA);

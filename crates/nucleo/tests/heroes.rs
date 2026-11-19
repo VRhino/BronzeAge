@@ -314,6 +314,30 @@ fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_po
     assert_eq!(e.n.heroe(h).unwrap().heroe.mochila.casillas.values().map(|c| c.pieza.objeto.as_str()).collect::<Vec<_>>(), ["botas_media_inicio", "montura_tiro"]);
 }
 
+/// 2026-11-19: cada campamento de mercenarios tiene una Armería de nivel 1, solo tienda: sin Facción no abre ningún metal (vende el tier I y las monturas) y no forja. La tienda ya no vende
+/// las armaduras de inicio: las sustituye el juego de recluta.
+#[test]
+fn en_un_campamento_de_mercenarios_se_compra_y_se_vende_lo_que_no_pide_tecnologia_y_no_se_forja() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let h = e.heroe("ana", 0);
+    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(0) });
+    let comprar = |objeto: &str| Comando::ComprarObjeto { heroe: h, objeto: objeto.into() };
+    let monedas = |e: &Escenario| e.n.heroe(h).unwrap().heroe.monedas;
+    let antes = monedas(&e);
+    e.ok("ana", comprar("casco_ligera_recluta"));
+    assert_eq!(monedas(&e), antes - 150);
+    let hc = &hechos(&e.n, "heroe.objeto_comprado")[0];
+    assert_eq!(dato(hc, "campamento"), 0, "el hecho nombra el campamento");
+    assert_eq!(e.rechazada("ana", comprar("torso_ligera_inicio")), rechazos::ARMERIA_NO_SE_VENDE, "la de inicio ya no se vende");
+    assert_eq!(e.rechazada("ana", comprar("casco_ligera_cobre")), rechazos::ARMERIA_SIN_TECNOLOGIA, "sin Facción, ningún metal");
+    e.ok("ana", comprar("montura_estepa"));
+    let casilla = *e.n.heroe(h).unwrap().heroe.mochila.casillas.iter().find(|(_, c)| c.pieza.objeto == "montura_estepa").unwrap().0;
+    e.ok("ana", Comando::VenderObjeto { heroe: h, casilla, cantidad: 1 });
+    assert_eq!(monedas(&e), antes - 150 - 600 + 300);
+    assert_eq!(e.rechazada("ana", Comando::ForjarObjeto { heroe: h, objeto: "dagas_cobre".into() }), rechazos::ARMERIA_SIN_ARMERIA, "en el campamento no se forja");
+}
+
 /// D1 y D2: las cuatro órdenes de la Armería y de los consumibles, de punta a punta, en una plaza con su Armería levantada, y la forja en cualquier plaza (Heroe_Y_Tropa §4.6):
 /// `configurar_forja`, la forja cerrada y abierta a un neutral de visita, la Era y lo que se ve. Los planos, los crisoles y los consumibles son del botín, que aquí no sale, así
 /// que la forja y usar llegan hasta su primera regla; sus caminos buenos y cada rechazo, en `nucleo::armeria`.

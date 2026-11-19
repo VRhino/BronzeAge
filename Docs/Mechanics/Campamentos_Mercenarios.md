@@ -152,6 +152,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Reclutar, tropa prestada, comprar con el almacén personal | **solo el residente** | dentro o con la columna a la puerta |
 | Comprar de visita | cualquiera, con el oro del carro (sin trigo) | `Comercio_Caravanas.md` §9.2 |
 | Repostar víveres | cualquiera, gratis | `Comercio_Caravanas.md` §9.2b |
+| Comprar y vender objetos en su Armería de nivel 1 (2026-11-19) | cualquiera, con sus monedas; solo lo que no pide tecnología (el tier I y las monturas), sin forja | dentro ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6) |
 | Aportar al fondo de refundación | ciudadano de una Facción **sin plazas**, dentro o con la columna a la puerta: del almacén personal residiendo allí, o del carro siendo su Líder (**implementado en Rust, 2026-10-24, 5G-b**: `aportarARefundacion` 153, `retirarDeRefundacion` 154, `comprarCaravanaDeRefundacion` 155; el fondo va por Facción en `CAMPAMENTO`) | `Fundacion_Y_Refundacion.md` §9 |
 | Intel de la taberna | cualquier héroe **de una Facción** | `Niebla_De_Guerra.md` |
 | Ver el campamento por dentro (mercado, tropas, tablón: el ámbito `CAMPAMENTO`) | cualquiera | dentro o, desde el 2026-11-10, con su columna **parada** a la puerta ([`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md), «Acciones a la puerta») |

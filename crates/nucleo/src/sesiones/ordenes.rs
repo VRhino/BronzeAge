@@ -669,8 +669,8 @@ impl Ctx<'_> {
                 let heroe = self.heroe(&o.heroe_id)?;
                 match self.obra(&o.obra_id)? {
                     (Obra::Avanzada, avanzada) => Comando::CancelarObraDeAvanzada { heroe, avanzada },
-                    // La obra de un pueblo ya tiene su orden (`destruir_pueblo`, que además lo derriba una vez levantado): aquí se rechaza en vez de duplicarla.
-                    (Obra::Pueblo, _) => return Err(self.no(rechazos::OBJETIVO_NO_SOPORTADO, "la obra de un pueblo se cancela con destruir_pueblo")),
+                    // La de un pueblo (2026-11-19): la de levantarlo, o la subida de nivel de uno activo (su obra lleva el id del pueblo).
+                    (Obra::Pueblo, pueblo) => Comando::CancelarObraDePueblo { pueblo },
                 }
             }
             Cuerpo::MejorarAvanzada(o) => Comando::MejorarAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)? },

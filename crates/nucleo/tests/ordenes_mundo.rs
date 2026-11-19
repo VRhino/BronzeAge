@@ -371,13 +371,11 @@ async fn un_pueblo_se_marca_se_entrega_y_se_destruye_por_el_contrato_con_la_obra
     aceptada(&r);
     assert_eq!(del_heroe(&deltas).len(), 1);
     assert!(columnas_de(del_heroe(&deltas)[0])[0].suministro.as_ref().unwrap().por_id.is_empty(), "la columna entregó todo lo que llevaba");
-    // La obra de un pueblo no se cancela con `cancelar_obra`; se destruye.
+    // La obra de un pueblo se cancela con `cancelar_obra` (2026-11-19), aquí con la columna a su puerta: el pueblo desaparece.
     let (_, r) = dar(&mut ana, "p3", orden::Cuerpo::CancelarObra(pb::OrdenCancelarObra { heroe_id: h.clone(), obra_id: obra.1.clone() })).await;
-    assert_eq!(rechazo(&r), "objetivo.no_soportado");
-    let pueblo = id(ids::parse_obra(&obra.1).unwrap(), "pueblo");
-    let (_, r) = dar(&mut ana, "p4", orden::Cuerpo::DestruirPueblo(pb::OrdenDestruirPueblo { heroe_id: h.clone(), pueblo_id: pueblo.clone() })).await;
     aceptada(&r);
-    let (_, r) = dar(&mut ana, "p5", orden::Cuerpo::DestruirPueblo(pb::OrdenDestruirPueblo { heroe_id: h, pueblo_id: pueblo })).await;
+    let pueblo = id(ids::parse_obra(&obra.1).unwrap(), "pueblo");
+    let (_, r) = dar(&mut ana, "p4", orden::Cuerpo::DestruirPueblo(pb::OrdenDestruirPueblo { heroe_id: h, pueblo_id: pueblo })).await;
     assert_eq!(rechazo(&r), "pueblo.desconocido");
     let n = w.parar().await;
     assert!(n.pueblos_de(plaza).is_empty());

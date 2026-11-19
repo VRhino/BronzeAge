@@ -225,6 +225,7 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
         (orden!(EntregarEnObra, OrdenEntregarEnObra, heroe_id: h.clone(), obra_id: s("obra-6"), materiales: carga(&[("madera", 1)])), Comando::EntregarMaterialesAAvanzada { ejercito: 70, avanzada: 6 }),
         (orden!(EntregarEnObra, OrdenEntregarEnObra, heroe_id: h.clone(), obra_id: s("obra-5")), Comando::EntregarMateriales { ejercito: 70, pueblo: 5 }),
         (orden!(CancelarObra, OrdenCancelarObra, heroe_id: h.clone(), obra_id: s("obra-6")), Comando::CancelarObraDeAvanzada { heroe: 7, avanzada: 6 }),
+        (orden!(CancelarObra, OrdenCancelarObra, heroe_id: h.clone(), obra_id: s("obra-5")), Comando::CancelarObraDePueblo { pueblo: 5 }),
         (orden!(MejorarAvanzada, OrdenMejorarAvanzada, heroe_id: h.clone(), avanzada_id: s("av-6")), Comando::MejorarAvanzada { heroe: 7, avanzada: 6 }),
         (orden!(RepararAvanzada, OrdenRepararAvanzada, heroe_id: h.clone(), avanzada_id: s("av-6")), Comando::RepararAvanzada { heroe: 7, avanzada: 6 }),
         (orden!(DestruirAvanzada, OrdenDestruirAvanzada, heroe_id: h.clone(), avanzada_id: s("av-6")), Comando::DestruirAvanzada { heroe: 7, avanzada: 6 }),
@@ -650,8 +651,8 @@ fn lo_que_la_orden_deja_implicito_se_resuelve_preguntando_al_mundo() {
     assert_eq!(traduce(reposta("heroe-7"), false), Ok(Comando::Repostar { heroe: 7, asentamiento: 3 }));
     assert_eq!(traduce(reposta("heroe-8"), false), Ok(Comando::RepostarEnAvanzada { heroe: 8, avanzada: 6 }));
     assert_eq!(traduce(reposta("heroe-9"), false), Err(rechazos::REPOSTAR_SIN_LUGAR));
-    // Una obra es un pueblo o una avanzada; la de un pueblo no se cancela con `cancelar_obra`; una que no existe, tampoco se entrega.
-    assert_eq!(traduce(orden!(CancelarObra, OrdenCancelarObra, heroe_id: h(), obra_id: s("obra-5")), false), Err(rechazos::OBJETIVO_NO_SOPORTADO));
+    // Una obra es un pueblo o una avanzada; la de un pueblo se cancela con `cancelar_obra` desde el 2026-11-19 (la de levantarlo o su mejora); una que no existe, no se entrega.
+    assert_eq!(traduce(orden!(CancelarObra, OrdenCancelarObra, heroe_id: h(), obra_id: s("obra-5")), false), Ok(Comando::CancelarObraDePueblo { pueblo: 5 }));
     assert_eq!(traduce(orden!(EntregarEnObra, OrdenEntregarEnObra, heroe_id: h(), obra_id: s("obra-7")), false), Err(rechazos::OBRA_DE_MAPA_DESCONOCIDA));
     assert_eq!(traduce(orden!(EntregarEnObra, OrdenEntregarEnObra, heroe_id: h(), obra_id: s("pueblo-5")), false), Err(rechazos::OBRA_DE_MAPA_DESCONOCIDA));
     // Sin campamento, el campamento donde está el héroe de la cuenta.
@@ -781,7 +782,7 @@ fn todo_comando_esta_clasificado_y_toda_orden_del_contrato_esta_mapeada_o_es_no_
     let de_administracion: BTreeSet<String> = ordenes_de_administracion().iter().map(|(_, c)| nombre(c)).collect();
     let del_servidor_de_batalla: BTreeSet<String> = ["RegistrarAsignacion", "ConfirmarInicio", "RegistrarTokens", "RegistrarSalida", "AplicarResultado"].map(String::from).into();
     let todos = variantes_de_comando();
-    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (222, 194, 23, 5));
+    assert_eq!((todos.len(), del_jugador.len(), de_administracion.len(), del_servidor_de_batalla.len()), (223, 195, 23, 5));
     let clasificados: Vec<&String> = del_jugador.iter().chain(&de_administracion).chain(&del_servidor_de_batalla).collect();
     assert_eq!(clasificados.len(), todos.len(), "una variante en dos orígenes");
     let sin_clasificar: Vec<&String> = todos.iter().filter(|v| !clasificados.contains(v)).collect();
@@ -876,5 +877,5 @@ fn la_matriz_de_autorizacion_del_documento_es_la_del_codigo() {
     let faltan: Vec<String> = codigo.difference(&documento).map(fila).collect();
     let sobran: Vec<String> = documento.difference(&codigo).map(fila).collect();
     assert!(faltan.is_empty() && sobran.is_empty(), "la matriz del documento no es la del código.\nFaltan o no coinciden (como las dice el código):\n{}\nSobran (como las dice el documento):\n{}", faltan.join("\n"), sobran.join("\n"));
-    assert_eq!(codigo.len(), 194 + 23 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
+    assert_eq!(codigo.len(), 195 + 23 + 5, "cada comando de una orden del jugador (dos órdenes dan dos), la administración, el servidor de batalla y las no disponibles");
 }

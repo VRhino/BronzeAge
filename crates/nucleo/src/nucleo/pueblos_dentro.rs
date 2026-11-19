@@ -5,7 +5,7 @@
 //! Todo lo hace un héroe **dentro** del pueblo (`entrarEnPueblo`) y **ciudadano de la Facción de la plaza madre**; nadie reside en un pueblo, así que lo que mueve es la columna con la que
 //! entró, que lo espera dentro ([`Nucleo::columna_que_lleva`]). La administración no necesita estar dentro ni ser de la Facción, pero sí que el héroe traiga columna.
 //! La guarnición (`guarnecerPueblo` y `retirarDePueblo`) vale también **a la puerta** (decisión del autor del 2026-11-10): con el héroe a bordo de su columna a la puerta del pueblo, la
-//! columna es esa.
+//! columna es esa. Cargar del almacén local al carro (`cargarDePueblo`), también (2026-11-19), y entonces solo el Líder de la columna.
 //!
 //! # La guarnición de jugadores
 //! Además de la guarnición de serie (mineros o granjeros sin dueño), cada héroe deja escuadras de su columna (`Contenedor::Pueblo`) con un cupo **por héroe** en Liderazgo:
@@ -183,7 +183,17 @@ impl Nucleo {
     fn cargar_de_pueblo(&mut self, t: Instante, p: &Peticion, heroe: u64, pueblo: u64, recurso: Recurso, cantidad: Mil) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let (madre, cid) = self.dentro_del_pueblo(p, heroe, pueblo)?;
+        // También con su columna a la puerta (2026-11-19, como en las plazas): entonces solo su Líder, y si el pueblo le abre su puerta.
+        let (madre, cid) = self.en_el_pueblo_o_a_su_puerta(t, p, heroe, pueblo)?;
+        let dentro = self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Pueblo(pueblo));
+        if !dentro && !p.admin {
+            if self.estado.ejercitos[&cid].columna.lider != heroe {
+                return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "a la puerta, solo el Líder de la columna carga su carro".into()));
+            }
+            if self.puede_entrar_en_pueblo(heroe, pueblo) != Some(true) {
+                return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "el pueblo no te abre su puerta".into()));
+            }
+        }
         if cantidad <= 0 {
             return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que cargar una cantidad positiva".into()));
         }

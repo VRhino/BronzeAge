@@ -473,13 +473,21 @@ fn renombrar_una_caravana_recorta_el_nombre_lo_proyecta_y_viaja_en_la_foto() {
 // ───────────────────────────── El carro frente al almacén de una plaza (2026-10-29) ─────────────────────────────
 
 #[test]
-fn dentro_de_una_plaza_el_ciudadano_carga_su_carro_del_almacen_y_su_faccion_y_las_aliadas_dejan_en_el() {
+fn dentro_de_una_plaza_o_a_su_puerta_el_ciudadano_carga_su_carro_del_almacen_y_su_faccion_y_las_aliadas_dejan_en_el() {
     let m = con_mundo!();
     let ConCaravana { mut e, a, c, ana, ej, .. } = con_caravana(m);
     let cargar = |heroe, plaza, recurso, cantidad| Comando::CargarDePlaza { heroe, asentamiento: plaza, recurso, cantidad };
     let dejar = |heroe, plaza, recurso, cantidad| Comando::DejarEnPlaza { heroe, asentamiento: plaza, recurso, cantidad };
-    // A la puerta no: hay que estar dentro.
-    assert_eq!(e.no("ana", cargar(ana, a, Madera, 10_000)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA);
+    // A la puerta (2026-11-19): su Líder saca al carro de la columna sin entrar; dejar, no.
+    e.dar(a, Madera, 10_000);
+    let (almacen, carro) = (e.almacen(a, Madera), e.carro(ej, Madera));
+    e.ok("ana", cargar(ana, a, Madera, 10_000));
+    assert_eq!((e.almacen(a, Madera), e.carro(ej, Madera)), (almacen - 10_000, carro + 10_000));
+    assert_eq!(e.no("ana", dejar(ana, a, Madera, 10_000)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA);
+    // Lejos de la puerta, tampoco saca.
+    let lejos = en_tierra(&m.0, e.n.estado().asentamientos[&a].posicion, 20_000, 0);
+    e.llevar("ana", ej, lejos);
+    assert_eq!(e.no("ana", cargar(ana, a, Madera, 1_000)), rechazos::HEROE_NO_ESTA_EN_LA_PLAZA);
 
     // De visita en C (de su Facción, no reside): carga en el carro de la columna con la que entró, en unidades enteras, y lo deja de vuelta.
     let pc = e.n.estado().asentamientos[&c].posicion;
@@ -523,7 +531,7 @@ fn dentro_de_una_plaza_el_ciudadano_carga_su_carro_del_almacen_y_su_faccion_y_la
 }
 
 #[test]
-fn en_su_residencia_el_carro_que_trajo_carga_del_almacen_sin_bajar_el_trigo_de_su_reserva_y_su_gobernador_saca_aunque_este_cerrado() {
+fn en_su_residencia_el_carro_que_trajo_carga_del_almacen_sin_bajar_el_trigo_de_su_reserva_y_su_tesorero_y_su_gobernador_sacan_aunque_este_cerrado() {
     let m = con_mundo!();
     let ConCaravana { mut e, a, ana, ej, .. } = con_caravana(m);
     e.ok("ana", Comando::Guarnecer { asentamiento: a, heroe: ana });
@@ -532,9 +540,13 @@ fn en_su_residencia_el_carro_que_trajo_carga_del_almacen_sin_bajar_el_trigo_de_s
     let madera = e.almacen(a, Madera);
     e.ok("ana", Comando::CargarDePlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 15_000 });
     assert_eq!((e.almacen(a, Madera), e.n.heroe(ana).unwrap().carro.get(&Madera).copied()), (madera - 15_000, Some(15_000)));
-    // Con el almacén cerrado a los ciudadanos, su Gobernador sigue sacando.
-    comun::gobierna(&mut e.n, a, ana);
+    // Con el almacén cerrado a los ciudadanos, la residente sin cargo no saca; su Tesorero (2026-11-19) y su Gobernador, sí.
     e.ok("admin", Comando::CerrarAlmacenACiudadanos { asentamiento: a, cerrado: true });
+    assert_eq!(e.no("ana", Comando::CargarDePlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 1_000 }), rechazos::ALMACEN_CERRADO);
+    e.ok("admin", Comando::AsignarCargoLocal { heroe: ana, asentamiento: a, cargo: asentamiento::Cargo::Tesorero, designado: ana });
+    e.ok("ana", Comando::CargarDePlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 1_000 });
+    e.ok("ana", Comando::DejarEnPlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 1_000 });
+    comun::gobierna(&mut e.n, a, ana);
     e.ok("ana", Comando::CargarDePlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 1_000 });
     e.ok("ana", Comando::DejarEnPlaza { heroe: ana, asentamiento: a, recurso: Madera, cantidad: 1_000 });
     // Vuelve a dejarlo.
