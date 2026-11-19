@@ -487,6 +487,12 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
     "vivienda",
     "vivienda",
     "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
     "mercado"
   ],
   "edificiosMilitares": [
