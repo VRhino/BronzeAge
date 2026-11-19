@@ -8,7 +8,8 @@
 //!   que le queda de verdad: ni la caravana ni la columna pasan de su límite (5G-a-4).
 //! - **`soltarCaravana`** es aparcar en la plaza dentro de la cual está la columna (entró con todo); fuera, a la puerta o en mundo abierto, se rechaza (5G-a-5).
 //! - **`cargarDePlaza`** y **`dejarEnPlaza`** (2026-10-29, pedido del autor) mueven entre el carro del héroe y el almacén de la plaza **dentro de la cual está**: sacar es de los ciudadanos
-//!   de su Facción, residan o no (sin bajar el trigo de su reserva), salvo que el Gobernador lo cierre (`cerrarAlmacenACiudadanos`; entonces solo él); meter es de su Facción y de las
+//!   de su Facción, residan o no (sin bajar el trigo de su reserva), salvo que el Gobernador lo cierre (`cerrarAlmacenACiudadanos`; entonces solo él y el Tesorero, 2026-11-19); sacar vale también con la columna a la puerta, siendo su Líder
+//!   (2026-11-19); meter es de su Facción y de las
 //!   aliadas o vasallas, hasta lo que quepa. El carro es el de la columna con la que entró o, en su residencia, el que trajo (como el almacén personal).
 //! - **`reclamarCaravana`** vale solo para la Caravana de Fundación que vuelve sola (su caso de éxito está en `nucleo/fundacion.rs`, 5G-b); una comercial se rechaza con
 //!   `caravana.no_reclamable`.
@@ -141,25 +142,39 @@ impl Nucleo {
         })
     }
 
-    /// `cargarDePlaza` (`saca`) y `dejarEnPlaza`: del almacén de la plaza al carro, o del carro al almacén, con el héroe dentro. Unidades enteras, hasta lo que quepa.
+    /// `cargarDePlaza` (`saca`) y `dejarEnPlaza`: del almacén de la plaza al carro, o del carro al almacén, con el héroe dentro (sacar, también con su columna a la puerta). Unidades enteras, hasta lo que quepa.
     #[allow(clippy::too_many_arguments)]
     fn mover_almacen_de_plaza(&mut self, t: Instante, p: &Peticion, heroe: u64, plaza: u64, recurso: Recurso, cantidad: Mil, saca: bool) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         self.autorizar_heroe(p, heroe, false)?;
         let a = self.plaza_o_rechazo(plaza)?;
-        let (duena, cerrado, gobernador) = (a.faccion, a.almacen_cerrado_a_ciudadanos, a.cargos.titular(asentamiento::Cargo::Gobernador));
+        let (duena, cerrado) = (a.faccion, a.almacen_cerrado_a_ciudadanos);
+        // Con el almacén cerrado sacan el Gobernador y el Tesorero (2026-11-19).
+        let con_cargo = [asentamiento::Cargo::Gobernador, asentamiento::Cargo::Tesorero].iter().any(|&c| a.cargos.titular(c) == Some(heroe));
         let hn = self.heroe(heroe).expect("existe");
         if !p.admin {
-            if hn.heroe.presencia.ubicacion != Ubicacion::Asentamiento(plaza as u32) {
-                return Err(rechazo(rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, format!("el héroe no está dentro de {}", ids::asentamiento(plaza))));
+            // Sacar vale también con su columna a la puerta, siendo su Líder y abriéndole la plaza su puerta (2026-11-19); dejar, solo dentro.
+            let dentro = hn.heroe.presencia.ubicacion == Ubicacion::Asentamiento(plaza as u32);
+            if !dentro && !(saca && self.a_la_puerta_de_plaza(heroe, plaza)) {
+                let donde = if saca { " ni con su columna a su puerta" } else { "" };
+                return Err(rechazo(rechazos::HEROE_NO_ESTA_EN_LA_PLAZA, format!("el héroe no está dentro de {}{donde}", ids::asentamiento(plaza))));
+            }
+            if !dentro {
+                let lider = self.columna_que_lleva(heroe).is_some_and(|c| self.estado.ejercitos[&c].columna.lider == heroe);
+                if !lider {
+                    return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "a la puerta, solo el Líder de la columna carga su carro".into()));
+                }
+                if !self.puede_entrar_en_plaza(heroe, plaza) {
+                    return Err(rechazo(rechazos::ALMACEN_SOLO_CIUDADANOS, "la plaza no te abre su puerta".into()));
+                }
             }
             if saca {
                 if hn.faccion != Some(duena) {
                     return Err(rechazo(rechazos::ALMACEN_SOLO_CIUDADANOS, "solo los ciudadanos de su Facción sacan del almacén de la plaza".into()));
                 }
-                if cerrado && gobernador != Some(heroe) {
-                    return Err(rechazo(rechazos::ALMACEN_CERRADO, "el Gobernador ha cerrado el almacén de la plaza a los ciudadanos".into()));
+                if cerrado && !con_cargo {
+                    return Err(rechazo(rechazos::ALMACEN_CERRADO, "el Gobernador ha cerrado el almacén de la plaza a los ciudadanos: solo sacan él y el Tesorero".into()));
                 }
             } else {
                 let aliada = hn.faccion.is_some_and(|f| matches!(self.estado.relacion(f, duena), Some(crate::estado_militar::Relacion::Alianza | crate::estado_militar::Relacion::Vasallaje)));

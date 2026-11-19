@@ -221,6 +221,11 @@ pub fn asentamiento(n: &Nucleo, id: u64) -> Option<pb::Asentamiento> {
     p.auto_construccion_pausada = eco.auto_pausada;
     p.recetas_pausadas = eco.recetas_pausadas.iter().map(|r| r.nombre().to_owned()).collect();
     p.consumo_pausado = eco.consumo_pausado.iter().map(|r| r.nombre().to_owned()).collect();
+    // Lo que come por minuto (2026-11-19): la población y, aparte, la guarnición (el campamento de sus residentes), que come después de ella.
+    let poblacion = eco.comida_de_poblacion(datos);
+    let guarnicion = n.comida_de_guarnicion(id, &poblacion);
+    p.comida_poblacion = Some(cantidades(poblacion));
+    p.comida_guarnicion = Some(cantidades(guarnicion));
     p.reserva_manual = Some(cantidades(TODOS.iter().copied().zip(eco.reserva_manual).filter(|&(_, v)| v != 0)));
     p.misiones = super::propios::misiones(n, crate::misiones::Dueno::Asentamiento(id));
     p.tablon = super::propios::tablon(n, crate::misiones::Dueno::Asentamiento(id));

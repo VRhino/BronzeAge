@@ -44,6 +44,7 @@ fn rechazo_de_pueblo(e: ErrorPueblo) -> (&'static str, &'static str) {
         ErrorPueblo::FertilidadInsuficiente => (PUEBLO_FERTILIDAD_INSUFICIENTE, "la tierra de ese punto no es bastante fértil para una aldea agrícola"),
         ErrorPueblo::NivelMaximo => (PUEBLO_NIVEL_MAXIMO, "el pueblo ya está en su último nivel"),
         ErrorPueblo::MejoraEnCurso => (PUEBLO_MEJORA_EN_CURSO, "el pueblo ya tiene una subida de nivel en marcha"),
+        ErrorPueblo::SinMejora => (PUEBLO_SIN_OBRA, "el pueblo no tiene ninguna obra que cancelar"),
         ErrorPueblo::NoEstaActivo => (PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún no está levantado"),
         ErrorPueblo::CultivoBloqueado => (PUEBLO_CULTIVO_BLOQUEADO, "ninguna plaza de la Facción tiene aún el nivel que pide ese cultivo"),
     }
@@ -275,25 +276,23 @@ impl Nucleo {
                 self.anotar_sucesos(plaza, t, &ev);
                 Ok(None)
             }
+            Comando::CancelarObraDePueblo { pueblo } => {
+                let (plaza, pu) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
+                self.autorizar_en_plaza_o_en_el_pueblo_o_a_su_puerta(p, plaza, *pueblo, &[politica::Cargo::Gobernador, politica::Cargo::MaestroObras])?;
+                if !pu.activo() {
+                    // La obra de levantarlo: como destruirlo.
+                    self.destruir_pueblo(t, plaza, *pueblo);
+                    return Ok(None);
+                }
+                let mut ev = vec![];
+                self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.cancelar_mejora_pueblo(*pueblo, &mut ev).map_err(de_pueblo)?;
+                self.anotar_sucesos(plaza, t, &ev);
+                Ok(None)
+            }
             Comando::DestruirPueblo { pueblo } => {
                 let (plaza, _) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
                 self.autorizar_en_plaza(p, plaza, None)?;
-                let mut ev = vec![];
-                // Quien estaba dentro sale al mapa con lo suyo, a la puerta del pueblo que desaparece.
-                if let Some(puerta) = self.posicion_de_pueblo(*pueblo) {
-                    self.vaciar_lugar(t, Ubicacion::Pueblo(*pueblo), puerta, plaza, MOTIVO_DESTRUIDO);
-                }
-                // Y la guarnición de jugadores vuelve, intacta, al campamento de cada héroe (§14.0.1).
-                self.liberar_guarnicion_de_pueblo(*pueblo, |_| true);
-                let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(*pueblo, &mut ev).expect("existe");
-                if let Some(n) = destruido.nodo() {
-                    self.estado.nodos_reclamados.remove(&n);
-                }
-                self.olvidar_ruta_de_acarreo(*pueblo);
-                if let Some(carro) = destruido.carro {
-                    self.perder_caravana(t, carro);
-                }
-                self.anotar_sucesos(plaza, t, &ev);
+                self.destruir_pueblo(t, plaza, *pueblo);
                 Ok(None)
             }
             Comando::ReponerCarro { pueblo } => {
@@ -313,6 +312,26 @@ impl Nucleo {
             }
             _ => unreachable!("solo se llama con órdenes de pueblos"),
         }
+    }
+
+    /// Quita el pueblo (o su obra) de la plaza `plaza`: quien está dentro sale, la guarnición vuelve, se libera el nodo y se pierde el carro. No recupera nada.
+    fn destruir_pueblo(&mut self, t: Instante, plaza: u64, pueblo: u64) {
+        let mut ev = vec![];
+        // Quien estaba dentro sale al mapa con lo suyo, a la puerta del pueblo que desaparece.
+        if let Some(puerta) = self.posicion_de_pueblo(pueblo) {
+            self.vaciar_lugar(t, Ubicacion::Pueblo(pueblo), puerta, plaza, MOTIVO_DESTRUIDO);
+        }
+        // Y la guarnición de jugadores vuelve, intacta, al campamento de cada héroe (§14.0.1).
+        self.liberar_guarnicion_de_pueblo(pueblo, |_| true);
+        let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(pueblo, &mut ev).expect("existe");
+        if let Some(n) = destruido.nodo() {
+            self.estado.nodos_reclamados.remove(&n);
+        }
+        self.olvidar_ruta_de_acarreo(pueblo);
+        if let Some(carro) = destruido.carro {
+            self.perder_caravana(t, carro);
+        }
+        self.anotar_sucesos(plaza, t, &ev);
     }
 
     /// Lo que lleva una columna y vale como material: su carro (`suministro`) y la carga de sus caravanas adjuntas, sumado por recurso.

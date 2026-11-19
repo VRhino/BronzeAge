@@ -6,6 +6,16 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### La tanda del 19: al carro desde la puerta, cancelar obras de pueblo, juego de recluta, Armería de los campamentos y lo que come la plaza (2026-11-19; contrato 0.30.0, nucleo 0.49.0, asentamiento 0.25.0, objetos 0.2.0, `OBJETOS` `bronzeage-objetos-2`, sin foto nueva ni partida nueva)
+
+Lo pidió Víctor el 2026-11-19. **El cliente TypeScript lo recoge en la misma tanda** (lo pidió él); esta entrada queda para el cliente de Unity.
+
+1. **Del almacén al carro a la puerta.** `cargar_de_plaza` y `cargar_de_pueblo` valen con el héroe a bordo de su columna a la puerta (siendo su Líder), sin entrar; dejar sigue siendo de dentro. Con el almacén de la plaza cerrado a los ciudadanos, saca también el Tesorero. En la ficha de la plaza propia (`FACCION`, con `almacen`) y en la del pueblo, «Al carro» con la columna a la puerta.
+2. **Cancelar la obra de un pueblo o su mejora.** `cancelar_obra` con la obra del pueblo (`obra-N`, la de levantarlo o la de su `mejoraAldea`, que lleva el id del pueblo): el Gobernador o el Maestro de Obras de la madre, desde la plaza, dentro del pueblo o con su columna a la puerta de la obra. Lo entregado se pierde. Activo sin mejora, `pueblo.sin_obra`; hecho `pueblo.mejora_cancelada { pueblo, nivel }`. Botón en Territorio y junto a «Entregar materiales».
+3. **Juego de recluta.** 15 armaduras nuevas de tier I (`{hueco}_{peso}_recluta`, metal `recluta`, con casco). Las de inicio llevan `enTienda: false`: la tienda no las vende (se le pueden vender). Filtrar la tienda por `enTienda`. Conquest necesita su aspecto.
+4. **Armería de los campamentos de mercenarios.** `comprar_objeto` y `vender_objeto` dentro de cualquier campamento; sin metales con tecnología (solo `inicio`, `recluta` y monturas); sin forja (`armeria.sin_armeria`). Los hechos llevan `campamento` en vez de `plaza`.
+5. **Lo que come la plaza.** `Asentamiento.comida_poblacion` (59) y `comida_guarnicion` (60): milésimas por recurso y minuto; en el interior y en la plaza propia.
+
 ### El Liderazgo cuenta solo lo que va contigo (2026-11-18; nucleo 0.48.0, militar 0.11.0, sin cambios en el contrato ni partida nueva)
 
 Lo pidió Víctor tras un `liderazgo.superado` al salir con 14 de 21 teniendo tropa en guarniciones. El Liderazgo es la tropa bajo tu mando en la batalla: al salir, al recoger tropa a la columna (de una guarnición, una avanzada, un pueblo o una escolta), al reclutar directo a la columna y al defender tu plaza, el motor cuenta solo lo que va en tu columna más lo que se suma. Lo prestado a guarniciones o escoltas ya no gasta Liderazgo (Heroe_Y_Tropa §5). Qué cambia para el cliente:

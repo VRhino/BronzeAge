@@ -109,6 +109,29 @@ impl Poblacion {
         std::array::from_fn(|c| if bien.clases[c] { por(por(habitantes[c] * 1000, bien.racion), e.factor_consumo) } else { 0 })
     }
 
+    /// Lo que la población comería en el próximo minuto (milésimas por recurso, 2026-11-19: «cuánto come su población»), con las reglas de [`Poblacion::nutrir`] y sin
+    /// tocar nada: de cada bien de consumo que no esté en `pausados`, lo que tomaría con lo que hay en `almacen`; del trigo, lo que falta hasta la necesidad entera, aunque
+    /// no lo haya. `factor_consumo` es el de las políticas (ppm). Solo los recursos con algo, en el orden de los bienes y el trigo al final.
+    pub fn comida_prevista(&self, r: &ReglasPoblacion, factor_consumo: i64, pausados: &[Recurso], almacen: &Almacen) -> Vec<(Recurso, Mil)> {
+        let habitantes = [self.pesants, self.artesanos, self.nobleza];
+        let necesidad = por(por(self.total() * 1000, r.consumo_por_habitante), factor_consumo);
+        let mut comido = 0;
+        let mut out = Vec::new();
+        for bien in r.bienes.iter().filter(|b| !pausados.contains(&b.recurso)) {
+            let pedido: Mil = (0..3).filter(|&c| bien.clases[c]).map(|c| por(por(habitantes[c] * 1000, bien.racion), factor_consumo)).sum();
+            let toma = pedido.min(almacen.disponible(bien.recurso).max(0));
+            if toma > 0 {
+                out.push((bien.recurso, toma));
+                comido += toma;
+            }
+        }
+        let trigo = (necesidad - comido).max(0);
+        if trigo > 0 {
+            out.push((Recurso::Trigo, trigo));
+        }
+        out
+    }
+
     /// Un minuto de comida y hambre (`avanzarNutricionPoblacion`). Cada clase toma del `almacen` los bienes de `BIENES_DE_CONSUMO` que come, hasta su
     /// ración (un bien que no llega para todas se reparte en proporción a lo que pide cada una), salvo los `pausados` (2026-11-10: no se comen, como si no
     /// quedaran); lo que falte hasta la necesidad lo pone el trigo.
@@ -257,6 +280,29 @@ mod pruebas {
         let r = Reglas::cargar().poblacion;
         let p = Poblacion::nueva(&r);
         assert_eq!((p.enteros(), p.restos, p.nutricion, p.recuperando), ((20, 0, 0), [0; 3], 100_000, false));
+    }
+
+    #[test]
+    fn la_comida_prevista_es_lo_que_come_el_minuto_siguiente_y_sin_trigo_dice_lo_que_falta() {
+        let r = Reglas::cargar().poblacion;
+        let p = con(200, 60, 10, 100_000);
+        let todo: Vec<(Recurso, Mil)> = r.bienes.iter().map(|b| (b.recurso, 3_000)).chain([(Recurso::Trigo, 1_000_000)]).collect();
+        for pausados in [vec![], vec![r.bienes[0].recurso]] {
+            let mut almacen = con_bienes(&todo);
+            let antes = almacen.clone();
+            let prevista = p.comida_prevista(&r, UNO, &pausados, &almacen);
+            p.clone().nutrir(&r, &entorno(), &pausados, &mut almacen, &mut vec![]);
+            let comido: Vec<(Recurso, Mil)> = r.bienes.iter().map(|b| b.recurso).chain([Recurso::Trigo]).map(|x| (x, antes.disponible(x) - almacen.disponible(x))).filter(|&(_, n)| n > 0).collect();
+            let mut a = prevista.clone();
+            a.sort();
+            let mut b = comido;
+            b.sort();
+            assert_eq!(a, b, "con {pausados:?} pausados");
+            assert!(pausados.iter().all(|x| prevista.iter().all(|(y, _)| y != x)), "lo pausado no se come");
+        }
+        // Sin nada en el almacén: todo en trigo, aunque no lo haya (pasaría hambre).
+        let vacio = con_bienes(&[]);
+        assert_eq!(p.comida_prevista(&r, UNO, &[], &vacio), vec![(Recurso::Trigo, p.consumo_por_minuto(&r, &entorno()))]);
     }
 
     #[test]

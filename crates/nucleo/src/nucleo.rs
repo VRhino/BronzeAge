@@ -1321,6 +1321,7 @@ impl Nucleo {
             Comando::MarcarPueblo { .. }
             | Comando::EntregarMateriales { .. }
             | Comando::DestruirPueblo { .. }
+            | Comando::CancelarObraDePueblo { .. }
             | Comando::ReponerCarro { .. }
             | Comando::MarcarAldea { .. }
             | Comando::MejorarAldea { .. } => match self.ejecutar_pueblos(t, p) {

@@ -177,6 +177,8 @@ pub enum Evento {
     ExtractorMejoraMarcada { id: u64, nivel: u32 },
     /// Acabó la obra de la subida: el extractor ya es de `nivel`.
     ExtractorSubio { id: u64, nivel: u32 },
+    /// Se canceló a mano la subida del pueblo (aldea o extractor) a `nivel` (2026-11-19): sigue en su nivel y lo entregado se pierde.
+    PuebloMejoraCancelada { id: u64, nivel: u32 },
     /// Se marcó la obra de una avanzada (levantar la atalaya, mejorarla o repararla): queda pendiente de materiales.
     AvanzadaObraMarcada { id: u64, tipo: TipoObra, posicion: Punto },
     /// Se entregaron materiales a la obra de una avanzada (`cantidad` en total).
@@ -420,6 +422,12 @@ impl Asentamiento {
             res.iter_mut().zip(self.reserva_manual).for_each(|(a, m)| *a += m);
         }
         res
+    }
+
+    /// Lo que su población comería en el próximo minuto, por recurso (2026-11-19; [`Poblacion::comida_prevista`]), con el consumo de sus políticas y sus bienes pausados.
+    pub fn comida_de_poblacion(&self, r: &Reglas) -> Vec<(Recurso, Mil)> {
+        let factor = self.politicas.factor(&r.politicas, "factorConsumoComida");
+        self.poblacion.comida_prevista(&r.poblacion, factor, &self.consumo_pausado, &self.almacen)
     }
 
     /// Lo que reclutar mira de la plaza (Heroe_Y_Tropa §11): el pool de cada clase, el factor de «Leva Forzosa» y lo que come la población.

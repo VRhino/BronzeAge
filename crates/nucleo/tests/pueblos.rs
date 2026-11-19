@@ -1865,6 +1865,9 @@ fn dentro_se_deja_en_el_almacen_local_solo_lo_que_produce_el_pueblo_y_se_carga_l
     // Y sale con ello.
     e.ok("ana", Comando::SalirDePueblo { pueblo, heroe: h0 });
     assert_eq!(e.carga(c0)[&Cobre], capacidad);
+    // A la puerta (2026-11-19) se carga como dentro (aquí ya no cabe nada); dejar, solo dentro.
+    assert_eq!(e.rechazada("ana", cargar(Cobre, 1_000)), rechazos::CARRO_LLENO, "a la puerta vale: lo que falla es el sitio del carro");
+    assert_eq!(e.rechazada("ana", dejar(Cobre, 1_000)), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO);
 }
 
 #[test]
@@ -1975,4 +1978,55 @@ fn ni_el_pueblo_ni_la_aldea_se_marcan_donde_su_maqueta_quedaria_dentro_del_cauce
         let (d, navegable) = comun::real::distancia_al_rio(&m.0, p);
         assert!(d >= (if navegable { orilla.media_anchura_navegable } else { orilla.media_anchura } + orilla.aldea) as f64, "a {d} del río");
     }
+}
+
+// ───────────────────────────── Cancelar la obra de un pueblo o su mejora (2026-11-19) ─────────────────────────────
+
+#[test]
+fn la_mejora_de_un_pueblo_se_cancela_pendiente_o_en_obra_sin_devolver_nada_y_quien_la_cancela_puede_estar_a_su_puerta() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.pueblo_levantado();
+    assert_eq!(e.rechazada("admin", Comando::CancelarObraDePueblo { pueblo }), rechazos::PUEBLO_SIN_OBRA, "levantado y sin mejora, no hay obra");
+
+    // Pendiente de materiales: se cancela y el pueblo sigue en su nivel.
+    e.ok("ana", Comando::MejorarAldea { pueblo });
+    assert!(matches!(e.pueblo(pueblo).mejora, Some(EstadoPueblo::Pendiente { .. })));
+    e.ok("admin", Comando::CancelarObraDePueblo { pueblo });
+    assert_eq!((e.pueblo(pueblo).mejora.clone(), e.pueblo(pueblo).nivel), (None, 1));
+    let h = &hechos(&e.n, "pueblo.mejora_cancelada")[0];
+    assert_eq!((dato(h, "pueblo") as u64, dato(h, "nivel")), (pueblo, 2));
+
+    // En obra, con todo entregado: también, y lo entregado se pierde.
+    e.ok("ana", Comando::MejorarAldea { pueblo });
+    e.entregar_lo_que_falta(pueblo);
+    let Some(EstadoPueblo::EnObra { completa_en }) = e.pueblo(pueblo).mejora.clone() else { panic!("la mejora, en obra") };
+    e.ok("admin", Comando::CancelarObraDePueblo { pueblo });
+    e.n.avanzar_hasta(completa_en + MIN);
+    assert_eq!((e.pueblo(pueblo).mejora.clone(), e.pueblo(pueblo).nivel), (None, 1), "cancelada, no sube");
+
+    // Con su columna a la puerta del pueblo: el Maestro de Obras de la madre sí; una ciudadana sin cargo, no.
+    e.ok("ana", Comando::MejorarAldea { pueblo });
+    let (_, leo) = e.visita("leo", 1, pueblo);
+    let (_, eva) = e.visita("eva", 1, pueblo);
+    for h in [leo, eva] {
+        e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+    }
+    e.ok("admin", Comando::AsignarCargoLocal { heroe: leo, asentamiento: plaza, cargo: asentamiento::Cargo::Gobernador, designado: leo });
+    e.ok("admin", Comando::AsignarCargoLocal { heroe: leo, asentamiento: plaza, cargo: asentamiento::Cargo::MaestroObras, designado: leo });
+    assert_eq!(e.rechazada("eva", Comando::CancelarObraDePueblo { pueblo }), rechazos::NO_AUTORIZADO);
+    e.ok("leo", Comando::CancelarObraDePueblo { pueblo });
+    assert!(e.pueblo(pueblo).mejora.is_none());
+}
+
+#[test]
+fn cancelar_la_obra_de_un_pueblo_que_aun_no_se_levanta_lo_quita_como_destruirlo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let pueblo = e.marcar();
+    e.ok("admin", Comando::CancelarObraDePueblo { pueblo });
+    assert!(e.n.pueblo(pueblo).is_none());
+    assert_eq!(hechos(&e.n, "pueblo.destruido").len(), 1);
+    assert_eq!(e.rechazada("admin", Comando::CancelarObraDePueblo { pueblo }), rechazos::PUEBLO_DESCONOCIDO);
 }

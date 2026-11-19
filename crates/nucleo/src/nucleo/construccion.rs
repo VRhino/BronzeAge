@@ -164,6 +164,7 @@ fn evento_nucleo(id: u64, t: Instante, punto: Punto, e: &EventoEco, reglas: &ase
         EventoEco::AldeaSubio { id, nivel } => ("aldea.subio", vec![("pueblo", *id as i64), ("nivel", i64::from(*nivel))]),
         EventoEco::ExtractorMejoraMarcada { id, nivel } => ("pueblo.mejora_marcada", vec![("pueblo", *id as i64), ("nivel", i64::from(*nivel))]),
         EventoEco::ExtractorSubio { id, nivel } => ("pueblo.subio", vec![("pueblo", *id as i64), ("nivel", i64::from(*nivel))]),
+        EventoEco::PuebloMejoraCancelada { id, nivel } => ("pueblo.mejora_cancelada", vec![("pueblo", *id as i64), ("nivel", i64::from(*nivel))]),
         EventoEco::AvanzadaObraMarcada { id, tipo, posicion } => ("avanzada.obra_marcada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("x", posicion.x), ("y", posicion.y)]),
         EventoEco::AvanzadaEntrega { id, cantidad } => ("avanzada.materiales_entregados", vec![("avanzada", *id as i64), ("cantidad", *cantidad)]),
         EventoEco::AvanzadaObraIniciada { id, tipo, completa_en } => ("avanzada.obra_iniciada", vec![("avanzada", *id as i64), ("tipo", *tipo as i64), ("completaEn", *completa_en)]),
@@ -422,7 +423,8 @@ impl Nucleo {
                 | EventoEco::AldeaMejoraMarcada { id: pueblo, .. }
                 | EventoEco::AldeaSubio { id: pueblo, .. }
                 | EventoEco::ExtractorMejoraMarcada { id: pueblo, .. }
-                | EventoEco::ExtractorSubio { id: pueblo, .. } => self.tr.tocar(Clase::Pueblo, *pueblo),
+                | EventoEco::ExtractorSubio { id: pueblo, .. }
+                | EventoEco::PuebloMejoraCancelada { id: pueblo, .. } => self.tr.tocar(Clase::Pueblo, *pueblo),
                 EventoEco::AvanzadaObraMarcada { id: avanzada, .. }
                 | EventoEco::AvanzadaEntrega { id: avanzada, .. }
                 | EventoEco::AvanzadaCompletada { id: avanzada, .. }

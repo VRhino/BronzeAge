@@ -943,6 +943,32 @@ impl Nucleo {
 
     // ───────────────────────────── La ración de la guarnición ─────────────────────────────
 
+    /// Lo que comería la guarnición de la plaza en el próximo minuto (2026-11-19), por recurso, con las reglas de [`Nucleo::alimentar_guarnicion`] y sin tocar nada: de cada bien suyo
+    /// no pausado, su ración con lo que quede en el almacén después de `ya_comido` (lo de la población, que come antes); del trigo, lo que falte hasta la ración entera, aunque no lo
+    /// haya. Vacía sin soldados.
+    pub fn comida_de_guarnicion(&self, plaza: u64, ya_comido: &[(asentamiento::Recurso, Mil)]) -> Vec<(asentamiento::Recurso, Mil)> {
+        use asentamiento::Recurso;
+        let (racion, _) = self.residentes_en_el_paso(plaza);
+        let Some(a) = self.estado.asentamientos.get(&plaza).filter(|_| racion > 0) else { return vec![] };
+        let datos = &self.estado.reglas.economia.datos.poblacion;
+        let soldados = racion / self.estado.reglas.economia.militar.militar.racion_por_soldado.max(1);
+        let mut consumido = 0;
+        let mut out = vec![];
+        for r in datos.guarnicion.iter().copied().filter(|b| !a.economia.consumo_pausado.contains(b)) {
+            let pedido = datos.bienes.iter().find(|b| b.recurso == r).map_or(0, |b| asentamiento::datos::por(soldados * 1000, b.racion));
+            let queda = a.economia.almacen.disponible(r) - ya_comido.iter().filter(|(x, _)| *x == r).map(|(_, n)| n).sum::<Mil>();
+            let toma = pedido.min(racion - consumido).min(queda.max(0));
+            if toma > 0 {
+                out.push((r, toma));
+                consumido += toma;
+            }
+        }
+        if racion > consumido {
+            out.push((Recurso::Trigo, racion - consumido));
+        }
+        out
+    }
+
     /// La guarnición de la plaza come en el paso de su minuto, justo después de la población (Reloj_Y_Eventos §2: la población come antes que las
     /// tropas): toma del almacén, hasta su ración, la de cada bien de `BIENES_DE_CONSUMO.guarnicion` (la carne, a la ración por cabeza del bloque) y el trigo
     /// el resto, a la vez, como la población (2026-11-11); con la ración entera la moral de cada escuadra sube y, sin ella, baja; con la moral a 0

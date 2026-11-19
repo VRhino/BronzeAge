@@ -118,6 +118,24 @@ impl Nucleo {
         en_la_plaza
     }
 
+    /// Como [`Nucleo::autorizar_en_plaza_o_en_pueblo`], pero el héroe con el cargo puede estar también **a la puerta** del pueblo, a bordo de su columna (`cancelarObra` de un pueblo o de
+    /// su mejora, 2026-11-19: junto a «Entregar materiales»).
+    pub(super) fn autorizar_en_plaza_o_en_el_pueblo_o_a_su_puerta(&self, p: &Peticion, a: u64, pueblo: u64, cargos: &[politica::Cargo]) -> Result<(), Respuesta> {
+        let en_la_plaza = self.autorizar_en_plaza_o_en_pueblo(p, a, pueblo, cargos);
+        if en_la_plaza.is_ok() {
+            return en_la_plaza;
+        }
+        let Some(puerta) = self.posicion_de_pueblo(pueblo) else { return en_la_plaza };
+        let a_su_puerta = |yo: u64| match self.heroe(yo).map(|h| h.heroe.presencia.ubicacion) {
+            Some(militar::presencia::Ubicacion::Columna(c)) => self.estado.ejercitos.get(&c).is_some_and(|e| e.posicion_en(self.estado.ahora).dist(puerta) <= self.radio_puerta()),
+            _ => false,
+        };
+        if self.heroes_en_el_mundo(&p.actor).any(|yo| a_su_puerta(yo) && (Actor { yo, politica: &self.estado.politica, vista: self }).cargo_en_el_sitio(a as u32, cargos)) {
+            return Ok(());
+        }
+        en_la_plaza
+    }
+
     /// ¿Va el héroe a bordo de una columna que está ahora a la puerta de la plaza `plaza`?
     pub(super) fn a_la_puerta_de_plaza(&self, heroe: u64, plaza: u64) -> bool {
         let (Some(h), Some(a)) = (self.heroe(heroe), self.estado.asentamientos.get(&plaza)) else { return false };

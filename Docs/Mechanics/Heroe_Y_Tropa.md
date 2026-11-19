@@ -197,8 +197,8 @@ Sin plaza (globales del héroe):
 | `heroe.puntos_repartidos` | `repartirPuntos` | `{ heroeId, atributos }` |
 | `heroe.nivel_subio` | (el combate, §4.3) | `{ heroe, nivel }` (el nivel nuevo) |
 | `heroe.equipo_cambiado` | `equiparObjeto` / `desequiparObjeto` (§4.5) | `{ heroe }` (el equipo nuevo va en la proyección `HEROE`) |
-| `heroe.objeto_comprado` | `comprarObjeto` (§4.6) | `{ heroe, plaza, precio, objeto }` (`objeto`, el id del catálogo, es un texto) |
-| `heroe.objeto_vendido` | `venderObjeto` (§4.6) | `{ heroe, plaza, cantidad, cobro, objeto }` |
+| `heroe.objeto_comprado` | `comprarObjeto` (§4.6) | `{ heroe, plaza, precio, objeto }` (`objeto`, el id del catálogo, es un texto); en un campamento de mercenarios (2026-11-19), `campamento` en vez de `plaza` |
+| `heroe.objeto_vendido` | `venderObjeto` (§4.6) | `{ heroe, plaza, cantidad, cobro, objeto }`; en un campamento, `campamento` en vez de `plaza` |
 | `heroe.objeto_forjado` | `forjarObjeto` (§4.6) | `{ heroe, plaza, pieza (el N de obj-N), calidad (en %), impuesto (monedas), objeto }` |
 | `heroe.objeto_usado` | `usarObjeto` (§4.6) | `{ heroe, objeto }`, con `escuadra` si es una medalla de tropa y `montura` y `destino` (`mochila` \| `almacen` \| `perdido`, textos) si es el cofre |
 | `heroe.botin` | (el botín: Unity, bandidos, diaria, alijo, mercenario, misión) | `{ heroe, origen, mochila, almacen, perdido }`, listas de `[objeto, cantidad]` ([`Objetos_Del_Heroe.md`](Objetos_Del_Heroe.md) §3.7) |
@@ -230,12 +230,13 @@ Cuatro órdenes más del héroe de la cuenta (`orders.proto` 196 a 199; comandos
 
 | Orden | Comando | Dónde | Qué hace |
 |---|---|---|---|
-| `comprar_objeto { objeto }` | `ComprarObjeto` (226) | D1: dentro de una plaza con la Armería activa | Compra la pieza (id de `OBJETOS`) al 100 % con sus monedas; llega a la mochila. El metal lo abre la tecnología de la Facción **de la plaza**. |
-| `vender_objeto { casilla, cantidad }` | `VenderObjeto` (227) | D1, igual | Vende `cantidad` de esa casilla de la mochila a `ventaPct` de la ficha (D18); cobra sus monedas. |
+| `comprar_objeto { objeto }` | `ComprarObjeto` (226) | D1: dentro de una plaza con la Armería activa o, desde el 2026-11-19, de un campamento de mercenarios | Compra la pieza (id de `OBJETOS`) al 100 % con sus monedas; llega a la mochila. El metal lo abre la tecnología de la Facción **de la plaza**; el campamento, sin Facción, no abre ninguno: vende lo que no pide tecnología (el tier I y las monturas). |
+| `vender_objeto { casilla, cantidad }` | `VenderObjeto` (227) | D1, igual (también en un campamento de mercenarios) | Vende `cantidad` de esa casilla de la mochila a `ventaPct` de la ficha (D18); cobra sus monedas. |
 | `forjar_objeto { objeto }` | `ForjarObjeto` (228) | Dentro de cualquier plaza con la Armería activa, con su forja abierta a su grupo (2026-11-12, abajo) | Gasta un plano de su tier y sus crisoles de la mochila, los materiales de la receta (abajo) y el impuesto en monedas, que va al fondo de la plaza; tira la calidad (90 a 110 %) con el generador del estado. Los tiers III a V piden su Era del mundo. La pieza nace con id propio, `obj-N`, del contador de ids del estado (`siguiente_id`, que ya va en la foto), que solo se gasta si la forja se acepta. Todo o nada. |
 | `usar_objeto { casilla, escuadron_id? }` | `UsarObjeto` (229) | D2, como equipar (§4.5) | Gasta uno del consumible de esa casilla y aplica su efecto (abajo). |
 | `configurar_forja { asentamiento_id, grupo, abierta, recargo_pct }` | `ConfigurarForja` (230) | El Tesorero o el Gobernador de la plaza, residente y dentro | Abre o cierra la forja de la plaza a un grupo de fuera (`aliados`, `neutrales` o `enemigos`) y le fija el recargo, uno de `OBJETOS.forja.recargosPct` (`forja.recargo_invalido`); sin cambio, `sin_cambios`. Hecho `asentamiento.forja_configurada`. |
 
+- **La Armería de los campamentos de mercenarios** (2026-11-19, pedido del autor): todo campamento tiene una de nivel 1, solo tienda. `forjar_objeto` dentro de un campamento se rechaza con `armeria.sin_armeria`.
 - **Medalla de tropa:** sobre `escuadron_id`, una escuadra suya (`escuadra.ajena` si falta o no es suya), no prestada (`escuadra.prestada`) y por debajo de `nivelMaximoEscuadra` (`escuadra.nivel_maximo`); se mira antes de gastarla. La experiencia entra como la del combate (`Nucleo::sumar_experiencia_de_escuadra`: sube los niveles que cruce y cuenta `escuadras.veteranas`) pero **sin** el bonus de Ejército permanente, que solo pone el combate. Lo que sobra al llegar al máximo no da nada.
 - **Medalla del héroe:** su porcentaje de lo que pide su nivel para el siguiente, `experienciaParaNivel(nivel + 1) − experienciaParaNivel(nivel)` (desde el 50, de 747), por `Nucleo::experiencia_de_heroe` (puede emitir `heroe.nivel_subio`). `escuadron_id` no se mira.
 - **Cofre de monturas:** una montura de tier III, IV o V por sus probabilidades, con el generador del estado; llega como lo que llega sin pedirlo (D17 y D22): a la mochila (si el cofre era el último de su pila, su casilla sirve), si no cabe al almacén de objetos y si tampoco, se pierde. El hecho dice dónde fue.

@@ -221,6 +221,9 @@ pub enum Comando {
     EntregarMateriales { ejercito: u64, pueblo: u64 },
     /// Cancela la obra o destruye el pueblo a mano: libera el cupo y no recupera nada (ni lo entregado ni lo almacenado).
     DestruirPueblo { pueblo: u64 },
+    /// Cancela la obra de un pueblo (2026-11-19, `cancelarObra` del contrato): la de levantarlo, como `DestruirPueblo`, o la subida de nivel de uno activo, que sigue en su nivel. No
+    /// recupera nada de lo entregado. El Gobernador o el Maestro de Obras de la madre, dentro de ella, dentro del pueblo o con su columna a su puerta.
+    CancelarObraDePueblo { pueblo: u64 },
     /// Compra en la plaza madre un carro de acarreo nuevo (carro + buey) para un pueblo que se quedó sin él.
     ReponerCarro { pueblo: u64 },
     /// Marca la obra de una aldea agrícola de `cultivo` en un punto de la zona de la plaza madre (§14.2; el cultivo, tanda 69 §12): queda «pendiente de
@@ -904,6 +907,7 @@ impl Comando {
             | Comando::AlternarReceta { .. }
             | Comando::MarcarPueblo { .. }
             | Comando::DestruirPueblo { .. }
+            | Comando::CancelarObraDePueblo { .. }
             | Comando::ReponerCarro { .. }
             | Comando::MarcarAldea { .. }
             | Comando::MejorarAldea { .. }
@@ -1060,7 +1064,7 @@ impl Comando {
                 i.ejercitos.push(*ejercito);
                 i.pueblos.push(*pueblo);
             }
-            Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => i.pueblos.push(*pueblo),
+            Comando::DestruirPueblo { pueblo } | Comando::CancelarObraDePueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => i.pueblos.push(*pueblo),
             Comando::EntrarEnPueblo { pueblo, heroe }
             | Comando::SalirDePueblo { pueblo, heroe }
             | Comando::GuarnecerPueblo { heroe, pueblo, .. }
@@ -1811,6 +1815,10 @@ impl Peticion {
             }
             Comando::DestruirPueblo { pueblo } => {
                 w.u8(47);
+                w.u64(*pueblo);
+            }
+            Comando::CancelarObraDePueblo { pueblo } => {
+                w.u8(237);
                 w.u64(*pueblo);
             }
             Comando::ReponerCarro { pueblo } => {
@@ -2826,6 +2834,7 @@ impl Peticion {
             45 => Comando::MarcarPueblo { asentamiento: r.u64()?, nodo: r.u32()? },
             46 => Comando::EntregarMateriales { ejercito: r.u64()?, pueblo: r.u64()? },
             47 => Comando::DestruirPueblo { pueblo: r.u64()? },
+            237 => Comando::CancelarObraDePueblo { pueblo: r.u64()? },
             48 => Comando::ReponerCarro { pueblo: r.u64()? },
             49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None, clase: r.texto()?, aspecto: crate::codec_militar::aspecto_leer(&mut r)? },
             50 => Comando::ReclutarTropa { asentamiento: r.u64()?, heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
@@ -3256,6 +3265,8 @@ pub mod rechazos {
     pub const PUEBLO_FUERA_DE_SU_ANILLO: &str = "pueblo.fuera_de_su_anillo";
     pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";
     pub const PUEBLO_MEJORA_EN_CURSO: &str = "pueblo.mejora_en_curso";
+    /// `cancelarObra` sobre un pueblo activo sin subida de nivel marcada (2026-11-19).
+    pub const PUEBLO_SIN_OBRA: &str = "pueblo.sin_obra";
     /// La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4).
     pub const PUEBLO_CULTIVO_BLOQUEADO: &str = "pueblo.cultivo_bloqueado";
     // Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29).
@@ -4132,6 +4143,7 @@ mod pruebas {
             Comando::MarcarPueblo { asentamiento: 3, nodo: 70_001 },
             Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
             Comando::DestruirPueblo { pueblo: 9 },
+            Comando::CancelarObraDePueblo { pueblo: 9 },
             Comando::ReponerCarro { pueblo: 9 },
             Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_500, -2_000), cultivo: Cultivo::Vid },
             Comando::MejorarAldea { pueblo: 9 },

@@ -462,6 +462,8 @@ pub enum ErrorPueblo {
     NivelMaximo,
     /// El pueblo ya tiene una subida de nivel marcada o en obra.
     MejoraEnCurso,
+    /// El pueblo no tiene ninguna subida de nivel que cancelar (2026-11-19).
+    SinMejora,
     NoEstaActivo,
     /// La plaza madre no tiene el nivel que pide el cultivo elegido (`cultivos.<cultivo>.nivelMadre`).
     CultivoBloqueado,
@@ -664,6 +666,17 @@ impl Asentamiento {
             ev.push(Evento::PuebloObraIniciada { id, completa_en });
         }
         Ok(tomado)
+    }
+
+    /// Cancela a mano la subida de nivel de un pueblo activo (2026-11-19), pendiente de materiales o ya levantándose: el pueblo sigue en su nivel y lo entregado
+    /// no se devuelve.
+    pub fn cancelar_mejora_pueblo(&mut self, id: u64, ev: &mut Vec<Evento>) -> Result<(), ErrorPueblo> {
+        let p = self.pueblos.iter_mut().find(|p| p.id == id).ok_or(ErrorPueblo::NoExiste)?;
+        if p.mejora.take().is_none() {
+            return Err(ErrorPueblo::SinMejora);
+        }
+        ev.push(Evento::PuebloMejoraCancelada { id, nivel: p.nivel + 1 });
+        Ok(())
     }
 
     /// Cancela la obra o destruye el pueblo a mano: libera el cupo y no recupera nada. Devuelve el pueblo para que el núcleo libere su nodo

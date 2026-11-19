@@ -211,6 +211,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.fuera_de_su_anillo` | `PUEBLO_FUERA_DE_SU_ANILLO` | Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01). |
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
+| `pueblo.sin_obra` | `PUEBLO_SIN_OBRA` | `cancelarObra` sobre un pueblo activo sin subida de nivel marcada (2026-11-19). |
 | `pueblo.cultivo_bloqueado` | `PUEBLO_CULTIVO_BLOQUEADO` | La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4). |
 
 ### Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29)
