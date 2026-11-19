@@ -6,12 +6,16 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
-### Cancelar la solicitud de ingreso y el enfriamiento de ingreso (2026-11-19; contrato 0.31.0, nucleo 0.51.0, politica 0.8.0, sin foto nueva ni partida nueva)
+### Cancelar la solicitud de ingreso y el enfriamiento de ingreso (2026-11-19; contrato 0.31.0, nucleo 0.52.0, politica 0.8.0, sin foto nueva ni partida nueva)
 
 Lo pidió Víctor el 2026-11-19. **El cliente TypeScript lo recoge en la misma tanda** (0.224.0, lo pidió él); esta entrada queda para el cliente de Unity.
 
 1. **Cancelar la solicitud.** Orden nueva `cancelar_solicitud { faccion_id }` (campo 203 del oneof): el solicitante retira su solicitud de esa Facción; las demás siguen. Sin tenerla, `faccion.no_ha_pedido`. Hecho `CiudadaniaCambiada` con `como = "cancelada"` (`faccion.solicitud_cancelada`). Donde se muestra «pedido», un botón «Cancelar».
 2. **El enfriamiento al salir pasa de crear a entrar.** Dejar una Facción ya no impide crear otra (también con una solicitud abierta, que se cancela sola). Durante 24 h (`CIUDADANIA.cooldownIngresoFaccionHoras`) no se pide el ingreso en ninguna, tampoco en la que se dejó: rechazo `faccion.cooldown_ingreso`, que sustituye a `faccion.cooldown_creacion`. Los textos que hablaban de los 7 días de creación cambian.
+### La Armería y seis viviendas más en la planta del campamento (2026-11-19; nucleo 0.51.0, militar 0.12.0, sin cambio de contrato ni partida nueva)
+
+1. **`CampamentoMercenarios.planta`** trae una pieza `armeria` de nivel 1 (colocada tras el edificio militar) y 16 viviendas en vez de 10; `edificios` termina en `armeria`. Las plantas de los campamentos que ya existían cambian (no se guardan). Qué haría el cliente: dibujar la Armería en la vista 3D del campamento (modelo de Armería, estilo de campamento) y comprobar que las 16 tiendas caben en la vista.
+2. **El tope de reclutas** del campamento pasa de 100 a 160 (`poblacion.maximo`); el cliente ya lo lee del ritmo, no tiene que cambiar nada salvo textos que digan 100.
 
 ### La tanda del 19: al carro desde la puerta, cancelar obras de pueblo, juego de recluta, Armería de los campamentos y lo que come la plaza (2026-11-19; contrato 0.30.0, nucleo 0.49.0, asentamiento 0.25.0, objetos 0.2.0, `OBJETOS` `bronzeage-objetos-2`, sin foto nueva ni partida nueva)
 

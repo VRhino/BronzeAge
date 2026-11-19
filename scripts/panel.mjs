@@ -213,7 +213,10 @@ function arrancar(c, extra = {}) {
     cwd: carpeta(c), shell: true, detached: process.platform !== 'win32', env: { ...process.env, ...c.env, ...env, FORCE_COLOR: '0' },
   });
   const anotar = (b) => {
-    p.log.push(...b.toString().replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/).filter(Boolean));
+    const lineas = b.toString().replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/).filter(Boolean);
+    // El servidor imprime al arrancar la llave de administrador de un solo uso (si la partida no tiene admin): se guarda para enseñarla en su tarjeta.
+    for (const l of lineas) { const m = /código de administrador \(un solo uso[^)]*\): *(\S+)/.exec(l); if (m) p.llave_admin = m[1]; }
+    p.log.push(...lineas);
     p.log.splice(0, Math.max(0, p.log.length - 200));
   };
   hijo.stdout.on('data', anotar);
@@ -315,6 +318,8 @@ async function estado() {
         + (c.name === 'bronzeage-servidor' ? `  [partida ${partidaActual() ?? 'ninguna'}]` : ''),
       // El token del canal de control de los bots, para pegarlo en el admin web (el código de registro no sale del panel).
       token_control: SERVICIOS[c.name]?.secretos?.includes('BOTS_TOKEN') ? secreto(c, 'BOTS_TOKEN') : null,
+      // La llave de administrador de un solo uso que el servidor imprimió al arrancar (mientras siga en marcha).
+      llave_admin: p?.hijo ? p.llave_admin ?? null : null,
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
       escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [], red: p?.hijo ? p.red : null,
       ...(c.name === 'bronzeage-lanzador' ? { conquest: { exe: PRUEBA_RED, aviso: avisoConquest(), modo: p?.hijo ? conquest.modo : null, duracion: conquest.duracion,
@@ -379,6 +384,7 @@ select{background:#0d0b08;color:var(--txt);border:1px solid var(--borde);border-
 <div class="fila"><span class="est">Conquest compilado, en el otro equipo</span><code id="i-cmd"></code><button data-copia="i-cmd">Copiar</button></div>
 <div class="est">Con el editor de Unity: esa dirección en el campo «Servidor» de ConexionDeMundo (Inspector). La cuenta se crea con «Registrar».</div></div>
 <ul class="pasos" id="i-pasos"></ul>
+<div class="token fila" id="i-llave" hidden><span class="est">llave de administrador (un solo uso)</span><code></code><button>Copiar</button></div>
 <div class="fila"><button class="grande" id="i-jugar">▶ Jugar</button><button id="i-parar">■ Parar todo</button></div><div class="msg" id="i-msg"></div></div></details>
 <details open data-seccion="abrir"><summary>Abrir</summary><div class="card"><div class="fila" id="i-clientes"></div><div class="est" style="margin-top:8px">Si no está en marcha, se arranca y se abre en cuanto responde.</div></div></details>
 </section>
@@ -504,6 +510,7 @@ document.getElementById('r-abierta').onchange=e=>api('POST','/api/red',{abierta:
 document.getElementById('r-ip').onchange=e=>api('POST','/api/red',{ip:e.target.value},'r-msg').then(pintarRed);
 document.getElementById('r-cortafuegos').onclick=()=>api('POST','/api/red/cortafuegos',null,'r-msg').then(pintarRed);
 document.getElementById('r-aplicar').onclick=()=>api('POST','/api/red/aplicar',null,'r-msg').then(pintarRed);
+document.querySelector('#i-llave button').onclick=e=>navigator.clipboard.writeText(document.querySelector('#i-llave code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
 document.querySelector('#r-otro button').onclick=e=>navigator.clipboard.writeText(document.querySelector('#r-otro code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
 pintarRed();setInterval(pintarRed,5000);
 // ───── Inicio: el estado de un vistazo y los botones de siempre ─────
@@ -529,6 +536,7 @@ function pintarInicio(datos){
   else if(p.mundo?M.artefactos.some(a=>a.archivo===p.mundo):M.artefactos.length)paso(ul,'on','Mundo','listo');
   else if(p.mundo)paso(ul,'off','Mundo','falta el mundo de esta partida ('+p.mundo.slice(6,18)+'…): genéralo con su semilla',['Ir a Mundo',()=>verVista('partidas')]);
   else paso(ul,'off','Mundo','no hay ningún mundo generado',['Generar mundo (2 min)',()=>api('POST','/api/mundo',{semilla:42},'i-msg')]);
+  const ll=document.getElementById('i-llave');ll.hidden=!s.llave_admin;ll.querySelector('code').textContent=s.llave_admin??'';
   if(s.escucha)paso(ul,'on','Servidor','en marcha en el puerto '+s.puerto+(s.red&&s.red!=='local'?' · abierto a la red':''));
   else if(s.lanzado)paso(ul,'wait','Servidor','arrancando… (si hay que compilar, tarda unos minutos)');
   else paso(ul,'off','Servidor','apagado');
@@ -589,14 +597,14 @@ async function pintar(){
     let c=document.getElementById(d.nombre);
     if(!c){c=document.createElement('div');c.className='card';c.id=d.nombre;
       document.getElementById(d.tipo==='cliente'?'clientes':d.tipo==='tarea'?'tareas':'backend').append(c);
-      c.innerHTML='<div class="top"><span class="dot"></span><span class="nom"></span><span class="est"></span></div><div class="cmd"></div><div class="aviso"></div><div class="token fila" hidden><span class="est">token de control</span><code></code><button>Copiar</button></div>'
+      c.innerHTML='<div class="top"><span class="dot"></span><span class="nom"></span><span class="est"></span></div><div class="cmd"></div><div class="aviso"></div><div class="token fila" hidden><span class="est">token de control</span><code></code><button>Copiar</button></div><div class="token llave fila" hidden><span class="est">llave de administrador (un solo uso)</span><code></code><button>Copiar</button></div>'
         +'<div class="fila"><button data-a="arrancar">Arrancar</button><button data-a="parar">Parar</button><button class="abrir">Abrir ↗</button>'
         +'<label>puerto <input type="number" min="1" max="65535"></label></div>'
         +(d.conquest?'<div class="fila conquest"><button class="con">Arrancar con Conquest</button><label style="margin-left:0">duración (s) <input class="dur" type="number" min="10" placeholder="ticket"></label><span class="est cq"></span></div><div class="aviso cqa"></div>':'')
         +'<details class="reg"><summary>Registro</summary><pre></pre></details>';
       if(d.conquest)c.querySelector('.con').onclick=()=>{const v=c.querySelector('.dur').value;post('/api/conquest/'+n+(v?'/'+v:''))};
       c.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>post('/api/'+b.dataset.a+'/'+n));
-      c.querySelector('.token button').onclick=e=>navigator.clipboard.writeText(c.querySelector('.token code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)});
+      c.querySelectorAll('.token').forEach(t=>t.querySelector('button').onclick=e=>navigator.clipboard.writeText(t.querySelector('code').textContent).then(()=>{e.target.textContent='Copiado';setTimeout(()=>e.target.textContent='Copiar',1500)}));
       c.querySelector('.abrir').onclick=()=>window.open('http://localhost:'+c.querySelector('input').value,'_blank');
       c.querySelector('input').onchange=e=>post('/api/puerto/'+n+'/'+e.target.value);}
     c.querySelector('.dot').style.background=d.escucha||(d.lanzado&&!d.puerto&&d.tipo!=='tarea')?'var(--on)':d.lanzado?'var(--wait)':'var(--off)';
@@ -605,6 +613,7 @@ async function pintar(){
     c.querySelector('.cmd').textContent=d.nombre+' · '+d.comando;
     c.querySelector('.aviso').textContent=d.aviso??'';
     c.querySelector('.token').hidden=!d.token_control;c.querySelector('.token code').textContent=d.token_control??'';
+    c.querySelector('.llave').hidden=!d.llave_admin;c.querySelector('.llave code').textContent=d.llave_admin??'';
     c.querySelector('label').style.display=d.tipo==='tarea'||!d.puerto?'none':'';
     if(d.conquest){const q=d.conquest;
       c.querySelector('.con').disabled=!!q.aviso||!!d.aviso||d.lanzado||q.esperando;c.querySelector('.dur').disabled=d.lanzado||q.esperando;

@@ -648,7 +648,7 @@ pub struct PlantaCampamento {
 }
 
 /// `layoutCampamento` (Campamentos_Mercenarios §7, paridad P7): el trazado de asentamientos **una sola vez**, con la taberna de ancla en el origen (la
-/// huella del Centro Urbano), y después el Mercado con sus puestos, el edificio militar y las viviendas, cada uno con su ancla de saturación si hace falta
+/// huella del Centro Urbano), y después el Mercado con sus puestos, el edificio militar, la Armería de nivel 1 (solo tienda, 2026-11-19) y las viviendas, cada uno con su ancla de saturación si hace falta
 /// (sin el gate de nivel: el campamento no tiene). Función pura de la semilla del núcleo y del índice del campamento: no se guarda. Los ids de las piezas son
 /// sus posiciones en la planta (la taberna es la 0). La empalizada es un anillo de celdas a una celda de margen de todas las huellas y calles, con la puerta
 /// de dos celdas en el centro del lado sur.
@@ -680,6 +680,7 @@ pub fn planta_de_campamento(reglas: &crate::ReglasEconomia, semilla_nucleo: u64,
         colocar(&mut ciudad, Tipo::PuestoMercado, forma, &mut ids);
     }
     colocar(&mut ciudad, militar, 1, &mut ids);
+    colocar(&mut ciudad, Tipo::Armeria, 1, &mut ids);
     for _ in 0..viviendas {
         colocar(&mut ciudad, Tipo::Vivienda, 1, &mut ids);
     }
@@ -736,12 +737,15 @@ mod pruebas {
     #[test]
     fn la_planta_de_un_campamento_sale_de_su_indice_con_la_taberna_de_ancla_y_su_empalizada() {
         let r = ReglasEconomia::default();
-        let a = planta_de_campamento(&r, 42, 3, Tipo::Barracon, 10);
-        assert_eq!(a, planta_de_campamento(&r, 42, 3, Tipo::Barracon, 10), "función pura");
-        assert_ne!(a.vista, planta_de_campamento(&r, 42, 4, Tipo::Barracon, 10).vista, "cada campamento tiene la suya");
+        let a = planta_de_campamento(&r, 42, 3, Tipo::Barracon, 16);
+        assert_eq!(a, planta_de_campamento(&r, 42, 3, Tipo::Barracon, 16), "función pura");
+        assert_ne!(a.vista, planta_de_campamento(&r, 42, 4, Tipo::Barracon, 16).vista, "cada campamento tiene la suya");
         assert_eq!((a.vista.piezas[0].id, a.vista.piezas[0].tipo), (0, Tipo::Taberna), "la taberna es el ancla, en el origen");
         let de = |t: Tipo| a.vista.piezas.iter().filter(|p| p.tipo == t).count();
-        assert_eq!((de(Tipo::Mercado), de(Tipo::PuestoMercado), de(Tipo::Barracon), de(Tipo::Vivienda)), (1, 5, 1, 10), "el Mercado con sus 5 puestos, el militar y las 10 viviendas");
+        assert_eq!((de(Tipo::Mercado), de(Tipo::PuestoMercado), de(Tipo::Barracon), de(Tipo::Armeria), de(Tipo::Vivienda)), (1, 5, 1, 1, 16), "el Mercado con sus 5 puestos, el militar, la Armería y las 16 viviendas");
+        for militar in [Tipo::Barracon, Tipo::GaleriaDeTiro, Tipo::Caballerizas] {
+            assert_eq!(planta_de_campamento(&r, 42, 3, militar, 16).vista.piezas.iter().filter(|p| p.tipo == Tipo::Armeria).count(), 1, "la Armería, sea cual sea el militar");
+        }
         assert!(!a.vista.calles.is_empty());
         // La puerta, dos celdas al sur; el muro rodea todo lo demás.
         assert_eq!(a.puerta.iter().map(|x| x.ancho * x.alto).sum::<i32>(), 2 * CELDA_UL * CELDA_UL);
