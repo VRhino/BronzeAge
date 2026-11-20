@@ -842,9 +842,8 @@ impl Sim<'_> {
         if t % DIA < COLONOS_CADA_H * HORA && self.rng.por_debajo(100) < SECESION_PCT {
             self.pol_secesion(t);
         }
-        // Los disidentes crean su Facción en cuanto pasa el cooldown de creación (si no entraron en otra).
-        let cooldown = self.n.estado().reglas.economia.politica.cooldown_creacion;
-        let listos: Vec<u64> = self.p().disidentes.iter().filter(|(_, &salio)| t >= salio + cooldown).map(|(&h, _)| h).collect();
+        // Los disidentes crean su Facción en la siguiente pasada (si no entraron en otra): crear ya no lleva cooldown, que desde el 2026-11-19 es del ingreso.
+        let listos: Vec<u64> = self.p().disidentes.keys().copied().collect();
         for h in listos {
             if self.n.heroe(h).is_some_and(|x| x.faccion.is_none()) {
                 let cuenta = self.cuenta_de(h);

@@ -793,6 +793,29 @@ fn guarnecer_deja_escuadras_en_la_avanzada_dentro_del_cupo_comen_de_la_madre_y_s
 }
 
 #[test]
+fn lo_que_guarnece_la_avanzada_no_gasta_liderazgo_al_salir_y_al_recogerla_cuenta_lo_que_va_en_la_columna() {
+    // Víctor, 2026-11-18: el Liderazgo es la tropa bajo tu mando en la batalla; lo prestado a una guarnición tiene su propio cupo. Con los 14 de un héroe nuevo.
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let (plaza, pos) = (e.plaza, e.sitio());
+    let (av, col, heroe) = e.colocar_en(pos);
+    e.residir(heroe);
+    e.acabar_obra(av, col);
+    let a = e.dar_escuadra(heroe, Tropa::MiliciaLanceros);
+    e.ok("ana", Comando::GuarnecerAvanzada { heroe, avanzada: av, escuadras: vec![a] });
+    let b = e.dar_escuadra(heroe, Tropa::MiliciaLanceros);
+    assert_eq!(e.rechazada("ana", Comando::RetirarDeAvanzada { heroe, avanzada: av, escuadras: vec![a] }), rechazos::LIDERAZGO_SUPERADO, "la de la columna (14) más la que vuelve (14)");
+    let centro = e.centro;
+    e.ok("ana", Comando::MarcharA { ejercito: col, destino: centro });
+    e.avanzar(30 * MIN);
+    e.ok("ana", Comando::Guarnecer { asentamiento: plaza, heroe });
+    assert_eq!(e.n.heroe(heroe).unwrap().heroe.escuadra(b).unwrap().contenedor, Contenedor::Campamento);
+    let nueva = e.ok("ana", Comando::MovilizarEjercito { asentamiento: plaza, heroe, escuadras: vec![b], carga: vec![], politica: militar::columna::Politica::Aceptar, caravana_fundacion: None }).creadas[0];
+    assert_eq!(e.n.heroe(heroe).unwrap().heroe.escuadra(b).unwrap().contenedor, Contenedor::Ejercito(nueva), "sale con 14 aunque haya otros 14 en la avanzada");
+    assert_eq!(e.n.heroe(heroe).unwrap().heroe.escuadra(a).unwrap().contenedor, Contenedor::Avanzada(av));
+}
+
+#[test]
 fn desde_dentro_de_la_avanzada_se_guarnece_se_retira_se_deposita_se_reposta_y_se_elige_la_tropa() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
@@ -2264,4 +2287,20 @@ fn tras_la_convocatoria(n: &mut Nucleo) {
     if let Some(h) = fin {
         n.avanzar_hasta(h);
     }
+}
+
+// ───────────────────────────── La orilla del río (ORILLA_RIO, 2026-11-18) ─────────────────────────────
+
+#[test]
+fn la_avanzada_no_se_coloca_donde_quedaria_dentro_del_cauce() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    // Un punto de tierra firme encima del agua dibujada (la celda de al lado del cauce o el hueco de un vado). La orilla se mira justo después de
+    // la tierra firme, antes que la zona.
+    let i = comun::real::nodos_encima_del_rio(&m.0)[0];
+    let q = m.0.nodos()[i].posicion.unwrap();
+    let pos = Punto::new(q.x, q.y);
+    let (_, heroe) = e.colocador(e.sitio());
+    assert_eq!(e.rechazada("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion: pos }), rechazos::AVANZADA_JUNTO_AL_RIO);
 }

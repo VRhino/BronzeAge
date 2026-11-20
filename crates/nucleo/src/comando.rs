@@ -221,6 +221,9 @@ pub enum Comando {
     EntregarMateriales { ejercito: u64, pueblo: u64 },
     /// Cancela la obra o destruye el pueblo a mano: libera el cupo y no recupera nada (ni lo entregado ni lo almacenado).
     DestruirPueblo { pueblo: u64 },
+    /// Cancela la obra de un pueblo (2026-11-19, `cancelarObra` del contrato): la de levantarlo, como `DestruirPueblo`, o la subida de nivel de uno activo, que sigue en su nivel. No
+    /// recupera nada de lo entregado. El Gobernador o el Maestro de Obras de la madre, dentro de ella, dentro del pueblo o con su columna a su puerta.
+    CancelarObraDePueblo { pueblo: u64 },
     /// Compra en la plaza madre un carro de acarreo nuevo (carro + buey) para un pueblo que se quedó sin él.
     ReponerCarro { pueblo: u64 },
     /// Marca la obra de una aldea agrícola de `cultivo` en un punto de la zona de la plaza madre (§14.2; el cultivo, tanda 69 §12): queda «pendiente de
@@ -477,6 +480,8 @@ pub enum Comando {
     CrearFaccion { heroe: u64, nombre: String, sigilo: Option<Sigilo> },
     /// Pide el ingreso en una Facción (§3.2): entra en su lista de solicitantes. Se puede pedir a varias a la vez.
     SolicitarIngreso { heroe: u64, faccion: u32 },
+    /// El solicitante retira su solicitud de ingreso en esa Facción (decisión del autor, 2026-11-19); las que tenga en otras siguen.
+    CancelarSolicitud { heroe: u64, faccion: u32 },
     /// El Rey (`heroe`) acepta o deniega la solicitud de `solicitante` (§3.2). Aceptada, es ciudadano y sus solicitudes en las demás caen.
     ResponderSolicitud { heroe: u64, faccion: u32, solicitante: u64, aceptar: bool },
     /// Deja su Facción, con la sucesión del trono (§3.3). No se deja yendo en un ejército (Q7). Si reside en una plaza, pasa al campamento de mercenarios más cercano.
@@ -848,6 +853,7 @@ impl Comando {
             | Comando::ReclamarCaravana { .. }
             | Comando::CrearFaccion { .. }
             | Comando::SolicitarIngreso { .. }
+            | Comando::CancelarSolicitud { .. }
             | Comando::DejarFaccion { .. }
             | Comando::CambiarResidencia { .. }
             | Comando::ResidirEnCampamento { .. }
@@ -904,6 +910,7 @@ impl Comando {
             | Comando::AlternarReceta { .. }
             | Comando::MarcarPueblo { .. }
             | Comando::DestruirPueblo { .. }
+            | Comando::CancelarObraDePueblo { .. }
             | Comando::ReponerCarro { .. }
             | Comando::MarcarAldea { .. }
             | Comando::MejorarAldea { .. }
@@ -1060,7 +1067,7 @@ impl Comando {
                 i.ejercitos.push(*ejercito);
                 i.pueblos.push(*pueblo);
             }
-            Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => i.pueblos.push(*pueblo),
+            Comando::DestruirPueblo { pueblo } | Comando::CancelarObraDePueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => i.pueblos.push(*pueblo),
             Comando::EntrarEnPueblo { pueblo, heroe }
             | Comando::SalirDePueblo { pueblo, heroe }
             | Comando::GuarnecerPueblo { heroe, pueblo, .. }
@@ -1267,6 +1274,7 @@ impl Comando {
             | Comando::ElegirEscuadrasDeBatalla { heroe, .. }
             | Comando::CrearFaccion { heroe, .. }
             | Comando::SolicitarIngreso { heroe, .. }
+            | Comando::CancelarSolicitud { heroe, .. }
             | Comando::DejarFaccion { heroe }
             | Comando::AsignarRey { heroe, .. }
             | Comando::AsignarEmbajador { heroe, .. }
@@ -1368,6 +1376,7 @@ impl Comando {
             Comando::ProponerAnexion { absorbente: a, absorbida: b, .. } | Comando::ProponerFusion { a, b, .. } => v.extend([(Clase::Faccion, u64::from(*a)), (Clase::Faccion, u64::from(*b))]),
             Comando::FijarFaccionDeHeroe { faccion: Some(faccion), .. }
             | Comando::SolicitarIngreso { faccion, .. }
+            | Comando::CancelarSolicitud { faccion, .. }
             | Comando::ResponderSolicitud { faccion, .. }
             | Comando::AsignarRey { faccion, .. }
             | Comando::AsignarEmbajador { faccion, .. }
@@ -1811,6 +1820,10 @@ impl Peticion {
             }
             Comando::DestruirPueblo { pueblo } => {
                 w.u8(47);
+                w.u64(*pueblo);
+            }
+            Comando::CancelarObraDePueblo { pueblo } => {
+                w.u8(237);
                 w.u64(*pueblo);
             }
             Comando::ReponerCarro { pueblo } => {
@@ -2592,6 +2605,11 @@ impl Peticion {
                 w.u64(*heroe);
                 w.u32(*faccion);
             }
+            Comando::CancelarSolicitud { heroe, faccion } => {
+                w.u8(238);
+                w.u64(*heroe);
+                w.u32(*faccion);
+            }
             Comando::ResponderSolicitud { heroe, faccion, solicitante, aceptar } => {
                 w.u8(130);
                 w.u64(*heroe);
@@ -2826,6 +2844,7 @@ impl Peticion {
             45 => Comando::MarcarPueblo { asentamiento: r.u64()?, nodo: r.u32()? },
             46 => Comando::EntregarMateriales { ejercito: r.u64()?, pueblo: r.u64()? },
             47 => Comando::DestruirPueblo { pueblo: r.u64()? },
+            237 => Comando::CancelarObraDePueblo { pueblo: r.u64()? },
             48 => Comando::ReponerCarro { pueblo: r.u64()? },
             49 => Comando::CrearHeroe { cuenta: r.texto()?, campamento: r.u32()?, controlador: controlador_de_u8(r.u8()?)?, nombre: None, clase: r.texto()?, aspecto: crate::codec_militar::aspecto_leer(&mut r)? },
             50 => Comando::ReclutarTropa { asentamiento: r.u64()?, heroe: r.u64()?, tropa: tropa_de_u8(r.u8()?)? },
@@ -2949,6 +2968,7 @@ impl Peticion {
                 Comando::CrearFaccion { heroe, nombre, sigilo: if r.bool()? { Some(sigilo_leer(&mut r)?) } else { None } }
             }
             129 => Comando::SolicitarIngreso { heroe: r.u64()?, faccion: r.u32()? },
+            238 => Comando::CancelarSolicitud { heroe: r.u64()?, faccion: r.u32()? },
             130 => Comando::ResponderSolicitud { heroe: r.u64()?, faccion: r.u32()?, solicitante: r.u64()?, aceptar: r.bool()? },
             131 => Comando::DejarFaccion { heroe: r.u64()? },
             132 => Comando::AsignarRey { heroe: r.u64()?, faccion: r.u32()?, designado: r.u64()? },
@@ -3237,6 +3257,8 @@ pub mod rechazos {
     pub const PUEBLO_FUERA_DE_LA_ZONA: &str = "pueblo.fuera_de_la_zona";
     /// El nodo no tiene ruta por tierra hasta la plaza madre: su carro no podría acarrear.
     pub const PUEBLO_SIN_RUTA: &str = "pueblo.sin_ruta";
+    /// El nodo o el punto está tan cerca del trazo de un río que el pueblo o la aldea quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18).
+    pub const PUEBLO_JUNTO_AL_RIO: &str = "pueblo.junto_al_rio";
     pub const PUEBLO_TECNOLOGIA_FALTANTE: &str = "pueblo.tecnologia_faltante";
     pub const PUEBLO_NIVEL_INSUFICIENTE: &str = "pueblo.nivel_insuficiente";
     pub const PUEBLO_SIN_CUPO: &str = "pueblo.sin_cupo";
@@ -3254,6 +3276,8 @@ pub mod rechazos {
     pub const PUEBLO_FUERA_DE_SU_ANILLO: &str = "pueblo.fuera_de_su_anillo";
     pub const PUEBLO_NIVEL_MAXIMO: &str = "pueblo.nivel_maximo";
     pub const PUEBLO_MEJORA_EN_CURSO: &str = "pueblo.mejora_en_curso";
+    /// `cancelarObra` sobre un pueblo activo sin subida de nivel marcada (2026-11-19).
+    pub const PUEBLO_SIN_OBRA: &str = "pueblo.sin_obra";
     /// La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4).
     pub const PUEBLO_CULTIVO_BLOQUEADO: &str = "pueblo.cultivo_bloqueado";
     // Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29).
@@ -3284,6 +3308,8 @@ pub mod rechazos {
     pub const AVANZADA_FUERA_DEL_SITIO: &str = "avanzada.fuera_del_sitio";
     /// Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04).
     pub const AVANZADA_SIN_RUTA: &str = "avanzada.sin_ruta";
+    /// El sitio está tan cerca del trazo de un río que la avanzada quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18).
+    pub const AVANZADA_JUNTO_AL_RIO: &str = "avanzada.junto_al_rio";
     pub const AVANZADA_FACCION_AJENA: &str = "avanzada.faccion_ajena";
     pub const AVANZADA_FUERA_DE_LA_PUERTA: &str = "avanzada.fuera_de_la_puerta";
     pub const AVANZADA_NO_ESTA_PENDIENTE: &str = "avanzada.no_esta_pendiente";
@@ -3738,9 +3764,9 @@ pub mod rechazos {
     pub const FACCION_SIGILO_DUPLICADO: &str = "faccion.sigilo_duplicado";
     /// Ya es ciudadano de una Facción: 1 héroe, 1 Facción.
     pub const FACCION_YA_PERTENECE: &str = "faccion.ya_pertenece";
-    /// Dejó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`.
-    pub const FACCION_COOLDOWN_CREACION: &str = "faccion.cooldown_creacion";
-    /// Responder a quien no ha pedido entrar.
+    /// Pide el ingreso habiendo dejado una Facción hace menos de `CIUDADANIA.cooldownIngresoFaccionHoras` (también en la que dejó; 2026-11-19, sustituye a `faccion.cooldown_creacion`).
+    pub const FACCION_COOLDOWN_INGRESO: &str = "faccion.cooldown_ingreso";
+    /// Responder a quien no ha pedido entrar, o cancelar una solicitud que no se tiene.
     pub const FACCION_NO_HA_PEDIDO: &str = "faccion.no_ha_pedido";
     /// No es ciudadano de ninguna Facción.
     pub const FACCION_NO_PERTENECE: &str = "faccion.no_pertenece";
@@ -4128,6 +4154,7 @@ mod pruebas {
             Comando::MarcarPueblo { asentamiento: 3, nodo: 70_001 },
             Comando::EntregarMateriales { ejercito: 2, pueblo: 9 },
             Comando::DestruirPueblo { pueblo: 9 },
+            Comando::CancelarObraDePueblo { pueblo: 9 },
             Comando::ReponerCarro { pueblo: 9 },
             Comando::MarcarAldea { asentamiento: 3, punto: Punto::new(1_500, -2_000), cultivo: Cultivo::Vid },
             Comando::MejorarAldea { pueblo: 9 },
@@ -4149,6 +4176,7 @@ mod pruebas {
             Comando::CrearFaccion { heroe: 2, nombre: "Micenas".into(), sigilo: None },
             Comando::CrearFaccion { heroe: 2, nombre: "Troya".into(), sigilo: Some(sigilo) },
             Comando::SolicitarIngreso { heroe: 2, faccion: 3 },
+            Comando::CancelarSolicitud { heroe: 2, faccion: 3 },
             Comando::ResponderSolicitud { heroe: 2, faccion: 3, solicitante: 9, aceptar: true },
             Comando::ResponderSolicitud { heroe: 2, faccion: 3, solicitante: 9, aceptar: false },
             Comando::DejarFaccion { heroe: 2 },

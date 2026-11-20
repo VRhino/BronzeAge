@@ -89,6 +89,7 @@ mod ciudadania;
 mod pueblos;
 mod pueblos_dentro;
 mod residentes;
+mod rios;
 mod salidas;
 mod taberna;
 mod logros;
@@ -1232,6 +1233,7 @@ impl Nucleo {
             },
             Comando::CrearFaccion { .. }
             | Comando::SolicitarIngreso { .. }
+            | Comando::CancelarSolicitud { .. }
             | Comando::ResponderSolicitud { .. }
             | Comando::DejarFaccion { .. }
             | Comando::AsignarRey { .. }
@@ -1320,6 +1322,7 @@ impl Nucleo {
             Comando::MarcarPueblo { .. }
             | Comando::EntregarMateriales { .. }
             | Comando::DestruirPueblo { .. }
+            | Comando::CancelarObraDePueblo { .. }
             | Comando::ReponerCarro { .. }
             | Comando::MarcarAldea { .. }
             | Comando::MejorarAldea { .. } => match self.ejecutar_pueblos(t, p) {

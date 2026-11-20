@@ -9,7 +9,7 @@ fn los_contratos_y_las_marcas_dan_la_vuelta_por_la_foto() {
     let reglas = Reglas::default();
     let mut s = Estado::nuevo(reglas.clone(), "h".into(), 1, 0);
     let rp = s.reglas.economia.politica.clone();
-    s.politica.facciones.crear(&rp, 1, 10, "Micenas", None, 0).unwrap();
+    s.politica.facciones.crear(&rp, 1, 10, "Micenas", None).unwrap();
     s.politica.facciones.otorgar_marcado(1, 20, Marca::Permanente).unwrap();
     s.politica.facciones.otorgar_marcado(1, 21, Marca::Temporal).unwrap();
     s.contratos.ofertas.insert(30, Oferta { campamento: 2, desde: 5 });

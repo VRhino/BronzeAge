@@ -483,7 +483,7 @@ mod pruebas {
         let m = Reglas::cargar().mercenarios;
         assert_eq!((m.recargo, m.descuento_sin_asentamientos, m.nivel_edificios), (1_500_000, 600_000, 3));
         assert_eq!((m.valor_equipo_en_oro, m.poblacion_por_vivienda, m.poblacion_por_hora), (8_000, 10, 10));
-        assert_eq!((m.edificios_militares, m.viviendas, m.porcentaje_facciones), (vec![Tipo::Barracon, Tipo::GaleriaDeTiro, Tipo::Caballerizas], 10, 500_000));
+        assert_eq!((m.edificios_militares, m.viviendas, m.porcentaje_facciones), (vec![Tipo::Barracon, Tipo::GaleriaDeTiro, Tipo::Caballerizas], 16, 500_000));
         assert_eq!(m.racion_cada, 30 * MS_POR_MINUTO, "la ración gratis del campamento, cada 30 minutos");
         assert_eq!(m.radio_proteccion, 10_000, "nadie inicia un combate a 10 unidades de un campamento");
     }

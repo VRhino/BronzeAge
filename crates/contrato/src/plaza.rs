@@ -97,4 +97,6 @@ campos_de_la_plaza!(
     reclutamiento_cerrado_a_ciudadanos,
     consumo_pausado,
     estilo_epoca,
+    comida_poblacion,
+    comida_guarnicion,
 );

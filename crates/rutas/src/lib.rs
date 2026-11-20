@@ -227,11 +227,13 @@ pub struct Rutas {
     transitable: Option<Transitable>,
 }
 
-/// Copia a bits de la transitabilidad del mundo (una celda = `TAMANO_CELDA`) y, si la trae, su capa de coste.
+/// Copia a bits de la transitabilidad del mundo (una celda = `TAMANO_CELDA`) y, si la trae, su capa de coste. Con los puntos de los
+/// vados: el cauce va cerrado entero y se pisa solo a [`mundo::RADIO_VADO`] del punto de un vado (2026-11-18).
 struct Transitable {
     cols: i64,
     filas: i64,
     bits: Vec<u64>,
+    vados: Vec<Punto>,
     /// Coste por celda en milésimas (1000 = llano, 0 = no transitable); vacío si el mundo no trae la capa.
     coste: Vec<u16>,
 }
@@ -253,7 +255,8 @@ impl Transitable {
                 }
             }
         }
-        Self { cols: c as i64, filas: f as i64, bits, coste }
+        let vados = m.rios().iter().flat_map(|r| &r.vados).map(|v| Punto::new(v.x, v.y)).collect();
+        Self { cols: c as i64, filas: f as i64, bits, vados, coste }
     }
 
     /// Para las pruebas: `coste(col, fila)` por celda, en milésimas; 0 = no transitable.
@@ -267,7 +270,7 @@ impl Transitable {
                 bits[i >> 6] |= 1 << (i & 63);
             }
         }
-        Self { cols, filas, bits, coste: c }
+        Self { cols, filas, bits, vados: Vec::new(), coste: c }
     }
 
     fn tiene_coste(&self) -> bool {
@@ -312,7 +315,7 @@ impl Transitable {
             return false;
         }
         let i = (f * self.cols + c) as usize;
-        self.bits[i >> 6] >> (i & 63) & 1 == 1
+        self.bits[i >> 6] >> (i & 63) & 1 == 1 || self.vados.iter().any(|&v| v.dist2(p) <= (mundo::RADIO_VADO as i128).pow(2))
     }
     /// Segmento transitable, muestreado cada media celda (incluye los extremos).
     fn libre(&self, a: Punto, b: Punto) -> bool {

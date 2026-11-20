@@ -127,6 +127,8 @@ pub struct Receta {
 /// Lo que tienen en común un arma y una armadura: la tecnología que abre su metal (ninguna, el de inicio), sus cifras y su receta.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeCombate {
+    /// El metal (`metal`, uno de `metales`): `inicio` es el equipo con el que nace el héroe.
+    pub metal: String,
     /// La tecnología de `metales` que abre comprarla y forjarla (Objetos_Del_Heroe §2.1: llevarla se puede siempre).
     pub tecnologia: Option<String>,
     pub cifras: Cifras,
@@ -215,6 +217,9 @@ pub struct Ficha {
     pub apilable: bool,
     /// En monedas: lo que cuesta en la tienda (si lo vende) y, por `ventaPct`, lo que da al venderlo.
     pub precio: i64,
+    /// `enTienda` (2026-11-19; sin él, sí): `false` en lo que la tienda deja de vender aunque su tier entre, las armaduras de inicio (las sustituye el juego de recluta).
+    /// Se le puede seguir vendiendo.
+    pub en_tienda: bool,
 }
 
 impl Ficha {
@@ -375,7 +380,7 @@ fn de_combate(o: &Value, tier: Option<u8>, metales: &BTreeMap<String, Option<Str
             calidad: (calidad[0].as_i64().expect("calidad mínima"), calidad[1].as_i64().expect("calidad máxima")),
         }
     });
-    DeCombate { tecnologia, cifras, forja }
+    DeCombate { metal, tecnologia, cifras, forja }
 }
 
 fn ficha(o: &Value, metales: &BTreeMap<String, Option<String>>) -> Ficha {
@@ -405,7 +410,8 @@ fn ficha(o: &Value, metales: &BTreeMap<String, Option<String>>) -> Ficha {
         }
         t => panic!("tipo de objeto «{t}» desconocido"),
     };
-    Ficha { tipo, tier, apilable: campo(o, "apilable").as_bool().expect("«apilable» es un sí o no"), precio: entero(o, "precio") }
+    let en_tienda = o.get("enTienda").map_or(true, |v| v.as_bool().unwrap_or_else(|| panic!("{}: «enTienda» es un sí o no", texto(o, "id"))));
+    Ficha { tipo, tier, apilable: campo(o, "apilable").as_bool().expect("«apilable» es un sí o no"), precio: entero(o, "precio"), en_tienda }
 }
 
 impl Catalogo {
@@ -433,17 +439,21 @@ impl Catalogo {
             }
         }
         let de_tier_1 = |pred: &dyn Fn(&Tipo) -> bool| -> Vec<&String> { objetos.iter().filter(|(_, f)| f.tier == Some(1) && pred(&f.tipo)).map(|(id, _)| id).collect() };
+        // El equipo de inicio es el del metal `inicio` (el tier I tiene también el juego de recluta, 2026-11-19).
+        let de_inicio = |pred: &dyn Fn(&Tipo) -> bool| -> Vec<&String> {
+            objetos.iter().filter(|(_, f)| f.tier == Some(1) && f.de_combate().is_some_and(|c| c.metal == "inicio") && pred(&f.tipo)).map(|(id, _)| id).collect()
+        };
         let monturas = de_tier_1(&|t| *t == Tipo::Montura);
         assert_eq!(monturas.len(), 1, "hay una sola montura de tier I, la de inicio");
         let montura = Pieza::del_catalogo(monturas[0]);
         let mut clases = BTreeMap::new();
         for c in lista(&cl, "clases") {
             let id = texto(c, "id");
-            let armas = de_tier_1(&|t| matches!(t, Tipo::Arma { clase, .. } if *clase == id));
+            let armas = de_inicio(&|t| matches!(t, Tipo::Arma { clase, .. } if *clase == id));
             assert_eq!(armas.len(), 1, "la clase «{id}» tiene una sola arma de inicio (tier I)");
             let peso = Peso::desde_nombre(&texto(c, "armaduraInicial"));
             let pieza = |h: Hueco| {
-                let p = de_tier_1(&|t| matches!(t, Tipo::Armadura { hueco, peso: q, .. } if *hueco == h && *q == peso));
+                let p = de_inicio(&|t| matches!(t, Tipo::Armadura { hueco, peso: q, .. } if *hueco == h && *q == peso));
                 assert_eq!(p.len(), 1, "la clase «{id}» tiene una sola pieza de inicio de {h:?} {peso:?}");
                 Some(Pieza::del_catalogo(p[0]))
             };
@@ -492,22 +502,51 @@ impl Default for Catalogo {
 mod pruebas {
     use super::*;
 
+    /// Las cifras de una armadura como una lista: los cuatro atributos, las tres defensas y la salud.
+    fn cifras(c: &Catalogo, id: &str) -> Vec<i64> {
+        match &c.objetos[id].de_combate().unwrap_or_else(|| panic!("{id}")).cifras {
+            Cifras::Armadura { atributos: a, defensa: d, salud } => vec![a.fuerza, a.destreza, a.armadura, a.vitalidad, d.perforante, d.cortante, d.contundente, *salud],
+            Cifras::Arma { .. } => panic!("{id} es un arma"),
+        }
+    }
+
     #[test]
-    fn el_catalogo_tiene_30_armas_87_armaduras_y_5_monturas() {
+    fn el_juego_de_recluta_es_mejor_que_el_de_inicio_pieza_a_pieza_y_peor_que_el_de_cobre() {
+        let c = Catalogo::cargar();
+        for peso in ["ligera", "media", "pesada"] {
+            let mut juego = vec![0; 8];
+            let mut cobre = vec![0; 8];
+            for h in ["torso", "casco", "pantalones", "guantes", "botas"] {
+                let r = cifras(&c, &format!("{h}_{peso}_recluta"));
+                assert!(c.objetos[&format!("{h}_{peso}_recluta")].en_tienda && c.objetos[&format!("{h}_{peso}_recluta")].tier == Some(1));
+                if h != "casco" {
+                    let i = cifras(&c, &format!("{h}_{peso}_inicio"));
+                    assert!(r.iter().zip(&i).all(|(r, i)| r >= i) && r != i, "{h} {peso}: {r:?} frente a {i:?}");
+                    assert!(!c.objetos[&format!("{h}_{peso}_inicio")].en_tienda);
+                }
+                juego.iter_mut().zip(&r).for_each(|(t, x)| *t += x);
+                cobre.iter_mut().zip(cifras(&c, &format!("{h}_{peso}_cobre"))).for_each(|(t, x)| *t += x);
+            }
+            assert!(juego[..4].iter().sum::<i64>() < cobre[..4].iter().sum::<i64>() && juego[4..7].iter().sum::<i64>() < cobre[4..7].iter().sum::<i64>() && juego[7] < cobre[7], "{peso}");
+        }
+    }
+
+    #[test]
+    fn el_catalogo_tiene_30_armas_102_armaduras_y_5_monturas() {
         let c = Catalogo::cargar();
         let cuenta = |p: &dyn Fn(&Tipo) -> bool| c.objetos.values().filter(|f| p(&f.tipo)).count();
         assert_eq!(cuenta(&|t| matches!(t, Tipo::Arma { .. })), 30);
-        assert_eq!(cuenta(&|t| matches!(t, Tipo::Armadura { .. })), 87);
+        assert_eq!(cuenta(&|t| matches!(t, Tipo::Armadura { .. })), 102, "87 y las 15 del juego de recluta (2026-11-19)");
         assert_eq!(cuenta(&|t| *t == Tipo::Montura), 5);
         assert_eq!(cuenta(&|t| *t == Tipo::Material), 5, "el crisol y los planos II a V");
         assert_eq!(cuenta(&|t| matches!(t, Tipo::Consumible(_))), 9, "ocho medallas y el cofre");
         assert_eq!(c.clases.len(), 5);
-        assert_eq!((c.metales.len(), &c.metales["inicio"], c.metales["acero"].as_deref()), (7, &None, Some("acero_templado")), "el de inicio no pide tecnología");
+        assert_eq!((c.metales.len(), &c.metales["inicio"], c.metales["acero"].as_deref()), (8, &None, Some("acero_templado")), "el de inicio no pide tecnología");
         assert_eq!((c.venta_pct, c.tienda_hasta_tier, c.casillas_mochila, c.casillas_almacen), (50, 2, 72, 144));
         let f = &c.forja;
         assert_eq!((f.impuesto_por_tier.values().copied().collect::<Vec<_>>(), &f.recargos_pct[..], f.recargo_inicial_pct), (vec![100, 175, 250, 350], &[0, 100, 200, 500][..], 100));
         assert_eq!(f.era_por_tier.iter().map(|(&t, &e)| (t, e)).collect::<Vec<_>>(), [(3, 3), (4, 4), (5, 5)], "del tier III al V, su Era; el II no pide");
-        assert_eq!((c.version_objetos.as_str(), c.version_clases.as_str()), ("bronzeage-objetos-1", "bronzeage-clases-1"), "cada bloque lleva su versión");
+        assert_eq!((c.version_objetos.as_str(), c.version_clases.as_str()), ("bronzeage-objetos-2", "bronzeage-clases-1"), "cada bloque lleva su versión");
     }
 
     #[test]

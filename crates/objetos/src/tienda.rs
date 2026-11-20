@@ -10,7 +10,7 @@ pub enum ErrorTienda {
     Inventario(ErrorInventario),
     /// El objeto no está en el catálogo.
     Desconocido,
-    /// La tienda no lo vende: no es arma, armadura ni montura, o su tier pasa de `tiendaHastaTier`.
+    /// La tienda no lo vende: no es arma, armadura ni montura, su tier pasa de `tiendaHastaTier` o su ficha lleva `enTienda: false`.
     NoSeVende,
     /// La Facción de la plaza no tiene adoptada la tecnología de su metal.
     MetalCerrado,
@@ -33,7 +33,7 @@ pub fn comprar(mochila: &mut Inventario, cat: &Catalogo, objeto: &str, monedas: 
         Tipo::Montura => None,
         Tipo::Material | Tipo::Consumible(_) => return Err(ErrorTienda::NoSeVende),
     };
-    if ficha.tier.is_none_or(|t| t > cat.tienda_hasta_tier) {
+    if !ficha.en_tienda || ficha.tier.is_none_or(|t| t > cat.tienda_hasta_tier) {
         return Err(ErrorTienda::NoSeVende);
     }
     if tecnologia.is_some_and(|t| !adoptada(t)) {
@@ -67,15 +67,28 @@ mod pruebas {
     }
 
     #[test]
+    fn la_tienda_no_vende_las_armaduras_de_inicio_pero_las_compra() {
+        let cat = Catalogo::default();
+        let mut m = Inventario::vacio(cat.casillas_mochila);
+        let mut monedas = 1_000;
+        assert_eq!(comprar(&mut m, &cat, "torso_media_inicio", &mut monedas, todo_abierto), Err(ErrorTienda::NoSeVende), "la sustituye el juego de recluta");
+        comprar(&mut m, &cat, "dagas_inicio", &mut monedas, todo_abierto).unwrap();
+        assert_eq!(monedas, 800, "las armas de inicio, sí");
+        m.meter(&cat, Pieza::del_catalogo("torso_media_inicio"), 1).unwrap();
+        let casilla = *m.casillas.iter().find(|(_, c)| c.pieza.objeto == "torso_media_inicio").unwrap().0;
+        assert_eq!(vender(&mut m, &cat, casilla, 1, &mut monedas), Ok(150), "se le sigue vendiendo, a la mitad");
+    }
+
+    #[test]
     fn comprar_cobra_el_precio_y_mete_la_pieza_al_100() {
         let cat = Catalogo::default();
         let mut m = Inventario::vacio(cat.casillas_mochila);
-        let mut monedas = 1_500;
-        comprar(&mut m, &cat, "torso_pesada_inicio", &mut monedas, |_| false).unwrap();
+        let mut monedas = 1_800;
+        comprar(&mut m, &cat, "torso_pesada_recluta", &mut monedas, |_| false).unwrap();
         comprar(&mut m, &cat, "montura_estepa", &mut monedas, |_| false).unwrap();
         comprar(&mut m, &cat, "casco_media_cobre", &mut monedas, |t| t == "metalurgia_cobre").unwrap();
-        assert_eq!(monedas, 1_500 - 450 - 600 - cat.objetos["casco_media_cobre"].precio);
-        assert_eq!(m.casillas.values().map(|c| c.pieza.clone()).collect::<Vec<_>>(), ["torso_pesada_inicio", "montura_estepa", "casco_media_cobre"].map(Pieza::del_catalogo));
+        assert_eq!(monedas, 1_800 - 675 - 600 - cat.objetos["casco_media_cobre"].precio);
+        assert_eq!(m.casillas.values().map(|c| c.pieza.clone()).collect::<Vec<_>>(), ["torso_pesada_recluta", "montura_estepa", "casco_media_cobre"].map(Pieza::del_catalogo));
     }
 
     #[test]

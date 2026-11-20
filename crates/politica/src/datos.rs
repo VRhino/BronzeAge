@@ -30,6 +30,10 @@ fn dias(v: &Value, ruta: &str) -> Instante {
     (num(v, ruta) * DIA as f64).round() as Instante
 }
 
+fn horas(v: &Value, ruta: &str) -> Instante {
+    (num(v, ruta) * (60 * MS_POR_MINUTO) as f64).round() as Instante
+}
+
 fn lista_u32(v: &Value) -> Vec<u32> {
     v.as_array().expect("lista").iter().map(|x| x.as_u64().expect("entero") as u32).collect()
 }
@@ -92,8 +96,9 @@ impl ReglasPrestigio {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reglas {
-    /// `CIUDADANIA.cooldownCreacionFaccionDias` (ms): tras dejar una Facción no se crea otra hasta que pase.
-    pub cooldown_creacion: Instante,
+    /// `CIUDADANIA.cooldownIngresoFaccionHoras` (ms): tras dejar una Facción no se pide el ingreso en ninguna (tampoco en la que deja) hasta que pase. Crear una sí se puede
+    /// (decisión del autor, 2026-11-19).
+    pub cooldown_ingreso: Instante,
     /// `CIUDADANIA.cooldownCambioResidenciaDias` (ms).
     pub cooldown_residencia: Instante,
     /// `CAPITAL.cooldownDias` (ms).
@@ -126,7 +131,7 @@ impl Reglas {
             .map(|g| Grupo::desde_nombre(g.as_str().expect("grupo")).unwrap_or_else(|| panic!("grupo «{g}»")))
             .collect::<Vec<_>>();
         Self {
-            cooldown_creacion: dias(&ciudadania, "cooldownCreacionFaccionDias"),
+            cooldown_ingreso: horas(&ciudadania, "cooldownIngresoFaccionHoras"),
             cooldown_residencia: dias(&ciudadania, "cooldownCambioResidenciaDias"),
             cooldown_capital: dias(&bloque("CAPITAL"), "cooldownDias"),
             puerta_por_defecto: Grupos::de(puerta),
@@ -189,7 +194,7 @@ mod pruebas {
     #[test]
     fn las_cifras_son_las_del_documento() {
         let r = Reglas::cargar();
-        assert_eq!((r.cooldown_creacion, r.cooldown_residencia, r.cooldown_capital), (7 * DIA, 3 * DIA, 14 * DIA));
+        assert_eq!((r.cooldown_ingreso, r.cooldown_residencia, r.cooldown_capital), (DIA, 3 * DIA, 14 * DIA));
         assert_eq!((r.caducidad_relacion, r.caducidad_anexion, r.caducidad_fusion), (3 * DIA, 3 * DIA, 3 * DIA));
         assert_eq!((r.cadencia_titulos, r.margen_titulos), (10 * MS_POR_MINUTO, 50_000), "P2: la aspirante supera a la poseedora en un 5 %");
         assert_eq!(r.puerta_por_defecto, Grupos::de([Grupo::Neutrales, Grupo::Enemigos]), "Q1: cerrada a neutrales y enemigos");

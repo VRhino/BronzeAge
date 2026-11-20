@@ -157,6 +157,15 @@ fn crear_pedir_responder_nombrar_y_dejar_la_faccion_con_la_sucesion_del_trono() 
     assert_eq!(e.ord("bea", Comando::SolicitarIngreso { heroe: bea, faccion: 1 }).resultado, Resultado::SinCambios, "pedir dos veces es pedir lo mismo");
     e.ok("cai", Comando::SolicitarIngreso { heroe: cai, faccion: 1 });
     assert_eq!(e.no("cai", Comando::SolicitarIngreso { heroe: cai, faccion: 9 }), rechazos::FACCION_NO_EXISTE);
+    // El solicitante cancela su solicitud (2026-11-19): solo la suya, y sin tenerla se rechaza.
+    assert_eq!(e.no("bea", Comando::CancelarSolicitud { heroe: cai, faccion: 1 }), rechazos::NO_AUTORIZADO, "nadie cancela la de otro");
+    assert_eq!(e.no("cai", Comando::CancelarSolicitud { heroe: cai, faccion: 9 }), rechazos::FACCION_NO_EXISTE);
+    e.ok("cai", Comando::CancelarSolicitud { heroe: cai, faccion: 1 });
+    assert_eq!(e.faccion(1).solicitudes, vec![bea]);
+    let cancelada = &e.hechos("faccion.solicitud_cancelada")[0];
+    assert_eq!((dato(cancelada, "faccion"), dato(cancelada, "heroe")), (1, cai as i64));
+    assert_eq!(e.no("cai", Comando::CancelarSolicitud { heroe: cai, faccion: 1 }), rechazos::FACCION_NO_HA_PEDIDO);
+    e.ok("cai", Comando::SolicitarIngreso { heroe: cai, faccion: 1 });
     assert_eq!(e.faccion(1).solicitudes, vec![bea, cai]);
     assert_eq!(e.no("bea", Comando::ResponderSolicitud { heroe: bea, faccion: 1, solicitante: bea, aceptar: true }), rechazos::NO_AUTORIZADO);
     assert_eq!(e.no("ana", Comando::ResponderSolicitud { heroe: ana, faccion: 9, solicitante: bea, aceptar: true }), rechazos::FACCION_NO_EXISTE);
@@ -179,15 +188,16 @@ fn crear_pedir_responder_nombrar_y_dejar_la_faccion_con_la_sucesion_del_trono() 
     assert_eq!(e.no("cai", Comando::AsignarRey { heroe: cai, faccion: 1, designado: cai }), rechazos::NO_AUTORIZADO, "quien no es ciudadano no nombra Rey");
     assert_eq!(e.faccion(1).embajador, Some(bea));
 
-    // Dejar la Facción: el trono pasa al primero de los que quedan, que era el Embajador (la embajada queda vacante); estampa el cooldown de creación.
+    // Dejar la Facción: el trono pasa al primero de los que quedan, que era el Embajador (la embajada queda vacante); estampa el cooldown de ingreso (24 h, 2026-11-19).
     e.ok("ana", Comando::DejarFaccion { heroe: ana });
     let f = e.faccion(1);
     assert_eq!((f.rey, f.embajador, f.ciudadanos.clone()), (Some(bea), None, vec![bea]));
     assert_eq!(e.faccion_de(ana), None);
     assert_eq!(e.no("ana", Comando::DejarFaccion { heroe: ana }), rechazos::FACCION_NO_PERTENECE);
-    assert_eq!(e.no("ana", Comando::CrearFaccion { heroe: ana, nombre: "Tebas".into(), sigilo: None }), rechazos::FACCION_COOLDOWN_CREACION);
+    assert_eq!(e.no("ana", Comando::SolicitarIngreso { heroe: ana, faccion: 1 }), rechazos::FACCION_COOLDOWN_INGRESO, "tampoco en la que acaba de dejar");
+    e.avanzar(DIA);
     e.ok("ana", Comando::SolicitarIngreso { heroe: ana, faccion: 1 });
-    e.avanzar(7 * DIA);
+    // Crear no lleva cooldown, y con una solicitud abierta se puede: la borra.
     let tebas = e.crear("ana", ana, "Tebas");
     assert_eq!((tebas, e.faccion(1).solicitudes.clone()), (2, vec![]), "crear borra sus solicitudes en las demás");
     assert_eq!(e.ord("bea", Comando::AsignarRey { heroe: bea, faccion: 1, designado: bea }).resultado, Resultado::SinCambios, "ya es el Rey");
@@ -201,6 +211,8 @@ fn crear_pedir_responder_nombrar_y_dejar_la_faccion_con_la_sucesion_del_trono() 
     assert_eq!((e.faccion(1).rey, e.faccion(1).solicitudes.clone()), (Some(cai), vec![]));
     e.ok("cai", Comando::AsignarEmbajador { heroe: cai, faccion: 1, designado: cai });
     assert!(!e.hechos("cargo.embajador_asignado").is_empty());
+    // Quien acaba de dejar su Facción crea otra al instante (2026-11-19).
+    assert_eq!(e.crear("bea", bea, "Argos"), 3);
 }
 
 #[test]

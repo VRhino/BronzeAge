@@ -229,7 +229,7 @@ pub fn mandaba(n: &Nucleo, actor: &str, c: &Comando) -> bool {
         | Comando::MoverCargaAparcada { caravana, .. }
         | Comando::EnviarCaravanaAlOrigen { caravana } => origen(*caravana),
         Comando::MoverCarro { de, .. } => origen(*de),
-        Comando::DestruirPueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => n.pueblo(*pueblo).and_then(|(m, _)| plaza(m)),
+        Comando::DestruirPueblo { pueblo } | Comando::CancelarObraDePueblo { pueblo } | Comando::ReponerCarro { pueblo } | Comando::MejorarAldea { pueblo } => n.pueblo(*pueblo).and_then(|(m, _)| plaza(m)),
         Comando::MejorarAvanzada { avanzada, .. }
         | Comando::RepararAvanzada { avanzada, .. }
         | Comando::DestruirAvanzada { avanzada, .. }

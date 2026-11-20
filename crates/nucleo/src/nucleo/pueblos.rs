@@ -44,6 +44,7 @@ fn rechazo_de_pueblo(e: ErrorPueblo) -> (&'static str, &'static str) {
         ErrorPueblo::FertilidadInsuficiente => (PUEBLO_FERTILIDAD_INSUFICIENTE, "la tierra de ese punto no es bastante fértil para una aldea agrícola"),
         ErrorPueblo::NivelMaximo => (PUEBLO_NIVEL_MAXIMO, "el pueblo ya está en su último nivel"),
         ErrorPueblo::MejoraEnCurso => (PUEBLO_MEJORA_EN_CURSO, "el pueblo ya tiene una subida de nivel en marcha"),
+        ErrorPueblo::SinMejora => (PUEBLO_SIN_OBRA, "el pueblo no tiene ninguna obra que cancelar"),
         ErrorPueblo::NoEstaActivo => (PUEBLO_NO_ESTA_ACTIVO, "el pueblo aún no está levantado"),
         ErrorPueblo::CultivoBloqueado => (PUEBLO_CULTIVO_BLOQUEADO, "ninguna plaza de la Facción tiene aún el nivel que pide ese cultivo"),
     }
@@ -75,14 +76,18 @@ impl Nucleo {
     }
 
     /// Los nodos que el panel de la plaza madre ofrece para un pueblo (§14): los de piedra y minerales dentro de su zona real, sin pueblo ni
-    /// extractor encima, con el extractor que les toca y cuya tecnología tenga la Facción. Vacío sin mundo o sin plaza.
+    /// extractor encima, lejos del cauce de los ríos (`ORILLA_RIO`), con el extractor que les toca y cuya tecnología tenga la Facción. Vacío sin mundo o sin plaza.
     pub fn candidatos_de_pueblo(&self, plaza: u64) -> Vec<(u32, Tipo)> {
         let (Some(geo), Some(a)) = (self.geografia.as_ref(), self.estado.asentamientos.get(&plaza)) else { return vec![] };
         let catalogo = &self.estado.reglas.economia.datos.catalogo;
         let mut nodos = geo.mapa.piedra_en(a.posicion, a.radio);
         nodos.extend(geo.mapa.minerales_en(a.posicion, a.radio));
         nodos.sort_unstable();
-        let libre = |n: &u32| !self.estado.nodos_reclamados.contains_key(n) && self.en_zona(plaza, geo.mapa.nodos[*n as usize].pos);
+        let orilla = &self.estado.reglas.economia.datos.orilla;
+        let libre = |n: &u32| {
+            let pos = geo.mapa.nodos[*n as usize].pos;
+            !self.estado.nodos_reclamados.contains_key(n) && self.en_zona(plaza, pos) && !geo.junto_al_rio(pos, orilla.pueblo, orilla)
+        };
         let alcanzable = |t: Tipo| catalogo.tipo(t).tecnologia.as_deref().is_none_or(|tec| self.tiene_tecnologia(a.faccion, tec));
         nodos.into_iter().filter(libre).map(|n| (n, geo.mapa.nodos[n as usize].tipo)).filter(|&(_, t)| alcanzable(t)).collect()
     }
@@ -100,7 +105,8 @@ impl Nucleo {
         Some((if nivel == 1 { 0 } else { techos[nivel - 2] }, techos[nivel - 1]))
     }
 
-    /// Lo que `MarcarAldea` mira de un punto antes de la ruta: tierra firme, en la zona real de la plaza, en el anillo de su siguiente aldea
+    /// Lo que `MarcarAldea` mira de un punto antes de la ruta: tierra firme, en la zona real de la plaza, fuera del cauce de los ríos con sus campos
+    /// (`ORILLA_RIO`), en el anillo de su siguiente aldea
     /// ([`Self::anillo_de_aldea`]) y a `separacionMinima` de toda plaza y todo pueblo, de cualquier Facción. Devuelve la fertilidad del punto
     /// en la capa de `cultivo` (ppm); el mínimo lo mira la regla (`iniciar_aldea`).
     fn sitio_de_aldea_sin_ruta(&self, plaza: u64, pos: Punto, cultivo: Cultivo) -> Result<i64, (&'static str, String)> {
@@ -108,6 +114,10 @@ impl Nucleo {
         let Some(fertilidad) = geo.fertilidad_en(pos, cultivo).filter(|_| geo.es_tierra_firme(pos)) else { return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, "ese punto no es tierra firme".into())) };
         if !self.en_zona(plaza, pos) {
             return Err((rechazos::PUEBLO_FUERA_DE_LA_ZONA, format!("el punto cae fuera de la zona de as-{plaza}")));
+        }
+        let orilla = &self.estado.reglas.economia.datos.orilla;
+        if geo.junto_al_rio(pos, orilla.aldea, orilla) {
+            return Err((rechazos::PUEBLO_JUNTO_AL_RIO, "el punto está tan cerca del río que la aldea quedaría dentro del cauce".into()));
         }
         if let Some((desde, hasta)) = self.anillo_de_aldea(plaza) {
             let d = self.estado.asentamientos[&plaza].posicion.dist(pos);
@@ -188,6 +198,10 @@ impl Nucleo {
                 if !self.en_zona(*asentamiento, pos) {
                     return Err(rechazo(rechazos::PUEBLO_FUERA_DE_LA_ZONA, format!("el nodo {nodo} cae fuera de la zona de as-{asentamiento}")));
                 }
+                let orilla = self.estado.reglas.economia.datos.orilla;
+                if geo.junto_al_rio(pos, orilla.pueblo, &orilla) {
+                    return Err(rechazo(rechazos::PUEBLO_JUNTO_AL_RIO, format!("el nodo {nodo} está tan cerca del río que el pueblo quedaría dentro del cauce")));
+                }
                 // Sin ruta por tierra a la madre el carro no podría acarrear nunca: no se funda (decisión del autor, 2026-10-23).
                 let madre = self.estado.asentamientos[asentamiento].posicion;
                 if self.camino_sin_red(pos, madre).is_none() {
@@ -262,25 +276,23 @@ impl Nucleo {
                 self.anotar_sucesos(plaza, t, &ev);
                 Ok(None)
             }
+            Comando::CancelarObraDePueblo { pueblo } => {
+                let (plaza, pu) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
+                self.autorizar_en_plaza_o_en_el_pueblo_o_a_su_puerta(p, plaza, *pueblo, &[politica::Cargo::Gobernador, politica::Cargo::MaestroObras])?;
+                if !pu.activo() {
+                    // La obra de levantarlo: como destruirlo.
+                    self.destruir_pueblo(t, plaza, *pueblo);
+                    return Ok(None);
+                }
+                let mut ev = vec![];
+                self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.cancelar_mejora_pueblo(*pueblo, &mut ev).map_err(de_pueblo)?;
+                self.anotar_sucesos(plaza, t, &ev);
+                Ok(None)
+            }
             Comando::DestruirPueblo { pueblo } => {
                 let (plaza, _) = self.pueblo(*pueblo).ok_or_else(|| de_pueblo(ErrorPueblo::NoExiste))?;
                 self.autorizar_en_plaza(p, plaza, None)?;
-                let mut ev = vec![];
-                // Quien estaba dentro sale al mapa con lo suyo, a la puerta del pueblo que desaparece.
-                if let Some(puerta) = self.posicion_de_pueblo(*pueblo) {
-                    self.vaciar_lugar(t, Ubicacion::Pueblo(*pueblo), puerta, plaza, MOTIVO_DESTRUIDO);
-                }
-                // Y la guarnición de jugadores vuelve, intacta, al campamento de cada héroe (§14.0.1).
-                self.liberar_guarnicion_de_pueblo(*pueblo, |_| true);
-                let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(*pueblo, &mut ev).expect("existe");
-                if let Some(n) = destruido.nodo() {
-                    self.estado.nodos_reclamados.remove(&n);
-                }
-                self.olvidar_ruta_de_acarreo(*pueblo);
-                if let Some(carro) = destruido.carro {
-                    self.perder_caravana(t, carro);
-                }
-                self.anotar_sucesos(plaza, t, &ev);
+                self.destruir_pueblo(t, plaza, *pueblo);
                 Ok(None)
             }
             Comando::ReponerCarro { pueblo } => {
@@ -300,6 +312,26 @@ impl Nucleo {
             }
             _ => unreachable!("solo se llama con órdenes de pueblos"),
         }
+    }
+
+    /// Quita el pueblo (o su obra) de la plaza `plaza`: quien está dentro sale, la guarnición vuelve, se libera el nodo y se pierde el carro. No recupera nada.
+    fn destruir_pueblo(&mut self, t: Instante, plaza: u64, pueblo: u64) {
+        let mut ev = vec![];
+        // Quien estaba dentro sale al mapa con lo suyo, a la puerta del pueblo que desaparece.
+        if let Some(puerta) = self.posicion_de_pueblo(pueblo) {
+            self.vaciar_lugar(t, Ubicacion::Pueblo(pueblo), puerta, plaza, MOTIVO_DESTRUIDO);
+        }
+        // Y la guarnición de jugadores vuelve, intacta, al campamento de cada héroe (§14.0.1).
+        self.liberar_guarnicion_de_pueblo(pueblo, |_| true);
+        let destruido = self.estado.asentamientos.get_mut(&plaza).expect("existe").economia.quitar_pueblo(pueblo, &mut ev).expect("existe");
+        if let Some(n) = destruido.nodo() {
+            self.estado.nodos_reclamados.remove(&n);
+        }
+        self.olvidar_ruta_de_acarreo(pueblo);
+        if let Some(carro) = destruido.carro {
+            self.perder_caravana(t, carro);
+        }
+        self.anotar_sucesos(plaza, t, &ev);
     }
 
     /// Lo que lleva una columna y vale como material: su carro (`suministro`) y la carga de sus caravanas adjuntas, sumado por recurso.

@@ -22,7 +22,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 > **Implementado en Rust (2026-10-23, fase 4H T3c): el campamento visto desde dentro por la sesión.** El ámbito `CAMPAMENTO:camp-N` lleva el `CampamentoMercenarios` completo (`proyeccion::interior::campamento`): los reclutas como un ritmo (valor e instante, tope por viviendas), el stock en venta, los contadores y la próxima reposición del mercado, los residentes y los presentes (residentes y visitantes), las escuadras prestadas, las tropas que ofrece y el tope diario por bien; lo comprado hoy y el almacén personal de cada héroe van en su `Heroe`. Se marca el campamento cuando cambia el stock, los reclutas o quién vive, está o tiene tropa prestada allí, y al cambiar las tecnologías. La planta del campamento (§7) viaja desde la paridad P7 (nota de §7).
 
 > **Implementado en Rust (2026-10-20, fase 4B-2: el campamento con las columnas).** `SalirDelCampamento` (71) y `EntrarEnCampamento` (75) cierran el diagrama. **Salir** lo comprueba todo antes de tocar nada (`validar_salida`, `Movimiento_Ejercitos.md` §3): quien sale con otra política que `rechazar` lo hace como ejército; el **residente** elige tropa y carga de su almacén personal; **la ración gratis** (§8) llena sus víveres si pasaron `racion.cadaMinutos` (30) desde la última (`Heroe.racion_en`; no se acumula) y, si no, sale con los que lleva; el que está **de visita** sale con la columna con la que entró. **Entrar** devuelve la tropa al campamento y los víveres pasan al héroe; el carro, **desde el 2026-10-22 (entrar con todo), no se vuelca solo en el almacén personal**: se queda con el héroe (`vaciarCarro` lo pasa al almacén, hasta donde quepa) y sale con él. Entrar ya no rechaza por caravanas adjuntas (viajan con la columna). Un **ejército** entra entero si lo ordena su Líder y se desarma. **Reclutar** o **reponer el préstamo** con la columna a la puerta **ya se une a la columna** (§5.3) si cabe en el Liderazgo, y la recompone; mudarse de campamento retira de las columnas la tropa prestada. Hechos: `jugador.{sale_de_campamento, entra_en_campamento}`, `ejercito.entra_en_campamento`.
-> - **El campamento** sale del artefacto de mundo (su índice y su posición). Su **edificio militar** es `edificiosMilitares[huella mod 3]` con `huella = |⌊x⌋·31 + ⌊y⌋·17 + índice|` (§3 de Generación del mundo; nada se guarda); sus viviendas, las de `edificiosFijos` (10); sus **reclutas**, `militar::mercenarios::Reclutas` (valor e instante) solo para los campamentos que alguien ha tocado: el que falta está lleno y nada los escribe por minuto. `Nucleo::{tropas_del_campamento, reclutas_de_campamento}` lo consultan.
+> - **El campamento** sale del artefacto de mundo (su índice y su posición). Su **edificio militar** es `edificiosMilitares[huella mod 3]` con `huella = |⌊x⌋·31 + ⌊y⌋·17 + índice|` (§3 de Generación del mundo; nada se guarda); sus viviendas, las de `edificiosFijos` (16 desde el 2026-11-19; antes 10); sus **reclutas**, `militar::mercenarios::Reclutas` (valor e instante) solo para los campamentos que alguien ha tocado: el que falta está lleno y nada los escribe por minuto. `Nucleo::{tropas_del_campamento, reclutas_de_campamento}` lo consultan.
 > - **`ReclutarEnCampamento { heroe, tropa, pagar_con }`** (código 51): el campamento es donde el héroe reside (`mercenarios.no_resides`); `pagar_con` = `AlmacenPersonal` (por defecto en el TypeScript) o `Carro` (la columna del héroe a la puerta: `heroe.sin_columna` si no va en una). Rechazos de las reglas: `mercenarios.{tropa_no_disponible, ya_la_tienes_fuera, al_tope, sin_reclutas}`, `mercenarios.sin_oro`, `campamento.fuera_de_la_puerta`. El precio usa el factor de reputación de la Facción del héroe (×1,5 con la reputación en el umbral bajo) y el descuento de la Facción sin plazas; un héroe sin Facción no tiene ninguno. Hecho `mercenarios.reclutado`.
 > - **`PedirPrestamo { heroe, tropas }`** (52) y **`ReponerPrestamo { heroe }`** (53): `mercenarios.{prestamo_sin_tropas, no_se_presta, prestamo_repetida, ya_prestada, nada_que_reponer}`; hechos `mercenarios.prestamo` y `mercenarios.prestamo_repuesto`. Dejar de residir en el campamento retira la prestada de donde esté (`mercenarios.prestamo_retirado`), también de sus loadouts (desde el 2026-11-03; antes se quedaba en ellos y volver a guardarlos respondía `escuadra.ajena`).
 > - **`ComprarEnCampamento` / `RepostarEnCampamento`** toman `heroe`: el residente (cuya residencia es ese campamento) paga de su almacén personal y compra con su cupo diario; el visitante, con el carro de su columna, a la puerta o dentro, donde la columna que trajo lo espera (`heroe.sin_columna` si no trajo ninguna). Repostar llena los víveres de la columna del héroe, también la que lo espera dentro de visita, o, sin columna, los suyos (`capacidadViveresPorHeroe`). *(Corregido el 2026-10-28: dentro de visita se buscaba solo la columna en la que va a bordo y la compra se rechazaba con `heroe.sin_columna`.)*
@@ -35,7 +35,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 | `id` | `mercenarios-{i}` (orden de aceptación al colocarlos). |
 | `posicion` | Punto en tierra firme; pegado a un bosque si lo hay cerca (Generación del mundo §11). |
 | `origen` | Variante de aspecto `0‥MERCENARIOS.origenes−1`; solo cambia cómo se ve. |
-| `edificios` | `[taberna, vivienda ×10, mercado, un militar]` (barracón, galería de tiro o caballerizas, elegido por la posición). Fijo: no se construye. |
+| `edificios` | `[taberna, vivienda ×16, mercado, un militar, armería]` (barracón, galería de tiro o caballerizas, elegido por la posición; la Armería de nivel 1, solo tienda, desde el 2026-11-19). Fijo: no se construye. |
 | `residentesIds` | Héroes que residen aquí (cualquier Facción, sin límite, aunque su Facción tenga plazas). |
 | `eligieronComoInicial` | Cuántos héroes lo eligieron al nacer (solo crece). En Rust (paridad P6, 2026-10-27), `EstadoMilitar::eligieron` (foto `BAN41`, hoy `BAN60`), sumado por `CrearHeroe`; sale en `Bienvenida.campamentos_para_elegir` y en el `CampamentoMercenarios` del ámbito `CAMPAMENTO`. |
 | `poblacion`, `poblacionEn` | Reclutas disponibles en ese instante (§4). |
@@ -64,7 +64,7 @@ ellas (§3) y el lugar donde se describe lo que aún no tenía documento: la **p
 ## 4. Población y reclutas
 
 ```
-tope(c)      = (nº de viviendas en c.edificios) × MERCENARIOS.poblacionPorVivienda          ; 10 viviendas × 10 = 100
+tope(c)      = (nº de viviendas en c.edificios) × MERCENARIOS.poblacionPorVivienda          ; 16 viviendas × 10 = 160
 actual(c, t) = min( tope(c),  c.poblacion + horas(t − c.poblacionEn) × MERCENARIOS.poblacionPorHora )
                horas = max(0, t − poblacionEn) / 60 min
 ```
@@ -108,7 +108,7 @@ Todas lanzan `MercenariosInvalidoError`:
 6. **Pago**: con `almacenPersonal`, `heroe.almacenPersonal.oro ≥ oro`; con `carro`, debe ser el Líder de una columna a `≤ radioPuerta` del campamento y llevar el oro en el carro. El oro se descuenta (la clave se borra si queda en 0).
 
 Efecto: si la escuadra existe, `cantidad +=` (moral, nivel y experiencia no cambian); si no, nace `escuadron-{campamento.id}-{n}` en `contenedor: campamento` con la progresión inicial y `moral 100`.
-**Se une a la columna**: si es nueva y su Líder tiene una columna a la puerta y la escuadra **cabe en su Liderazgo** contando lo que ya lleva fuera del campamento (`puedeLlevar(héroe, [fuera + nueva])`), nace directamente en esa columna (`contenedor: ejercito`, y se añade a `escuadronIds`) para no obligarle a entrar y volver a salir. Una escuadra que se repone no se mueve.
+**Se une a la columna**: si es nueva y su Líder tiene una columna a la puerta y la escuadra **cabe en su Liderazgo** contando lo que ya lleva en una columna (`puedeLlevar(héroe, [en columna + nueva])`; lo prestado a guarniciones o escoltas no cuenta, Rust 2026-11-18), nace directamente en esa columna (`contenedor: ejercito`, y se añade a `escuadronIds`) para no obligarle a entrar y volver a salir. Una escuadra que se repone no se mueve.
 `poblacion = actual − cantidad`, `poblacionEn = ahora`. Evento `mercenarios.reclutado { campamentoId, heroeId, tropaId, cantidad, oro, seUne }`. Resultado `{ cantidad, oro, seUne }`.
 Como en una plaza, **suma los contadores de tecnología** `reclutados.*` ([`Tecnologia_Aedas.md`](Tecnologia_Aedas.md) §2.1, Q4 del autor del 2026-10-24); a diferencia de la plaza, **no exige reserva de trigo ni población de plaza**.
 
@@ -123,14 +123,14 @@ Gratis, para **quien reside** en el campamento, para aprender a usar tropa antes
 
 ## 7. La planta del campamento (`layoutCampamento`)
 
-> **Implementado en Rust (2026-10-27, paridad P7).** `nucleo::urbanismo::planta_de_campamento` (y `Nucleo::planta_de_campamento`), con el trazado de Rust y la receta de abajo: la taberna con la huella del Centro Urbano en el origen, el Mercado con sus 5 puestos, el militar y las diez viviendas, cada uno con su ancla de saturación si la necesita y sin gate de nivel, en un radio de 60 u. l.; la empalizada a una celda de margen con la puerta de dos celdas al sur. La semilla es la de la partida y el índice del campamento (`trazado::hash(semilla, "campamento", [i])`), no el id del TypeScript, así que la planta no coincide pieza a pieza con la suya. No se guarda. Viaja en el `CampamentoMercenarios` del ámbito `CAMPAMENTO` (`planta`, `trazado`, `empalizada`, `empalizada_puerta`).
+> **Implementado en Rust (2026-10-27, paridad P7).** `nucleo::urbanismo::planta_de_campamento` (y `Nucleo::planta_de_campamento`), con el trazado de Rust y la receta de abajo: la taberna con la huella del Centro Urbano en el origen, el Mercado con sus 5 puestos, el militar, la Armería de nivel 1 y las dieciséis viviendas (2026-11-19: antes no llevaba la Armería y eran diez; como la planta no se guarda, los campamentos que ya existían salen con la nueva sin partida nueva), cada uno con su ancla de saturación si la necesita y sin gate de nivel, en un radio de 60 u. l.; la empalizada a una celda de margen con la puerta de dos celdas al sur. La semilla es la de la partida y el índice del campamento (`trazado::hash(semilla, "campamento", [i])`), no el id del TypeScript, así que la planta no coincide pieza a pieza con la suya. No se guarda. Viaja en el `CampamentoMercenarios` del ámbito `CAMPAMENTO` (`planta`, `trazado`, `empalizada`, `empalizada_puerta`).
 
 Presentación pura: ningún número cambia lo que hace el campamento. Reutiliza el motor de trazado de asentamientos ([`Trazado_Urbano.md`](Trazado_Urbano.md)) **una sola vez**: el campamento no crece, no se mantiene, no se degrada ni sube de nivel. Función pura de `{ id, edificios }`: no se guarda y la misma entidad siempre da lo mismo.
 
 ```
 perfil = resolverPerfil(id)                 ← el id del campamento es la semilla de su planta (cada uno tiene la suya)
 si hay taberna: se coloca un «centroUrbano» en (0, 0)         ← la taberna es el ancla principal
-para tipo en [mercado, barracón, galería de tiro, caballerizas, vivienda]:       ← en este orden
+para tipo en [mercado, barracón, galería de tiro, caballerizas, armería, vivienda]:       ← en este orden
     para cada edificio de ese tipo del campamento:
         asegurarAncla(tipo): igual que la construcción pero sin cupo de nivel; si hace falta, crea un ancla nueva (plaza de armas, plaza, pozo, parque…)
         sitioParaTipo({ radioPotencial: MERCENARIOS.layout.radioLocal }, …)  → se coloca en el sitio que da el motor
@@ -140,7 +140,7 @@ empalizada = un anillo de una celda a una celda de margen alrededor de todas las
 ```
 
 Resultado: `elementos` (edificios y, de relleno, `puestoMercado`, `plazaDeArmas`, `plaza`, `pozo`, `parque`), `calles` y `empalizada { muro, puerta }`. La empalizada es **decorativa**: dentro no hay combate.
-Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez viviendas) da 19 elementos —1 taberna, 1 mercado, 5 puestos, 1 plaza de armas, 1 barracón y 10 viviendas—, 23 tramos de calle y una puerta de 6×3 unidades.
+Con las cifras del TypeScript, un campamento típico (taberna, mercado, barracón y diez viviendas) daba 19 elementos —1 taberna, 1 mercado, 5 puestos, 1 plaza de armas, 1 barracón y 10 viviendas—, 23 tramos de calle y una puerta de 6×3 unidades; en Rust lleva además la Armería y 16 viviendas.
 **Para Conquest** (`escenaDeCampamento`): el mismo trazado en celdas (`unidadesPorCelda = REJILLA_ASENTAMIENTO.tamanoCelda`): `{ campamentoId, origen, layoutVersion: LAYOUT_VERSION, unidadesPorCelda, edificios[{ edificioId, tipo, posicion (centro), ancho, alto }], calles[], empalizada[celdas muro/puerta] }`.
 
 ## 8. Quién puede qué dentro
@@ -152,6 +152,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Reclutar, tropa prestada, comprar con el almacén personal | **solo el residente** | dentro o con la columna a la puerta |
 | Comprar de visita | cualquiera, con el oro del carro (sin trigo) | `Comercio_Caravanas.md` §9.2 |
 | Repostar víveres | cualquiera, gratis | `Comercio_Caravanas.md` §9.2b |
+| Comprar y vender objetos en su Armería de nivel 1 (2026-11-19) | cualquiera, con sus monedas; solo lo que no pide tecnología (el tier I y las monturas), sin forja | dentro ([`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §4.6) |
 | Aportar al fondo de refundación | ciudadano de una Facción **sin plazas**, dentro o con la columna a la puerta: del almacén personal residiendo allí, o del carro siendo su Líder (**implementado en Rust, 2026-10-24, 5G-b**: `aportarARefundacion` 153, `retirarDeRefundacion` 154, `comprarCaravanaDeRefundacion` 155; el fondo va por Facción en `CAMPAMENTO`) | `Fundacion_Y_Refundacion.md` §9 |
 | Intel de la taberna | cualquier héroe **de una Facción** | `Niebla_De_Guerra.md` |
 | Ver el campamento por dentro (mercado, tropas, tablón: el ámbito `CAMPAMENTO`) | cualquiera | dentro o, desde el 2026-11-10, con su columna **parada** a la puerta ([`Proyecciones_Y_Autorizacion.md`](Proyecciones_Y_Autorizacion.md), «Acciones a la puerta») |
@@ -175,6 +176,12 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
   "origenes": 3,
   "edificiosFijos": [
     "taberna",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
+    "vivienda",
     "vivienda",
     "vivienda",
     "vivienda",
@@ -252,7 +259,7 @@ Con las cifras de hoy, un campamento típico (taberna, mercado, barracón y diez
 | Población: el tope son sus viviendas por lo que da cada una y recupera por hora; más viviendas, más tope; lo gastado se recupera sin ningún evento | `engine/__tests__/reclutamientoMercenario.test.ts` |
 | Qué se recluta: edificio y tecnología; la tecnología del campamento por porcentaje de Facciones o por plazo; sin Facciones manda el plazo | `reclutamientoMercenario.test.ts` |
 | Precio: oro del escalón, caballos y equipo × recargo; la mala reputación lo encarece; sin asentamientos lo abarata | `reclutamientoMercenario.test.ts` |
-| Reclutar: crea la escuadra, cobra del almacén personal o del carro y gasta población; repone solo lo que falta; se une a la columna si cabe en el Liderazgo (contando lo que ya lleva fuera); rechaza no residente, tropa que no ofrece, sin oro, sin reclutas, al tope | `reclutamientoMercenario.test.ts` |
+| Reclutar: crea la escuadra, cobra del almacén personal o del carro y gasta población; repone solo lo que falta; se une a la columna si cabe en el Liderazgo (contando lo que ya lleva en una columna); rechaza no residente, tropa que no ofrece, sin oro, sin reclutas, al tope | `reclutamientoMercenario.test.ts` |
 | Tropa prestada: se pide gratis una, dos o las tres, no gana experiencia; se repone gratis; al dejar de residir se retira, también de la columna, con evento | `session/__tests__/entrarSalirCampamento.test.ts`, `reclutamientoMercenario.test.ts` |
 | Planta: todo colocado, con calles, sin solapes y dentro de la empalizada; determinista y distinta por campamento | `engine/__tests__/layoutCampamento.test.ts`, `contratos/v1/__tests__/contratos.test.ts` |
 | Residir y reubicar de una ruina | `session/__tests__/residenciaMercenaria.test.ts` |

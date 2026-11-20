@@ -5,7 +5,7 @@
 //! Todo lo hace un héroe **dentro** del pueblo (`entrarEnPueblo`) y **ciudadano de la Facción de la plaza madre**; nadie reside en un pueblo, así que lo que mueve es la columna con la que
 //! entró, que lo espera dentro ([`Nucleo::columna_que_lleva`]). La administración no necesita estar dentro ni ser de la Facción, pero sí que el héroe traiga columna.
 //! La guarnición (`guarnecerPueblo` y `retirarDePueblo`) vale también **a la puerta** (decisión del autor del 2026-11-10): con el héroe a bordo de su columna a la puerta del pueblo, la
-//! columna es esa.
+//! columna es esa. Cargar del almacén local al carro (`cargarDePueblo`) y dejar en él (`dejarEnPueblo`), también (2026-11-19), y entonces solo el Líder de la columna.
 //!
 //! # La guarnición de jugadores
 //! Además de la guarnición de serie (mineros o granjeros sin dueño), cada héroe deja escuadras de su columna (`Contenedor::Pueblo`) con un cupo **por héroe** en Liderazgo:
@@ -163,7 +163,7 @@ impl Nucleo {
                 return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {id} está reservada para una batalla")));
             }
         }
-        let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Pueblo(pueblo) || vistas.contains(&s.id));
+        let fuera = h.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) || vistas.contains(&s.id));
         if !liderazgo::puede_llevar(&mr, h.liderazgo_base, fuera) {
             return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
         }
@@ -179,11 +179,29 @@ impl Nucleo {
         Ok(())
     }
 
+    /// Con la columna a la puerta del pueblo (no dentro), el carro lo mueve solo su Líder, y si el pueblo le abre su puerta.
+    fn solo_el_lider_a_la_puerta(&self, p: &Peticion, heroe: u64, pueblo: u64, cid: u64) -> Result<(), Respuesta> {
+        let v = self.estado.version;
+        let dentro = self.heroe(heroe).is_some_and(|h| h.heroe.presencia.ubicacion == Ubicacion::Pueblo(pueblo));
+        if dentro || p.admin {
+            return Ok(());
+        }
+        if self.estado.ejercitos[&cid].columna.lider != heroe {
+            return Err(Respuesta::rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "a la puerta, solo el Líder de la columna mueve su carro".to_owned(), v));
+        }
+        if self.puede_entrar_en_pueblo(heroe, pueblo) != Some(true) {
+            return Err(Respuesta::rechazo(rechazos::PUEBLO_FACCION_AJENA, "el pueblo no te abre su puerta".to_owned(), v));
+        }
+        Ok(())
+    }
+
     /// Carga en el carro de la columna `cantidad` de `recurso` del almacén local, hasta donde quepa.
     fn cargar_de_pueblo(&mut self, t: Instante, p: &Peticion, heroe: u64, pueblo: u64, recurso: Recurso, cantidad: Mil) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let (madre, cid) = self.dentro_del_pueblo(p, heroe, pueblo)?;
+        // También con su columna a la puerta (2026-11-19, como en las plazas): entonces solo su Líder, y si el pueblo le abre su puerta.
+        let (madre, cid) = self.en_el_pueblo_o_a_su_puerta(t, p, heroe, pueblo)?;
+        self.solo_el_lider_a_la_puerta(p, heroe, pueblo, cid)?;
         if cantidad <= 0 {
             return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que cargar una cantidad positiva".into()));
         }
@@ -209,7 +227,9 @@ impl Nucleo {
     fn dejar_en_pueblo(&mut self, t: Instante, p: &Peticion, heroe: u64, pueblo: u64, recurso: Recurso, cantidad: Mil) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let (madre, cid) = self.dentro_del_pueblo(p, heroe, pueblo)?;
+        // También con su columna a la puerta (2026-11-19, en los dos sentidos como en las plazas): entonces solo su Líder, y si el pueblo le abre su puerta.
+        let (madre, cid) = self.en_el_pueblo_o_a_su_puerta(t, p, heroe, pueblo)?;
+        self.solo_el_lider_a_la_puerta(p, heroe, pueblo, cid)?;
         if cantidad <= 0 {
             return Err(rechazo(rechazos::CANTIDAD_NO_POSITIVA, "hay que dejar una cantidad positiva".into()));
         }

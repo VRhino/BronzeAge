@@ -296,6 +296,9 @@ impl Nucleo {
                 if !geo.es_tierra_firme(*posicion) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DEL_SITIO, "ese punto no es tierra firme".into()));
                 }
+                if geo.junto_al_rio(*posicion, datos.orilla.avanzada, &datos.orilla) {
+                    return Err(rechazo(rechazos::AVANZADA_JUNTO_AL_RIO, "el sitio está tan cerca del río que la avanzada quedaría dentro del cauce".into()));
+                }
                 if !self.en_zona(*asentamiento, *posicion) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_ZONA, format!("el sitio cae fuera de la zona de as-{asentamiento}")));
                 }
@@ -636,7 +639,7 @@ impl Nucleo {
                 return Err(rechazo(rechazos::ESCUADRA_EN_BATALLA, format!("la escuadra {id} está reservada para una batalla")));
             }
         }
-        let fuera = h.escuadras.iter().filter(|s| s.contenedor != Contenedor::Campamento && s.contenedor != Contenedor::Avanzada(avanzada) || vistas.contains(&s.id));
+        let fuera = h.escuadras.iter().filter(|s| matches!(s.contenedor, Contenedor::Ejercito(_)) || vistas.contains(&s.id));
         if !liderazgo::puede_llevar(&mr, h.liderazgo_base, fuera) {
             return Err(rechazo(rechazos::LIDERAZGO_SUPERADO, "las escuadras pasan del Liderazgo del héroe".into()));
         }

@@ -36,11 +36,19 @@ pub(crate) struct Geografia {
     pub(super) mapa: Arc<Mapa>,
     /// Los alijos del artefacto con su rejilla (6F).
     pub(super) alijos: super::alijos::AlijosDelMundo,
+    /// Los tramos de los ríos, para la orilla (`ORILLA_RIO`).
+    cauces: super::rios::Cauces,
 }
 
 impl Geografia {
     pub(crate) fn de(mundo: Arc<Mundo>) -> Self {
-        Self { mapa: Mapa::de(&mundo), alijos: super::alijos::AlijosDelMundo::de(&mundo), mundo }
+        Self { mapa: Mapa::de(&mundo), alijos: super::alijos::AlijosDelMundo::de(&mundo), cauces: super::rios::Cauces::de(&mundo), mundo }
+    }
+
+    /// ¿Entraría en el cauce que se ve algo de `radio` levantado en `p`? (`ORILLA_RIO`, Economia_Construccion §14.3, decisión del autor del
+    /// 2026-11-18). `radio` es uno de los de `orilla`.
+    pub(super) fn junto_al_rio(&self, p: Punto, radio: Mil, orilla: &asentamiento::datos::OrillaRio) -> bool {
+        self.cauces.junto_al_rio(p, radio, orilla.media_anchura, orilla.media_anchura_navegable)
     }
 
     /// Ancho y alto del mapa, en milésimas.
@@ -97,9 +105,10 @@ impl Geografia {
         self.mundo.region_en(p.x, p.y)
     }
 
-    /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable.
+    /// ¿Lo pisa una ruta? Lo que el A\* de las rutas da por transitable: una celda transitable o el punto de un vado (desde el 2026-11-18 el
+    /// cauce va cerrado entero y el vado es un punto).
     pub(super) fn transitable(&self, p: Punto) -> bool {
-        self.mundo.transitable_en(p.x, p.y)
+        self.mundo.pisable_en(p.x, p.y)
     }
 
     /// ¿Se puede pisar `p`? Tierra firme dentro del mapa y transitable (ni agua ni río sin vado ni ladera de más de 35°).
@@ -264,6 +273,8 @@ impl Nucleo {
         let terreno = match geo.terreno(p) {
             Terreno::Firme if geo.mundo.pendiente_en(p.x, p.y).is_some_and(|q| q > pendiente) => Terreno::Empinado,
             Terreno::Firme if geo.mundo.densidad_bosque_en(p.x, p.y).is_some_and(|d| d as Mil * 1000 >= maxima * 255) => Terreno::BosqueDenso,
+            // La ciudad más grande que puede tener la plaza, fuera del cauce que se ve (2026-11-18).
+            Terreno::Firme if geo.junto_al_rio(p, datos.orilla.plaza, &datos.orilla) => Terreno::JuntoAlRio,
             t => t,
         };
         territorio::validar(p, terreno, &plazas, geo.mapa.campamentos.iter().copied(), &dist)

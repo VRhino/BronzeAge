@@ -208,6 +208,7 @@ impl Nucleo {
             | Comando::MarcarPueblo { .. }
             | Comando::EntregarMateriales { .. }
             | Comando::DestruirPueblo { .. }
+            | Comando::CancelarObraDePueblo { .. }
             | Comando::ReponerCarro { .. }
             | Comando::MarcarAldea { .. }
             | Comando::MejorarAldea { .. }
@@ -301,6 +302,7 @@ impl Nucleo {
             | Comando::ReclamarCaravana { .. }
             | Comando::SoltarCaravana { .. }
             | Comando::ResponderSolicitud { .. }
+            | Comando::CancelarSolicitud { .. }
             | Comando::DejarFaccion { .. }
             | Comando::AsignarRey { .. }
             | Comando::AsignarEmbajador { .. }

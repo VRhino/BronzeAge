@@ -562,6 +562,13 @@ message Asentamiento {
   // (y de las que la tuvieron antes): nunca baja. Va a quien la ve por dentro: interior, plaza propia (su Facción, también en `FACCION`), la plaza ajena vista desde dentro en `VISTA` y
   // `ADMIN`. Ausente en la avistada desde fuera.
   optional EstiloEpoca estilo_epoca = 58;
+  // 2026-11-19 (decisión del autor): lo que come por minuto la población de la plaza, en milésimas por recurso: de cada bien de consumo no pausado, lo que tomaría con lo que
+  // hay en el almacén; del trigo, lo que falta hasta su necesidad entera, aunque no lo haya (si falta, pasa hambre). Una previsión del próximo minuto con el almacén de ahora.
+  // Interior, plaza propia (también en `FACCION`) y `ADMIN`.
+  Cantidades comida_poblacion = 59;
+  // 2026-11-19: lo mismo para su guarnición (las escuadras en el campamento de sus residentes y las que dejaron en sus avanzadas), que come después de la población: su carne
+  // con lo que quede y el resto de la ración en trigo. Vacía sin soldados. Interior, plaza propia y `ADMIN`.
+  Cantidades comida_guarnicion = 60;
 }
 
 // El estilo de época (Tecnologia_Aedas §4.2): `era`, el orden de la Era (1 a 5) más alta de la que la Facción tiene adoptada alguna tecnología, y `grado`, cuántas de esa

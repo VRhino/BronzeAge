@@ -1,4 +1,4 @@
-//! Liderazgo (Doc 5.11, Heroe_Y_Tropa §5): cuánta tropa puede sacar a campaña un héroe. Es un límite de **salida**, no de posesión; el coste
+//! Liderazgo (Doc 5.11, Heroe_Y_Tropa §5): cuánta tropa puede llevar consigo un héroe (solo lo que va con él; lo prestado a guarniciones o escoltas no cuenta). Es un límite de **salida**, no de posesión; el coste
 //! sigue al **escalón** de la tropa (no a su poder) y **no mira cuántos soldados quedan**: una escuadra mermada paga el precio completo.
 //! En un ejército cada héroe se valida contra **el suyo**, sin tope agregado.
 

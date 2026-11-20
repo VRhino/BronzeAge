@@ -201,6 +201,9 @@ message OrdenCancelarFormacion {
   string heroe_id = 1;
 }
 
+// Cancela una obra de mapa sin devolver nada de lo entregado: la de una avanzada o, desde el 2026-11-19, la de un pueblo o una aldea (la de levantarlo, como
+// destruir_pueblo, o su subida de nivel, cuya obra lleva el id del pueblo; el pueblo sigue en su nivel). La del pueblo, el Gobernador o el Maestro de Obras
+// de la madre, dentro de ella, dentro del pueblo o con su columna a su puerta; sin obra, `pueblo.sin_obra`.
 message OrdenCancelarObra {
   string heroe_id = 1;
   string obra_id = 2;
@@ -1168,6 +1171,11 @@ message OrdenSolicitarIngreso {
   string faccion_id = 1;
 }
 
+// El solicitante retira su solicitud de ingreso en esa Facción (2026-11-19); las que tenga en otras siguen. Sin haberla pedido, `faccion.no_ha_pedido`.
+message OrdenCancelarSolicitud {
+  string faccion_id = 1;
+}
+
 message OrdenSoltarCaravana {
   string ejercito_id = 1;
   string caravana_id = 2;
@@ -1480,5 +1488,6 @@ message Orden {
     OrdenConfigurarForja configurar_forja = 200;
     OrdenBajarseDeBatalla bajarse_de_batalla = 201;
     OrdenElegirEscuadrasDeBatalla elegir_escuadras_de_batalla = 202;
+    OrdenCancelarSolicitud cancelar_solicitud = 203;
   }
 }

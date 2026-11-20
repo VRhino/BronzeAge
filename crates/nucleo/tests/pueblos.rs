@@ -1865,6 +1865,10 @@ fn dentro_se_deja_en_el_almacen_local_solo_lo_que_produce_el_pueblo_y_se_carga_l
     // Y sale con ello.
     e.ok("ana", Comando::SalirDePueblo { pueblo, heroe: h0 });
     assert_eq!(e.carga(c0)[&Cobre], capacidad);
+    // A la puerta (2026-11-19) se carga y se deja como dentro (aquí ya no cabe nada en el carro; en el almacén, lo que se sacó).
+    assert_eq!(e.rechazada("ana", cargar(Cobre, 1_000)), rechazos::CARRO_LLENO, "a la puerta vale: lo que falla es el sitio del carro");
+    e.ok("ana", dejar(Cobre, 1_000));
+    assert_eq!((e.carga(c0)[&Cobre], e.pueblo(pueblo).almacen.cantidad(Cobre)), (capacidad - 1_000, 2_000), "a la puerta se deja");
 }
 
 #[test]
@@ -1931,4 +1935,99 @@ fn el_gobernador_o_el_maestro_de_obras_de_la_madre_mejora_la_aldea_desde_dentro_
     e.n.avanzar_hasta(completa_en);
     assert_eq!(e.pueblo(aldea).nivel, 2);
     assert_eq!(e.n.cupo_de_guarnicion_de_pueblo(aldea), Some(45));
+}
+
+// ───────────────────────────── La orilla del río (ORILLA_RIO, 2026-11-18) ─────────────────────────────
+
+/// Un nodo de pueblo del artefacto real encima del agua dibujada (en una celda transitable a menos de 0,5 u del trazo de un río: la celda de al
+/// lado del cauce o el hueco de un vado) y un sitio fundable a 7-13 u con ruta hasta él.
+fn nodo_encima_del_rio(n: &Nucleo, m: &M, mapa: &Mapa) -> (u32, Punto) {
+    let encima = |i: &usize| {
+        let p = mapa.nodos[*i].pos;
+        mapa.nodos[*i].tipo.es_de_pueblo() && m.0.transitable_en(p.x, p.y) && comun::real::distancia_al_rio(&m.0, p).0 < 500.0
+    };
+    let sitio_cerca = |i: usize| {
+        let nodo = mapa.nodos[i].pos;
+        (7..=13).step_by(2).flat_map(|d| (0..24).map(move |g| (d * 1_000, g))).find_map(|(d, g)| {
+            let a = ((g * 15) as f64).to_radians();
+            let p = Punto::new(nodo.x + (d as f64 * a.cos()) as i64, nodo.y + (d as f64 * a.sin()) as i64);
+            (n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none()) && m.1.ruta(nodo, p, &rutas::Opciones::default()).is_some()).then_some(p)
+        })
+    };
+    (0..mapa.nodos.len()).filter(encima).find_map(|i| sitio_cerca(i).map(|p| (i as u32, p))).expect("algún nodo encima del río con un sitio fundable al lado")
+}
+
+#[test]
+fn ni_el_pueblo_ni_la_aldea_se_marcan_donde_su_maqueta_quedaria_dentro_del_cauce() {
+    // Víctor, 2026-11-18: en Render un bot levantó una aldea encima del río. El río solo cierra las celdas que pisa su trazo (y ninguna en el
+    // hueco de un vado), así que «tierra firme» no bastaba; la orilla mide la distancia al trazo.
+    let m = con_mundo!();
+    let n = Nucleo::nuevo(arranque(m, 7));
+    let mapa = Mapa::de(&m.0);
+    let (nodo, sitio) = nodo_encima_del_rio(&n, m, &mapa);
+    let mut e = montar_en(n, mapa, 2, nodo, sitio);
+    let (plaza, pos) = (e.plaza, e.mapa.nodos[nodo as usize].pos);
+    assert!(e.n.en_zona(plaza, pos), "el nodo cae en la zona");
+    assert!(!e.n.candidatos_de_pueblo(plaza).iter().any(|&(c, _)| c == nodo), "el panel no lo ofrece");
+    let rastro = e.n.hash_estado();
+    assert_eq!(e.rechazada("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo }), rechazos::PUEBLO_JUNTO_AL_RIO);
+    assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: pos, cultivo: Cultivo::Trigo }), rechazos::PUEBLO_JUNTO_AL_RIO);
+    assert_eq!(e.n.hash_estado(), rastro, "los rechazos no dejan rastro");
+    // El sitio que propone el panel de la aldea queda con sus campos fuera del cauce.
+    let orilla = e.n.estado().reglas.economia.datos.orilla;
+    if let Some(p) = e.n.sitio_de_aldea(plaza, Cultivo::Trigo) {
+        let (d, navegable) = comun::real::distancia_al_rio(&m.0, p);
+        assert!(d >= (if navegable { orilla.media_anchura_navegable } else { orilla.media_anchura } + orilla.aldea) as f64, "a {d} del río");
+    }
+}
+
+// ───────────────────────────── Cancelar la obra de un pueblo o su mejora (2026-11-19) ─────────────────────────────
+
+#[test]
+fn la_mejora_de_un_pueblo_se_cancela_pendiente_o_en_obra_sin_devolver_nada_y_quien_la_cancela_puede_estar_a_su_puerta() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let plaza = e.plaza;
+    let pueblo = e.pueblo_levantado();
+    assert_eq!(e.rechazada("admin", Comando::CancelarObraDePueblo { pueblo }), rechazos::PUEBLO_SIN_OBRA, "levantado y sin mejora, no hay obra");
+
+    // Pendiente de materiales: se cancela y el pueblo sigue en su nivel.
+    e.ok("ana", Comando::MejorarAldea { pueblo });
+    assert!(matches!(e.pueblo(pueblo).mejora, Some(EstadoPueblo::Pendiente { .. })));
+    e.ok("admin", Comando::CancelarObraDePueblo { pueblo });
+    assert_eq!((e.pueblo(pueblo).mejora.clone(), e.pueblo(pueblo).nivel), (None, 1));
+    let h = &hechos(&e.n, "pueblo.mejora_cancelada")[0];
+    assert_eq!((dato(h, "pueblo") as u64, dato(h, "nivel")), (pueblo, 2));
+
+    // En obra, con todo entregado: también, y lo entregado se pierde.
+    e.ok("ana", Comando::MejorarAldea { pueblo });
+    e.entregar_lo_que_falta(pueblo);
+    let Some(EstadoPueblo::EnObra { completa_en }) = e.pueblo(pueblo).mejora.clone() else { panic!("la mejora, en obra") };
+    e.ok("admin", Comando::CancelarObraDePueblo { pueblo });
+    e.n.avanzar_hasta(completa_en + MIN);
+    assert_eq!((e.pueblo(pueblo).mejora.clone(), e.pueblo(pueblo).nivel), (None, 1), "cancelada, no sube");
+
+    // Con su columna a la puerta del pueblo: el Maestro de Obras de la madre sí; una ciudadana sin cargo, no.
+    e.ok("ana", Comando::MejorarAldea { pueblo });
+    let (_, leo) = e.visita("leo", 1, pueblo);
+    let (_, eva) = e.visita("eva", 1, pueblo);
+    for h in [leo, eva] {
+        e.ok("admin", Comando::FijarResidencia { heroe: h, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
+    }
+    e.ok("admin", Comando::AsignarCargoLocal { heroe: leo, asentamiento: plaza, cargo: asentamiento::Cargo::Gobernador, designado: leo });
+    e.ok("admin", Comando::AsignarCargoLocal { heroe: leo, asentamiento: plaza, cargo: asentamiento::Cargo::MaestroObras, designado: leo });
+    assert_eq!(e.rechazada("eva", Comando::CancelarObraDePueblo { pueblo }), rechazos::NO_AUTORIZADO);
+    e.ok("leo", Comando::CancelarObraDePueblo { pueblo });
+    assert!(e.pueblo(pueblo).mejora.is_none());
+}
+
+#[test]
+fn cancelar_la_obra_de_un_pueblo_que_aun_no_se_levanta_lo_quita_como_destruirlo() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let pueblo = e.marcar();
+    e.ok("admin", Comando::CancelarObraDePueblo { pueblo });
+    assert!(e.n.pueblo(pueblo).is_none());
+    assert_eq!(hechos(&e.n, "pueblo.destruido").len(), 1);
+    assert_eq!(e.rechazada("admin", Comando::CancelarObraDePueblo { pueblo }), rechazos::PUEBLO_DESCONOCIDO);
 }

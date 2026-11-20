@@ -196,6 +196,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.nodo_ocupado` | `PUEBLO_NODO_OCUPADO` | — |
 | `pueblo.fuera_de_la_zona` | `PUEBLO_FUERA_DE_LA_ZONA` | — |
 | `pueblo.sin_ruta` | `PUEBLO_SIN_RUTA` | El nodo no tiene ruta por tierra hasta la plaza madre: su carro no podría acarrear. |
+| `pueblo.junto_al_rio` | `PUEBLO_JUNTO_AL_RIO` | El nodo o el punto está tan cerca del trazo de un río que el pueblo o la aldea quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18). |
 | `pueblo.tecnologia_faltante` | `PUEBLO_TECNOLOGIA_FALTANTE` | — |
 | `pueblo.nivel_insuficiente` | `PUEBLO_NIVEL_INSUFICIENTE` | — |
 | `pueblo.sin_cupo` | `PUEBLO_SIN_CUPO` | — |
@@ -210,6 +211,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.fuera_de_su_anillo` | `PUEBLO_FUERA_DE_SU_ANILLO` | Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01). |
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
+| `pueblo.sin_obra` | `PUEBLO_SIN_OBRA` | `cancelarObra` sobre un pueblo activo sin subida de nivel marcada (2026-11-19). |
 | `pueblo.cultivo_bloqueado` | `PUEBLO_CULTIVO_BLOQUEADO` | La plaza madre no tiene aún el nivel que pide ese cultivo (tanda 69 §12: la vid, el 3; la oliva, el 4). |
 
 ### Dentro de un pueblo o una aldea (§14.0.1, 2026-10-29)
@@ -236,6 +238,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `avanzada.nada_que_cancelar` | `AVANZADA_NADA_QUE_CANCELAR` | No hay una mejora ni una reparación que cancelar. |
 | `avanzada.fuera_del_sitio` | `AVANZADA_FUERA_DEL_SITIO` | El sitio donde se pide colocarla no es tierra firme (desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea; antes: la columna del héroe no estaba en el sitio). |
 | `avanzada.sin_ruta` | `AVANZADA_SIN_RUTA` | Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04). |
+| `avanzada.junto_al_rio` | `AVANZADA_JUNTO_AL_RIO` | El sitio está tan cerca del trazo de un río que la avanzada quedaría dentro del cauce que se ve (`ORILLA_RIO`, 2026-11-18). |
 | `avanzada.faccion_ajena` | `AVANZADA_FACCION_AJENA` | — |
 | `avanzada.fuera_de_la_puerta` | `AVANZADA_FUERA_DE_LA_PUERTA` | — |
 | `avanzada.no_esta_pendiente` | `AVANZADA_NO_ESTA_PENDIENTE` | — |
@@ -626,8 +629,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `faccion.sigilo_invalido` | `FACCION_SIGILO_INVALIDO` | Alguna pieza del sigilo no es del catálogo, o los dos colores del fondo son el mismo. |
 | `faccion.sigilo_duplicado` | `FACCION_SIGILO_DUPLICADO` | Otra Facción lleva un sigilo idéntico. |
 | `faccion.ya_pertenece` | `FACCION_YA_PERTENECE` | Ya es ciudadano de una Facción: 1 héroe, 1 Facción. |
-| `faccion.cooldown_creacion` | `FACCION_COOLDOWN_CREACION` | Dejó una Facción hace menos de `CIUDADANIA.cooldownCreacionFaccionDias`. |
-| `faccion.no_ha_pedido` | `FACCION_NO_HA_PEDIDO` | Responder a quien no ha pedido entrar. |
+| `faccion.cooldown_ingreso` | `FACCION_COOLDOWN_INGRESO` | Pide el ingreso habiendo dejado una Facción hace menos de `CIUDADANIA.cooldownIngresoFaccionHoras` (también en la que dejó; 2026-11-19, sustituye a `faccion.cooldown_creacion`). |
+| `faccion.no_ha_pedido` | `FACCION_NO_HA_PEDIDO` | Responder a quien no ha pedido entrar, o cancelar una solicitud que no se tiene. |
 | `faccion.no_pertenece` | `FACCION_NO_PERTENECE` | No es ciudadano de ninguna Facción. |
 | `faccion.en_ejercito` | `FACCION_EN_EJERCITO` | Dejar la Facción yendo en un ejército (aunque sea solo) o en uno en preparación (Q7): primero se separa. |
 | `faccion.no_ciudadano` | `FACCION_NO_CIUDADANO` | El designado para Rey o Embajador no es ciudadano de la Facción. |

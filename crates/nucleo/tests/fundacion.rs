@@ -1014,3 +1014,37 @@ async fn por_la_sesion_se_aporta_se_compra_la_caravana_de_refundacion_y_se_desar
     assert!(n.estado().fundacion.caravanas.is_empty());
     assert_eq!(n.fondo_de_faccion(0, f), n.costo_refundacion(), "el fondo vuelve a ser lo aportado");
 }
+
+// ───────────────────────────── La orilla del río (ORILLA_RIO, 2026-11-18) ─────────────────────────────
+
+#[test]
+fn no_se_funda_donde_la_ciudad_mas_grande_que_puede_tener_entraria_en_el_cauce() {
+    let m = con_mundo!();
+    let mut n = Nucleo::nuevo(arranque(m));
+    let orilla = n.estado().reglas.economia.datos.orilla;
+    // Alrededor de los nodos que el generador dejó encima del agua dibujada: cerca del trazo, sea la celda de al lado o el hueco de un vado.
+    let mut junto = None;
+    for i in comun::real::nodos_encima_del_rio(&m.0) {
+        let c = m.0.nodos()[i].posicion.unwrap();
+        for d in (0..=8_000).step_by(1_000) {
+            for g in 0..24 {
+                let a = ((g * 15) as f64).to_radians();
+                let p = Punto::new(c.x + (d as f64 * a.cos()) as i64, c.y + (d as f64 * a.sin()) as i64);
+                let Some(v) = n.viabilidad(p, 1) else { continue };
+                let (dist, navegable) = comun::real::distancia_al_rio(&m.0, p);
+                let limite = (if navegable { orilla.media_anchura_navegable } else { orilla.media_anchura } + orilla.plaza) as f64;
+                if v.motivo.is_none() {
+                    assert!(dist >= limite - 1.0, "en {p:?} se fundaría a {dist} del trazo (límite {limite})");
+                }
+                if v.motivo == Some(territorio::Motivo::JuntoAlRio) {
+                    assert!(dist < limite + 1.0, "en {p:?}, a {dist} del trazo, no está junto al río");
+                    junto.get_or_insert(p);
+                }
+            }
+        }
+    }
+    let p = junto.expect("algún sitio de tierra firme junto al río");
+    let e = n.crear_ejercito(0, "ana", 1, p, 500, 100_000).unwrap();
+    assert!(n.aplicar_en(0, Peticion::nueva("admin", "c", Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
+    assert_eq!(codigo(&n.aplicar_en(0, Peticion::nueva("ana", "f", Comando::Fundar { ejercito: e }))), "fundacion.junto_al_rio");
+}

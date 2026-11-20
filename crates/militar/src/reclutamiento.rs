@@ -169,11 +169,11 @@ pub fn reclutar(r: &Reglas, plaza: Plaza, pedido: Pedido, nuevo_id: impl FnOnce(
         return Err(ErrorReclutamiento::SoloReponer);
     }
     // La escuadra nueva de un ciudadano que no reside aquí se va a la columna con la que entró: tiene que haberla y caber en su Liderazgo (contando las escuadras que ya lleva
-    // fuera del campamento y de la guarnición de esta plaza, como al recogerlas).
+    // en una columna, como al recogerlas; lo prestado a guarniciones o escoltas no cuenta).
     let a_la_columna = match (existente, permiso) {
         (None, Permiso::Ciudadano) => {
             let c = columna.ok_or(ErrorReclutamiento::SinColumna)?;
-            let fuera = heroe.escuadras.iter().filter(|e| e.contenedor != Contenedor::Campamento && e.contenedor != Contenedor::Plaza(u64::from(plaza.id)));
+            let fuera = heroe.escuadras.iter().filter(|e| matches!(e.contenedor, Contenedor::Ejercito(_)));
             if liderazgo::comprometido(r, fuera) + liderazgo::coste(r, tropa) > heroe.liderazgo_base {
                 return Err(ErrorReclutamiento::SuperaLiderazgo);
             }
@@ -336,10 +336,12 @@ mod pruebas {
         // El Liderazgo: lo que ya lleva fuera del campamento más la nueva no puede pasar de su base.
         m.heroe.liderazgo_base = liderazgo::coste(&r, Tropa::MiliciaLanceros) + liderazgo::coste(&r, Tropa::Lenadores) - 1;
         assert_eq!(reclutar_de(&mut m, Tropa::Lenadores), Err(ErrorReclutamiento::SuperaLiderazgo));
-        // Las del campamento y las que dejó de visita en esta plaza no cuentan.
-        m.heroe.escuadra_mut(77).unwrap().contenedor = Contenedor::Plaza(4);
-        assert!(reclutar_de(&mut m, Tropa::Lenadores).is_ok_and(|x| x.columna == Some(9)));
-        assert_eq!(m.heroe.escuadras.len(), 2);
+        // Solo cuenta lo que va en la columna: lo prestado a cualquier guarnición, avanzada, pueblo o escolta no gasta Liderazgo (Víctor, 2026-11-18).
+        for prestada in [Contenedor::Plaza(8), Contenedor::Avanzada(3), Contenedor::Pueblo(5), Contenedor::Escolta(2), Contenedor::Plaza(4)] {
+            m.heroe.escuadra_mut(77).unwrap().contenedor = prestada;
+            assert!(reclutar_de(&mut m, Tropa::Lenadores).is_ok_and(|x| x.columna == Some(9)), "{prestada:?}");
+            m.heroe.escuadras.truncate(1);
+        }
     }
 
     #[test]

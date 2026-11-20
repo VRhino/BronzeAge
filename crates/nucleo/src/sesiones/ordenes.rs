@@ -669,8 +669,8 @@ impl Ctx<'_> {
                 let heroe = self.heroe(&o.heroe_id)?;
                 match self.obra(&o.obra_id)? {
                     (Obra::Avanzada, avanzada) => Comando::CancelarObraDeAvanzada { heroe, avanzada },
-                    // La obra de un pueblo ya tiene su orden (`destruir_pueblo`, que además lo derriba una vez levantado): aquí se rechaza en vez de duplicarla.
-                    (Obra::Pueblo, _) => return Err(self.no(rechazos::OBJETIVO_NO_SOPORTADO, "la obra de un pueblo se cancela con destruir_pueblo")),
+                    // La de un pueblo (2026-11-19): la de levantarlo, o la subida de nivel de uno activo (su obra lleva el id del pueblo).
+                    (Obra::Pueblo, pueblo) => Comando::CancelarObraDePueblo { pueblo },
                 }
             }
             Cuerpo::MejorarAvanzada(o) => Comando::MejorarAvanzada { heroe: self.heroe(&o.heroe_id)?, avanzada: self.avanzada(&o.avanzada_id)? },
@@ -848,6 +848,7 @@ impl Ctx<'_> {
             // ── La Facción, la ciudadanía y la residencia (sistema 5, 5B) ──
             Cuerpo::CrearFaccion(o) => Comando::CrearFaccion { heroe: self.mi_heroe()?, nombre: o.nombre.clone(), sigilo: o.sigilo.as_ref().map(sigilo) },
             Cuerpo::SolicitarIngreso(o) => Comando::SolicitarIngreso { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)? },
+            Cuerpo::CancelarSolicitud(o) => Comando::CancelarSolicitud { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)? },
             Cuerpo::DejarFaccion(_) => Comando::DejarFaccion { heroe: self.mi_heroe()? },
             Cuerpo::ResponderSolicitud(o) => Comando::ResponderSolicitud { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, solicitante: self.heroe(&o.heroe_id)?, aceptar: o.aceptar },
             Cuerpo::AsignarRey(o) => Comando::AsignarRey { heroe: self.mi_heroe()?, faccion: self.faccion(&o.faccion_id)?, designado: self.heroe(&o.heroe_id)? },

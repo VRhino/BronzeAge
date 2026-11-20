@@ -14,6 +14,9 @@ pub enum Terreno {
     NoTransitable,
     /// Tierra firme y pisable, pero en bosque cerrado (`FUNDACION.densidadBosqueMaximaParaFundar` o más): se cruza, no se funda.
     BosqueDenso,
+    /// Tierra firme y pisable, pero tan cerca del trazo de un río que la ciudad acabaría dentro del cauce que se ve (`ORILLA_RIO`, decisión del
+    /// autor del 2026-11-18).
+    JuntoAlRio,
     Firme,
 }
 
@@ -25,6 +28,7 @@ pub enum Motivo {
     NoTransitable,
     Empinado,
     BosqueDenso,
+    JuntoAlRio,
     DentroDeZona,
     CercaDePlaza,
     CercaDeCampamento,
@@ -38,6 +42,7 @@ impl Motivo {
             Motivo::Empinado => "fundacion.pendiente",
             Motivo::NoTransitable => "fundacion.no_transitable",
             Motivo::BosqueDenso => "fundacion.bosque_denso",
+            Motivo::JuntoAlRio => "fundacion.junto_al_rio",
             Motivo::DentroDeZona => "fundacion.dentro_de_zona",
             Motivo::CercaDePlaza => "fundacion.cerca_de_plaza",
             Motivo::CercaDeCampamento => "fundacion.cerca_de_campamento",
@@ -62,6 +67,7 @@ pub fn validar(p: Punto, terreno: Terreno, plazas: &[Disco], campamentos: impl I
         Terreno::NoTransitable => return Err(Motivo::NoTransitable),
         Terreno::Empinado => return Err(Motivo::Empinado),
         Terreno::BosqueDenso => return Err(Motivo::BosqueDenso),
+        Terreno::JuntoAlRio => return Err(Motivo::JuntoAlRio),
         Terreno::Firme => {}
     }
     // Solo hace falta mirar la zona de las plazas cuyo disco contiene el punto; su recorte sí usa a todas.
@@ -108,7 +114,7 @@ mod pruebas {
     #[test]
     fn terreno_y_mapa() {
         let p = Punto::new(500_000, 500_000);
-        for (t, m) in [(Terreno::FueraDelMapa, Motivo::FueraDelMapa), (Terreno::Agua, Motivo::SobreAgua), (Terreno::Empinado, Motivo::Empinado), (Terreno::NoTransitable, Motivo::NoTransitable), (Terreno::BosqueDenso, Motivo::BosqueDenso)] {
+        for (t, m) in [(Terreno::FueraDelMapa, Motivo::FueraDelMapa), (Terreno::Agua, Motivo::SobreAgua), (Terreno::Empinado, Motivo::Empinado), (Terreno::NoTransitable, Motivo::NoTransitable), (Terreno::BosqueDenso, Motivo::BosqueDenso), (Terreno::JuntoAlRio, Motivo::JuntoAlRio)] {
             assert_eq!(validar(p, t, &[], [], &D), Err(m));
         }
         assert_eq!(validar(p, Terreno::Firme, &[], [], &D), Ok(()));
