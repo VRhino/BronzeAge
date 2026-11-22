@@ -520,6 +520,9 @@ impl Nucleo {
         self.asegurar_tablon(t, Dueno::Asentamiento(id));
         self.asegurar_tablon(t, Dueno::Faccion(faccion));
         self.avance(t, Dueno::Faccion(faccion), "fundaciones", 1);
+        // H18 (Misiones §3, 2026-11-22): cada fundador, los de la columna que pasan a residir en ella.
+        let fundadores = self.estado.asentamientos[&id].fundadores.clone();
+        self.avance_de_heroes(t, &fundadores, "fundaciones", 1);
         self.mirar_misiones(t, Dueno::Faccion(faccion));
         self.mirar_misiones(t, Dueno::Asentamiento(id));
         // La derrota se borra al fundar (§8) y la fundación da experiencia salvo la primera plaza de la Facción (§3.5). La capital puede cambiar: la Facción cambia.

@@ -147,7 +147,7 @@ fn el_heroe_cumple_su_cadena_en_origen_y_reclama_el_oro_una_vez() {
     let vistas = nucleo::proyeccion::propios::misiones(&x.n, d);
     let estados: Vec<(&str, i32)> = vistas.iter().map(|v| (v.id.as_str(), v.estado)).collect();
     let (activa, cumplida, reclamada) = (pb::EstadoMision::MisionActiva as i32, pb::EstadoMision::MisionCumplida as i32, pb::EstadoMision::MisionReclamada as i32);
-    assert_eq!(estados, [("H1", reclamada), ("H2", activa), ("H3", cumplida), ("H4", activa), ("H5", activa), ("H11", activa), ("H13", activa)]);
+    assert_eq!(estados, [("H1", reclamada), ("H2", activa), ("H3", cumplida), ("H4", activa), ("H5", activa), ("H11", activa), ("H13", activa), ("H14", activa)]);
     let h3 = &vistas[2];
     assert_eq!((h3.condiciones[0].contador.as_str(), h3.condiciones[0].avance, h3.condiciones[0].umbral), ("llegadas", 1, 1));
     assert_eq!(h3.previa.as_deref(), Some("H1"));

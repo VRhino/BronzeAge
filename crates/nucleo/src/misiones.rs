@@ -279,7 +279,7 @@ mod pruebas {
     #[test]
     fn el_catalogo_del_documento_se_lee_entero_con_sus_cadenas() {
         let r = cargar();
-        assert_eq!(r.de(ClaseDueno::Heroe).count(), 13);
+        assert_eq!(r.de(ClaseDueno::Heroe).count(), 18, "H1 a H13 y la cadena «Tu primera plaza», H14 a H18");
         assert_eq!(r.de(ClaseDueno::Asentamiento).count(), 11);
         assert_eq!(r.de(ClaseDueno::Faccion).count(), 12);
         let f4 = r.buscar(ClaseDueno::Faccion, "F4").unwrap();

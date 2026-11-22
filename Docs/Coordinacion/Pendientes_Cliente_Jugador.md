@@ -6,6 +6,10 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### La cadena «Tu primera plaza», H14 a H18 (2026-11-22; nucleo 0.53.0, sin cambio de contrato; cambia la huella: partida nueva)
+
+Lo pidió Víctor el 2026-11-22 tras un playtest. Cinco misiones de héroe nuevas: H14 Facción, H15 destruir un campamento de bandidos, H16 aportar 20 al Fondo, H17 comprar la Caravana de Fundación, H18 fundar. Recompensas en medallas (`objeto`) y 5 de trigo. Contadores nuevos del héroe: `aportes`, `caravanas` y `fundaciones`. Los títulos, textos y nombres de contador van en `TEXTOS_MISIONES` de `/v1/datos`, así que el cliente TypeScript las enseña sin cambios; el de Unity, igual si lee esos datos. Si el cliente tiene una guía propia del camino (el TS, desde 0.225.0), conviene que no repita lo que ya dice la misión.
+
 ### Cancelar la solicitud de ingreso y el enfriamiento de ingreso (2026-11-19; contrato 0.31.0, nucleo 0.52.0, politica 0.8.0, sin foto nueva ni partida nueva)
 
 Lo pidió Víctor el 2026-11-19. **El cliente TypeScript lo recoge en la misma tanda** (0.224.0, lo pidió él); esta entrada queda para el cliente de Unity.
