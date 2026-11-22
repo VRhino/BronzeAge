@@ -482,7 +482,7 @@ async fn el_paso_de_minuto_manda_solo_lo_que_cambia_con_su_mascara_y_la_tendenci
     assert_eq!(ana.plaza.version_interior, antes.version_interior + 1);
     assert_eq!(ana.plaza.version, antes.version, "la ficha de la plaza no cambió: la versión de la plaza es la del mundo en que cambió por última vez");
     // La advertencia de solvencia del nivel siguiente (2026-11-10) la recalcula el paso de minuto: lo que llega cambia con la producción.
-    let permitidos = ["version", "version_interior", "almacen", "poblacion", "nutricion", "medidor_mantenimiento", "racha_mantenimiento_sano", "insolvencia_ascenso"];
+    let permitidos = ["version", "version_interior", "almacen", "poblacion", "nutricion", "medidor_mantenimiento", "racha_mantenimiento_sano", "insolvencia_ascenso", "comida_poblacion", "comida_guarnicion"];
     assert!(cambio.campos.iter().all(|c| permitidos.contains(&c.as_str())), "solo el almacén y la población, no la ciudad: {:?}", cambio.campos);
     assert!(cambio.campos.iter().any(|c| c == "almacen"));
     let datos = match cambio.datos.as_ref().unwrap().cuerpo.as_ref().unwrap() {
