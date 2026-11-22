@@ -471,6 +471,32 @@ fn h18_fundar_tu_plaza_cuenta_para_cada_fundador() {
     });
 }
 
+/// `conPlaza` (Misiones §2): quien entra en una Facción que ya tiene plaza recibe H16 a H18 por cumplidas, y también el ciudadano que no iba en la columna que funda la primera.
+#[test]
+fn h16_a_h18_se_dan_por_cumplidas_con_la_faccion_con_plaza() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let (f, ana, beto) = faccion_sin_plazas(&mut x);
+    let cadena = ["H16", "H17", "H18"];
+    let todas = |x: &X, h: u64| cadena.iter().all(|id| x.cumplida(Dueno::Heroe(h), id));
+    let ninguna = |x: &X, h: u64| cadena.iter().all(|id| !x.cumplida(Dueno::Heroe(h), id));
+    assert!(ninguna(&x, ana) && ninguna(&x, beto), "sin plaza, nada");
+    // Ana funda con una columna; beto no va en ella y también las recibe.
+    let p = sitio_rico(&x.n, &m.0, 0, f);
+    let t = x.n.ahora();
+    let col = x.n.crear_ejercito(t, "ana2", f, p, 500, 100_000).unwrap();
+    x.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+    x.ok("ana2", Comando::Fundar { ejercito: col });
+    assert!(todas(&x, ana) && todas(&x, beto), "la Facción ya tiene plaza");
+    // Y quien entra después, al entrar.
+    let carol = x.heroe("carol", 0);
+    assert!(ninguna(&x, carol));
+    x.ok("carol", Comando::SolicitarIngreso { heroe: carol, faccion: f });
+    x.ok("ana", Comando::ResponderSolicitud { heroe: ana, faccion: f, solicitante: carol, aceptar: true });
+    assert!(todas(&x, carol), "entra en una Facción con plaza");
+    assert!(!x.cumplida(Dueno::Heroe(carol), "H15"), "los bandidos, sí tiene que hacerlos");
+}
+
 // ───────────────────────────── Plaza ─────────────────────────────
 
 #[test]

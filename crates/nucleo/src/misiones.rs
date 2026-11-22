@@ -47,6 +47,9 @@ pub struct Mision {
     pub previa: Option<u16>,
     /// `false`: está en el catálogo pero no se activa nunca.
     pub habilitada: bool,
+    /// `conPlaza`: se da por cumplida en cuanto la Facción del héroe tiene alguna plaza (2026-11-22, la cadena «Tu primera plaza»: quien entra en una Facción con plaza
+    /// ya no puede aportar al Fondo, comprar la caravana ni fundar la primera, y sus compañeros ya pasaron por ahí para guiarle).
+    pub con_plaza: bool,
     /// Contador y umbral; se cumplen todos a la vez.
     pub condiciones: Vec<(String, u64)>,
     pub recompensa: Recompensa,
@@ -82,7 +85,11 @@ impl Reglas {
                 let recompensa = Recompensa::leer(m, clase, clase == ClaseDueno::Heroe, militar)?;
                 previas.push(m.get("previa").and_then(Value::as_str).map(str::to_owned));
                 let habilitada = m.get("habilitada").and_then(Value::as_bool).unwrap_or(true);
-                misiones.push(Mision { id, clase, previa: None, habilitada, condiciones, recompensa });
+                let con_plaza = m.get("conPlaza").and_then(Value::as_bool).unwrap_or(false);
+                if con_plaza && clase != ClaseDueno::Heroe {
+                    return Err(format!("{id}: «conPlaza» solo vale en una misión de héroe"));
+                }
+                misiones.push(Mision { id, clase, previa: None, habilitada, con_plaza, condiciones, recompensa });
             }
         }
         for (i, previa) in previas.into_iter().enumerate() {
@@ -191,6 +198,23 @@ impl EstadoMisiones {
             let usados: BTreeSet<&str> = r.de(d.clase()).filter(|(i, m)| m.habilitada && !x.cumplidas.contains(i)).flat_map(|(_, m)| m.condiciones.iter().map(|(c, _)| c.as_str())).collect();
             x.contadores.retain(|c, _| usados.contains(c.as_str()));
         }
+        nuevas
+    }
+
+    /// Da por cumplidas las misiones habilitadas `conPlaza` de `d` que aún no lo están, estén activas o no (Misiones §2), y luego las activas que ya cumplen; devuelve las nuevas.
+    pub fn cumplir_con_plaza(&mut self, r: &Reglas, d: Dueno) -> Vec<u16> {
+        let x = self.duenos.entry(d).or_default();
+        let mut nuevas: Vec<u16> = r.de(d.clase()).filter(|(i, m)| m.habilitada && m.con_plaza && !x.cumplidas.contains(i)).map(|(i, _)| i).collect();
+        if nuevas.is_empty() {
+            if *x == DeDueno::default() {
+                self.duenos.remove(&d);
+            }
+            return nuevas;
+        }
+        x.cumplidas.extend(&nuevas);
+        let usados: BTreeSet<&str> = r.de(d.clase()).filter(|(i, m)| m.habilitada && !x.cumplidas.contains(i)).flat_map(|(_, m)| m.condiciones.iter().map(|(c, _)| c.as_str())).collect();
+        x.contadores.retain(|c, _| usados.contains(c.as_str()));
+        nuevas.extend(self.cumplir(r, d));
         nuevas
     }
 

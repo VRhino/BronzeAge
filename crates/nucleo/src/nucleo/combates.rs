@@ -797,6 +797,7 @@ impl Nucleo {
         if conquistada {
             self.avance(t, Dueno::Faccion(yo), "conquistas", 1);
             self.mirar_misiones(t, Dueno::Faccion(yo));
+            self.misiones_con_plaza_de_faccion(t, yo);
         } else if en_combate {
             self.avance(t, Dueno::Asentamiento(x), "asedios", 1);
         }
