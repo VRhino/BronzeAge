@@ -10,7 +10,7 @@
 // Cada binario escribe su salida en target/suite-registros/<paquete>--<binario>.log; al final sale un resumen con las que fallaron y los más
 // lentos, y los tiempos se guardan en target/suite-tiempos.json para ordenar la vez siguiente. Sale con código 1 si algo falla.
 import { spawn } from 'node:child_process';
-import { createWriteStream, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -36,6 +36,20 @@ let paraBinarios = [];
 
 const seg = (ms) => `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
 const min = (ms) => (ms < 90_000 ? seg(ms) : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`);
+
+// 0. El artefacto de mundo (pedido del autor, 2026-11-22). Sin `generador/salida/mundo/mundo-*.bin` las pruebas sobre el mundo real se omiten
+// en silencio y cuentan como bien: así pasaron 9 pruebas rotas por los PR #33, #34 y #37 con «0 mal». Sin él, la suite no arranca.
+{
+  const carpeta = path.join(RAIZ, 'generador', 'salida', 'mundo');
+  const mundos = existsSync(carpeta) ? readdirSync(carpeta).filter((f) => /^mundo-[0-9a-f]+\.bin$/.test(f)) : [];
+  if (mundos.length === 0) {
+    console.error(`— falta el artefacto de mundo en ${path.relative(RAIZ, carpeta)}: sin él las pruebas sobre el mundo real se omiten y la suite miente.`);
+    console.error('  Genéralo con:  cd generador && npm ci && npm run generar && npx tsx scripts/generar-mundo.ts 42 salida/mundo   (unos 3 min)');
+    process.exit(2);
+  }
+  if (mundos.length > 1) console.warn(`— aviso: hay ${mundos.length} artefactos de mundo en ${path.relative(RAIZ, carpeta)}; deja solo el actual: ${mundos.join(', ')}`);
+  else console.log(`— mundo: ${mundos[0]}`);
+}
 
 // 1. Compilar y recoger los binarios de prueba.
 function compilar() {
