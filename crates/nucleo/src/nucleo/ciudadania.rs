@@ -267,6 +267,9 @@ impl Nucleo {
                 self.emitir_propio(t, codigo, vec![], vec![("faccion", i64::from(*faccion)), ("heroe", *solicitante as i64)]);
                 if *aceptar {
                     self.avance(t, Dueno::Heroe(*solicitante), "ciudadania", 1);
+                    // Entrar en una Facción que ya tiene plaza da por hecho lo que ya no puede hacer de «Tu primera plaza» (Misiones §2, 2026-11-22); un mercenario contratado no entra
+                    // como ciudadano y no cuenta.
+                    self.misiones_con_plaza(t, *solicitante);
                 }
                 Ok(vec![])
             }

@@ -88,6 +88,28 @@ impl Nucleo {
         self.tocar_si_cambio(d, antes);
     }
 
+    /// Si la Facción del héroe tiene alguna plaza, da por cumplidas sus misiones `conPlaza` (Misiones §2): al entrar en una Facción y cuando la suya gana su primera plaza.
+    pub(super) fn misiones_con_plaza(&mut self, t: Instante, heroe: u64) {
+        let Some(f) = self.heroe(heroe).and_then(|h| h.faccion) else { return };
+        if self.plazas_de(f).next().is_none() {
+            return;
+        }
+        let d = Dueno::Heroe(heroe);
+        let r = self.estado.reglas.economia.misiones.clone();
+        let antes = self.estado.misiones.de(d).cloned();
+        let cumplidas = self.estado.misiones.cumplir_con_plaza(&r, d);
+        self.tras_avance(t, d, cumplidas, false);
+        self.tocar_si_cambio(d, antes);
+    }
+
+    /// Lo mismo para cada ciudadano de la Facción.
+    pub(super) fn misiones_con_plaza_de_faccion(&mut self, t: Instante, faccion: u32) {
+        let ciudadanos = self.estado.politica.facciones.get(faccion).map(|f| f.ciudadanos.clone()).unwrap_or_default();
+        for h in ciudadanos {
+            self.misiones_con_plaza(t, h);
+        }
+    }
+
     /// Anuncia las misiones cumplidas y, si se cumplió alguna (que activa sus siguientes) o se pide `mirar`, lee los contadores de estado de las activas, hasta que no se cumple ninguna más.
     fn tras_avance(&mut self, t: Instante, d: Dueno, mut cumplidas: Vec<u16>, mut mirar: bool) {
         let r = self.estado.reglas.economia.misiones.clone();
