@@ -265,10 +265,10 @@ fn el_heroe_nace_en_un_campamento_con_su_progresion_inicial_y_cada_rechazo_tiene
     assert_eq!(elegir, vec![(0, 1, 0), (1, 1, 1), (2, 1, 2)]);
     // El campamento en el contrato (paridad P7): los edificios en el orden del TypeScript, cuántos lo eligieron, el plazo de los bandidos de su anillo y su planta.
     let camp = nucleo::proyeccion::interior::campamento(&e.n, 2).expect("el campamento 2");
-    assert_eq!((camp.edificios.first().map(String::as_str), camp.edificios.len(), camp.edificios[camp.edificios.len() - 2].as_str()), (Some("taberna"), 13, "mercado"));
+    assert_eq!((camp.edificios.first().map(String::as_str), camp.edificios.len(), camp.edificios[camp.edificios.len() - 2].as_str()), (Some("taberna"), 20, "caballerizas"));
     assert_eq!((camp.eligieron_como_inicial, camp.bandidos_en_ms), (2, e.n.estado().combate.anillos.get(&2).copied()));
     assert_eq!(camp.planta.first().map(|x| (x.id.as_str(), x.tipo.as_str())), Some(("camp-2-0", "taberna")));
-    assert_eq!(camp.planta.iter().filter(|x| x.tipo == "vivienda").count(), 10);
+    assert_eq!(camp.planta.iter().filter(|x| x.tipo == "vivienda").count(), 16);
     assert!(camp.trazado.is_some_and(|t| !t.calles.is_empty()) && camp.empalizada_puerta.len() == 1 && !camp.empalizada.is_empty());
     assert_eq!(camp.planta, nucleo::proyeccion::interior::campamento(&e.n, 2).unwrap().planta, "la planta no cambia: es del campamento");
 }
@@ -320,8 +320,8 @@ fn el_heroe_nace_con_su_clase_y_su_equipo_y_cambia_de_equipo_y_guarda_objetos_po
 fn en_un_campamento_de_mercenarios_se_compra_y_se_vende_lo_que_no_pide_tecnologia_y_no_se_forja() {
     let m = con_mundo!();
     let mut e = escenario(m, 7);
+    // Nace en el campamento 0: ya está en él.
     let h = e.heroe("ana", 0);
-    e.ok("admin", Comando::ColocarHeroe { heroe: h, ubicacion: Ubicacion::Mercenarios(0) });
     let comprar = |objeto: &str| Comando::ComprarObjeto { heroe: h, objeto: objeto.into() };
     let monedas = |e: &Escenario| e.n.heroe(h).unwrap().heroe.monedas;
     let antes = monedas(&e);
@@ -394,7 +394,7 @@ fn en_la_armeria_se_compra_se_vende_se_forja_y_se_usa_por_orden() {
     assert!(nucleo::proyeccion::vista::plaza_avistada(&e.n, a).armeria_activa);
     let dentro = nucleo::proyeccion::vista::plaza_desde_dentro(&e.n, a);
     let neutrales = dentro.forja.and_then(|f| f.neutrales).unwrap();
-    assert_eq!((neutrales.abierta, neutrales.recargo_pct, dentro.metales_armeria), (true, 0, vec!["bronce".to_owned(), "cobre".to_owned(), "inicio".to_owned()]));
+    assert_eq!((neutrales.abierta, neutrales.recargo_pct, dentro.metales_armeria), (true, 0, vec!["bronce".to_owned(), "cobre".to_owned(), "inicio".to_owned(), "recluta".to_owned()]));
 }
 
 // ───────────────────────────── 2. Reclutar en una plaza ─────────────────────────────
@@ -546,7 +546,7 @@ fn reclutar_en_un_campamento_cobra_oro_del_almacen_personal_o_del_carro_y_gasta_
     assert_eq!(e.rechazada("ana", Comando::ReclutarEnCampamento { heroe: h, tropa: Tropa::MiliciaLanceros, pagar_con: personal }), rechazos::MERCENARIOS_TROPA_NO_DISPONIBLE);
     assert_eq!(e.rechazada("ana", honderos(h, personal)), rechazos::MERCENARIOS_SIN_ORO);
     assert_eq!(e.rechazada("ana", honderos(h, PagarCon::Carro)), rechazos::HEROE_SIN_COLUMNA, "para pagar con el carro hay que ir en una columna");
-    assert_eq!(e.n.reclutas_de_campamento(camp), Some(100_000), "un campamento nace lleno: 10 viviendas × 10");
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(160_000), "un campamento nace lleno: 16 viviendas × 10");
 
     // Con el oro en el almacén personal: precio = (2 de escalón + 1 de arma de madera × 8) × 1,5 = 15 por soldado, 20 soldados.
     e.ok("admin", Comando::DarAlmacenPersonal { heroe: h, recurso: Oro, cantidad: 1_000_000 });
@@ -558,14 +558,14 @@ fn reclutar_en_un_campamento_cobra_oro_del_almacen_personal_o_del_carro_y_gasta_
     let esc = hn.heroe.escuadra(r.creadas[0]).unwrap();
     assert_eq!((esc.tropa, esc.cantidad, esc.contenedor, esc.plaza_origen, esc.prestada), (Tropa::Honderos, 20, Contenedor::Campamento, None, None));
     assert_eq!(hn.almacen_personal[&Oro], 1_000_000 - precio);
-    assert_eq!(e.n.reclutas_de_campamento(camp), Some(80_000));
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(140_000));
     let reclutado = hechos(&e.n, "mercenarios.reclutado");
     assert_eq!((reclutado.len(), dato(&reclutado[0], "cantidad"), dato(&reclutado[0], "oro")), (1, 20, precio));
     assert_eq!(e.rechazada("ana", honderos(h, personal)), rechazos::MERCENARIOS_AL_TOPE);
     // Los reclutas se recuperan a 10 por hora, sin ningún evento.
     let cola = en_cola(&e.n);
     e.avanzar(HORA);
-    assert_eq!(e.n.reclutas_de_campamento(camp), Some(90_000));
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(150_000));
     assert!(en_cola(&e.n) <= cola, "reponer los reclutas no programa nada");
 
     // Con el oro del carro de su columna, a la puerta del campamento.
@@ -576,7 +576,7 @@ fn reclutar_en_un_campamento_cobra_oro_del_almacen_personal_o_del_carro_y_gasta_
     e.ok("admin", Comando::ColocarHeroe { heroe: beto, ubicacion: Ubicacion::Columna(col) });
     e.ok("beto", honderos(beto, PagarCon::Carro));
     assert_eq!(e.n.suministro(col)[&Oro], 400_000 - precio);
-    assert_eq!(e.n.reclutas_de_campamento(camp), Some(70_000));
+    assert_eq!(e.n.reclutas_de_campamento(camp), Some(130_000));
     assert_eq!(e.n.soldados_del_campamento(e.a), 0, "los reclutas de un campamento no comen de ninguna plaza");
 
     // Lejos del campamento no se recluta, y solo donde se reside.
