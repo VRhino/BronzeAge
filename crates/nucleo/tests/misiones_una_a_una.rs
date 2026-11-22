@@ -390,6 +390,113 @@ fn h13_repartir_los_puntos_de_atributo() {
     assert!(!x.cumplida(Dueno::Heroe(h), "H13"));
 }
 
+// ───────────────────────────── Héroe: «Tu primera plaza» (H14 a H18, 2026-11-22) ─────────────────────────────
+
+#[test]
+fn h14_fundar_o_entrar_en_una_faccion() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let h = x.heroe("ana", 0);
+    x.cumple(Dueno::Heroe(h), "H14", |x| {
+        x.ok("ana", Comando::CrearFaccion { heroe: h, nombre: "Micenas".into(), sigilo: None });
+    });
+}
+
+#[test]
+fn h15_destruir_un_campamento_de_bandidos() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let (b, h) = bandidos_y_arqueros(&mut x, m, "ana", 1, descampado(m, 0));
+    x.cumple(Dueno::Heroe(h), "H15", |x| {
+        x.ok("ana", Comando::Atacar { heroe: h, objetivo: ObjetivoAtaque::Campamento(b), declara_guerra: false });
+    });
+}
+
+/// Una Facción sin plazas con dos ciudadanos en el campamento 0: (ana, la que la crea, y beto).
+fn faccion_sin_plazas(x: &mut X) -> (u32, u64, u64) {
+    let ana = x.heroe("ana", 0);
+    let f = x.ok("ana", Comando::CrearFaccion { heroe: ana, nombre: "Troya".into(), sigilo: None }).creadas[0] as u32;
+    let beto = x.heroe("beto", 0);
+    x.ok("beto", Comando::SolicitarIngreso { heroe: beto, faccion: f });
+    x.ok("ana", Comando::ResponderSolicitud { heroe: ana, faccion: f, solicitante: beto, aceptar: true });
+    (f, ana, beto)
+}
+
+fn aportar(x: &mut X, cuenta: &str, heroe: u64, recurso: Recurso, cantidad: i64) {
+    x.ok("admin", Comando::DarAlmacenPersonal { heroe, recurso, cantidad });
+    x.ok(cuenta, Comando::AportarARefundacion { heroe, recurso, cantidad, lado: nucleo::LadoDelFondo::Almacen });
+}
+
+#[test]
+fn h16_aportar_veinte_al_fondo_del_campamento() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let (_, ana, _) = faccion_sin_plazas(&mut x);
+    aportar(&mut x, "ana", ana, Recurso::Madera, 15_000);
+    // Retirar no descuenta.
+    x.ok("ana", Comando::RetirarDeRefundacion { heroe: ana, recurso: Recurso::Madera, cantidad: 5_000, lado: nucleo::LadoDelFondo::Almacen });
+    x.cumple(Dueno::Heroe(ana), "H16", |x| aportar(x, "ana", ana, Recurso::Trigo, 5_000));
+}
+
+#[test]
+fn h17_comprar_la_caravana_cuenta_para_quien_la_compra_y_para_quien_aporto() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let (f, ana, beto) = faccion_sin_plazas(&mut x);
+    let carol = x.heroe("carol", 0);
+    x.ok("carol", Comando::SolicitarIngreso { heroe: carol, faccion: f });
+    x.ok("ana", Comando::ResponderSolicitud { heroe: ana, faccion: f, solicitante: carol, aceptar: true });
+    // Beto pone todo el coste y ana, que no aporta nada, la compra; carol no hace nada.
+    let costo = x.n.costo_refundacion();
+    for (&r, &n) in &costo {
+        aportar(&mut x, "beto", beto, r, n);
+    }
+    assert!(!x.cumplida(Dueno::Heroe(beto), "H17"));
+    x.cumple(Dueno::Heroe(ana), "H17", |x| {
+        x.ok("ana", Comando::ComprarCaravanaDeRefundacion { heroe: ana });
+    });
+    assert!(x.cumplida(Dueno::Heroe(beto), "H17"), "beto aportó a la caravana");
+    assert!(!x.cumplida(Dueno::Heroe(carol), "H17"), "carol no puso nada ni la compró");
+}
+
+#[test]
+fn h18_fundar_tu_plaza_cuenta_para_cada_fundador() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let p = sitio_rico(&x.n, &m.0, 0, 1);
+    let (col, h) = x.columna("ana", 1, p, 100_000);
+    x.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+    x.cumple(Dueno::Heroe(h), "H18", |x| {
+        x.ok("ana", Comando::Fundar { ejercito: col });
+    });
+}
+
+/// `conPlaza` (Misiones §2): quien entra en una Facción que ya tiene plaza recibe H16 a H18 por cumplidas, y también el ciudadano que no iba en la columna que funda la primera.
+#[test]
+fn h16_a_h18_se_dan_por_cumplidas_con_la_faccion_con_plaza() {
+    let m = con_mundo!();
+    let mut x = X::nuevo(m);
+    let (f, ana, beto) = faccion_sin_plazas(&mut x);
+    let cadena = ["H16", "H17", "H18"];
+    let todas = |x: &X, h: u64| cadena.iter().all(|id| x.cumplida(Dueno::Heroe(h), id));
+    let ninguna = |x: &X, h: u64| cadena.iter().all(|id| !x.cumplida(Dueno::Heroe(h), id));
+    assert!(ninguna(&x, ana) && ninguna(&x, beto), "sin plaza, nada");
+    // Ana funda con una columna; beto no va en ella y también las recibe.
+    let p = sitio_rico(&x.n, &m.0, 0, f);
+    let t = x.n.ahora();
+    let col = x.n.crear_ejercito(t, "ana2", f, p, 500, 100_000).unwrap();
+    x.ok("admin", Comando::DarCaravanaFundacion { ejercito: col });
+    x.ok("ana2", Comando::Fundar { ejercito: col });
+    assert!(todas(&x, ana) && todas(&x, beto), "la Facción ya tiene plaza");
+    // Y quien entra después, al entrar.
+    let carol = x.heroe("carol", 0);
+    assert!(ninguna(&x, carol));
+    x.ok("carol", Comando::SolicitarIngreso { heroe: carol, faccion: f });
+    x.ok("ana", Comando::ResponderSolicitud { heroe: ana, faccion: f, solicitante: carol, aceptar: true });
+    assert!(todas(&x, carol), "entra en una Facción con plaza");
+    assert!(!x.cumplida(Dueno::Heroe(carol), "H15"), "los bandidos, sí tiene que hacerlos");
+}
+
 // ───────────────────────────── Plaza ─────────────────────────────
 
 #[test]
@@ -765,7 +872,7 @@ fn f12_empezar_una_epica() {
 
 /// Las misiones que prueba este archivo, una a una: todo el catálogo. Una misión nueva sin su prueba aquí la hace fallar.
 const PROBADAS: &[&str] = &[
-    "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "H10", "H11", "H12", "H13", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8",
+    "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "H10", "H11", "H12", "H13", "H14", "H15", "H16", "H17", "H18", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8",
     "F9", "F10", "F11", "F12",
 ];
 

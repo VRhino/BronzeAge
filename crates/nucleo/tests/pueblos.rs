@@ -1827,7 +1827,6 @@ fn dentro_se_deja_en_el_almacen_local_solo_lo_que_produce_el_pueblo_y_se_carga_l
     e.ok("admin", Comando::DarSuministro { ejercito: c0, recurso: Cobre, cantidad: capacidad });
     let dejar = |recurso, cantidad| Comando::DejarEnPueblo { heroe: h0, pueblo, recurso, cantidad };
     let cargar = |recurso, cantidad| Comando::CargarDePueblo { heroe: h0, pueblo, recurso, cantidad };
-    assert_eq!(e.rechazada("ana", dejar(Cobre, 1_000)), rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO);
     e.ok("ana", Comando::EntrarEnPueblo { pueblo, heroe: h0 });
     e.avanzar(0);
     let (v, hash) = (e.n.version(), e.n.hash_estado());

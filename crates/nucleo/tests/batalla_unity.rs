@@ -486,7 +486,7 @@ async fn el_ticket_del_asedio_es_completo_congelado_y_va_a_todos_los_servidores_
     assert_eq!(milicia.len(), 1);
     assert_eq!((milicia[0].tropa_id.as_str(), milicia[0].efectivos_autorizados as i64, milicia[0].nivel, milicia[0].experiencia, milicia[0].moral, milicia[0].heroe_id.as_deref()), ("milicia_lanceros", completa(Tropa::MiliciaLanceros), 1, 0, 100, Some(h_beto.as_str())));
     let reglas = t.reglas.as_ref().unwrap();
-    assert_eq!((reglas.duracion_maxima_segundos, reglas.version_catalogo_heroe.as_str(), reglas.version_catalogo_objetos.as_str()), (1_800, "bronzeage-clases-1", "bronzeage-objetos-1"), "las versiones de CLASES_HEROE y de OBJETOS");
+    assert_eq!((reglas.duracion_maxima_segundos, reglas.version_catalogo_heroe.as_str(), reglas.version_catalogo_objetos.as_str()), (1_800, "bronzeage-clases-1", "bronzeage-objetos-2"), "las versiones de CLASES_HEROE y de OBJETOS");
     assert_eq!(reglas.version_catalogo_tropas, 2, "VERSION_CATALOGO_TROPAS (Heroe_Y_Tropa §12), no el 1 fijo");
     assert_eq!((milicia[0].estandarte.as_str(), milicia[0].aspecto.as_str()), ("", ""), "el estandarte y el aspecto, vacíos (D20)");
 

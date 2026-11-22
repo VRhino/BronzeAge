@@ -499,8 +499,10 @@ fn dentro_de_una_plaza_o_a_su_puerta_el_ciudadano_carga_su_carro_del_almacen_y_s
     let (almacen, carro) = (e.almacen(c, Madera), e.carro(ej, Madera));
     e.ok("ana", cargar(ana, c, Madera, 25_500));
     assert_eq!((e.almacen(c, Madera), e.carro(ej, Madera)), (almacen - 25_000, carro + 25_000), "unidades enteras: nada se crea ni se pierde");
+    // El último: el primero es el de la puerta de A.
     let h = hechos(&e.n, "almacen.cargado_en_carro");
-    assert_eq!((dato(&h[0].0, "plaza") as u64, dato(&h[0].0, "heroe") as u64, dato(&h[0].0, "cantidad")), (c, ana, 25_000));
+    let h = h.last().unwrap();
+    assert_eq!((dato(&h.0, "plaza") as u64, dato(&h.0, "heroe") as u64, dato(&h.0, "cantidad")), (c, ana, 25_000));
     e.ok("ana", dejar(ana, c, Madera, 5_000));
     assert_eq!((e.almacen(c, Madera), e.carro(ej, Madera)), (almacen - 20_000, carro + 20_000));
     assert_eq!(e.no("ana", dejar(ana, c, Oro, 1_000)), rechazos::CARRO_NO_LLEVA);

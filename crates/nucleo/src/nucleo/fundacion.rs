@@ -797,6 +797,10 @@ impl Nucleo {
         let datos = vec![("campamento", i64::from(campamento)), ("heroe", heroe as i64), ("faccion", i64::from(faccion)), ("recurso", recurso_a_u8(recurso) as i64), ("cantidad", movido)];
         let sentido = Dato::Texto(if aporta { "aporta" } else { "retira" }.into());
         self.tr.emitir(&self.estado, EventoNucleo { valores: vec![("sentido", sentido)], ..EventoNucleo::nuevo("mercenarios.fondo_refundacion", t, datos) });
+        // H16 (Misiones §3, 2026-11-22): las unidades que aporta; retirar no descuenta.
+        if aporta {
+            self.avance(t, crate::misiones::Dueno::Heroe(heroe), "aportes", (movido / UNIDAD) as u64);
+        }
         Ok(vec![])
     }
 
@@ -847,9 +851,15 @@ impl Nucleo {
         }
         self.tr.tocar(Clase::Campamento, u64::from(campamento));
         let puerta = self.puerta_de_campamento(campamento).expect("el campamento existe");
+        // H17 (Misiones §3, 2026-11-22): la caravana cuenta para quien la compra y para cada uno de los que pusieron algo en ella.
+        let mut compradores: Vec<u64> = aportes.keys().copied().collect();
+        if !compradores.contains(&heroe) {
+            compradores.push(heroe);
+        }
         let id = self.nueva_fundacion(t, faccion, heroe, Origen::Campamento(campamento), puerta, costo, aportes);
         let c = self.estado.fundacion.caravanas[&id].clone();
         self.hecho_de_fundacion(t, "mercenarios.caravana_refundacion", &c, vec![], vec![("campamento", i64::from(campamento))]);
+        self.avance_de_heroes(t, &compradores, "caravanas", 1);
         Ok(vec![id])
     }
 

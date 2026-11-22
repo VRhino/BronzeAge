@@ -29,6 +29,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 69 | POLÍTICA / MAPA | Marcas de Facción en el mapa (pedidas por el autor el 2026-10-29; acotadas en la sección «69»; rescatadas el 2026-11-11 de una rama que no llegó a `main`, donde eran la 63) | nada: el cliente de jugador no tiene dónde guardarlas |
 | 75 | MILITAR / HÉROE | Estandartes y aspecto de las escuadras (D20, 2026-11-12): un tipo de objeto `estandarte`, su sitio en la escuadra y una orden para elegirlo, cuando haya estandartes en el catálogo y arte. Sección «75» | `SquadSnapshot.estandarte` y `aspecto` viajan vacíos |
 | 76 | BOTS / ADMIN | Lo que piden la clase y los objetos del héroe a BotsBrain y al AdminClient (D21, 2026-11-12). Sección «76» | el motor rechaza un héroe sin clase |
+| 78 | BATALLA / MUNDO | Campo de batalla del lugar (diseño del 2026-11-22; `Docs/Disenos_Por_Implementar/Campo_De_Batalla_Del_Lugar.md`): el mapa interior de la batalla sale del punto del mundo (relieve, río y vado, costa, bosque, caminos), con escala interna de 8 u por 600 m. El vado es el único paso y el único efecto nuevo. Sección «78» | el ticket trae `mapa_referencia{mapa_id, centro}`, pero Conquest lo ignora y carga siempre el mismo campo plano |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -261,3 +262,13 @@ Desde el 2026-11-12 `crear_heroe` rechaza un héroe sin clase o con una que no e
 - **La forja en cualquier plaza (2026-11-12)**, para los dos (`Docs/Mechanics/Heroe_Y_Tropa.md` §4.6 y `Mercenarios_Por_Contrato.md` §5.1):
   - **BotsBrain**: sus héroes forjan en cualquier plaza con la Armería activa cuya forja esté abierta a su grupo (la de su Facción, siempre) y pagan en monedas el impuesto de `OBJETOS.forja` con el recargo de su grupo (sin monedas, `heroe.sin_monedas`); fuera de su residencia los materiales salen del carro de la columna con la que entraron (`forja.sin_materiales` si no los trae), y los tiers III a V esperan a su Era (`forja.era_cerrada`). Lo que necesitan lo leen de la plaza donde están dentro (`forja` y `metales_armeria`) y, desde fuera, de `armeria_activa`. Sus Tesoreros y Gobernadores, residentes y dentro, pueden abrir o cerrar la forja de su plaza a aliados, neutrales y enemigos y fijarles el recargo con `configurar_forja` (200); de partida está cerrada a los tres con +100 %, y una conquista la devuelve a eso. Pagar contratos de mercenarios con el fondo de la plaza (`pagar_con = fondoPlaza`) no les toca: las Facciones de bots no contratan (`mercenario.faccion_de_bots`).
   - **AdminClient**: `ADMIN` lleva en cada plaza `armeria_activa`, `forja` (la apertura y el recargo de cada grupo de fuera y el fondo de monedas) y `metales_armeria`; el hecho `asentamiento.forja_configurada` y el `impuesto` de `heroe.objeto_forjado`. Mostrarlos en la ficha de la plaza. No hay orden de administración para poner monedas en el fondo.
+
+## 78. Campo de batalla del lugar (diseño del 2026-11-22)
+
+Diseño: `Docs/Disenos_Por_Implementar/Campo_De_Batalla_Del_Lugar.md`. Casi todo es de Conquest, que lee el lugar del artefacto y del relieve que ya tiene.
+
+Lo que toca al motor:
+
+- `BattleMapReference` gana `relieve_id`, los `caminos` que cruzan el campo y la `procedencia` de cada bando.
+- El lanzador pasa al proceso de batalla la URL del motor, para que descargue el artefacto y el relieve por hash.
+- Para más adelante: `centro` en `SettlementBattleSnapshot`, cuando los asedios entren.

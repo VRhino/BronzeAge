@@ -8,6 +8,8 @@
 
 > **Recompensas flexibles (2026-11-01, en Rust; mecánica 66).** Cada misión da una **recompensa fija**, que marca su tipo (participación en una de plaza, experiencia de Facción en una de Facción, ninguna en una de héroe), y una **lista libre** de recursos, oro, experiencia y tropa (§4). Antes cada cadena daba una sola cosa: oro la de héroe, recursos la de plaza y experiencia la de Facción. Las cadenas de plaza A1-A11 dan ahora también 10 de participación. Cambia la huella de las reglas: una foto anterior no carga y hace falta partida nueva (§8). Código: `crates/nucleo/src/recompensas.rs` (leer y validar) y `crates/nucleo/src/nucleo/recompensas.rs` (el reparto al reclamar).
 
+> **Cadena «Tu primera plaza» (2026-11-22).** Tras el playtest del 22 (los jugadores nuevos no encontraban cómo fundar), H14 a H18 llevan al héroe por el camino de la refundación desde un campamento: Facción, bandidos, aportar 20 al Fondo, comprar la Caravana de Fundación y fundar. Las recompensas son medallas, tres de cada (decisión del autor del 22 a las 11:54), y 5 de trigo, a propósito pequeñas para no quitar la pelea con los bandidos (decisión del autor). Contadores nuevos del héroe: `aportes`, `caravanas` y `fundaciones` (antes solo de Facción). Quien entra en una Facción que ya tiene plaza recibe H16 a H18 por cumplidas (`conPlaza`, §2). Cambia la huella de las reglas: hace falta partida nueva.
+
 ## 1. Alcance
 
 Las misiones guían al jugador al principio del juego para que descubra las mecánicas, con recompensa. Tienen tres dueños: el **héroe**, el **asentamiento** y la **Facción**. Valen igual para los bots (`12_NPC_Fuera_Del_Motor.md` §2), que las siguen como currículo.
@@ -18,6 +20,7 @@ Las misiones guían al jugador al principio del juego para que descubra las mec�
 - **Activa**: habilitada, no cumplida y con su previa cumplida (o sin previa). Todo dueño empieza con las primeras de cada cadena activas, también en una partida que ya estaba en marcha.
 - **Estado por dueño** (`Estado::misiones`): los contadores que necesita alguna misión **activa** (solo se cuenta mientras hay una activa que los use; un contador que ya no usa ninguna misión sin cumplir se borra), las cumplidas y las reclamadas. Un dueño sin entrada es un dueño nuevo: todo a 0 y nada cumplido.
 - **Cumplir** es fijo: una misión cumplida no se pierde aunque el estado cambie después. Al cumplirse sale el hecho `mision.cumplida` y se activan las que la tenían de previa; si ya cumplen, se cumplen en el mismo instante.
+- **Con plaza** (`"conPlaza": true`, solo en misiones de héroe; 2026-11-22): se da por **cumplida**, esté activa o no, en cuanto la Facción del héroe tiene alguna plaza: al entrar en una Facción que ya la tiene y cuando la suya funda o conquista la primera. Son H16 a H18 de «Tu primera plaza»: quien entra en una Facción con plaza ya no puede aportar al Fondo de refundación, comprar la caravana ni fundar la primera, y sus compañeros ya pasaron por ahí para guiarle (decisión del autor). Se reclaman como cualquier otra.
 - **Reclamar** (`reclamarRecompensa`): la recompensa no se da sola; se pide con la orden, así un almacén lleno no se la come y el cliente tiene su momento. Se reclama una vez y se da entera o no se da (§4).
 
 ## 3. De dónde sale cada avance
@@ -39,6 +42,8 @@ Cada avance se suma **en origen**, en el sitio que produce el hecho y al ocurrir
 | `alijos` | héroe | abre un alijo: cuenta para todos los héroes de la columna de quien lo abre (decisión del 2026-10-31) |
 | `entregas` | héroe | entrega materiales a la obra de un pueblo o de una avanzada |
 | `atributos` | héroe | reparte puntos de atributo |
+| `aportes` | héroe | unidades que aporta al Fondo de refundación de un campamento (`aportarARefundacion`); retirar no descuenta |
+| `caravanas` | héroe | se compra una Caravana de Fundación en un campamento (`comprarCaravanaDeRefundacion`): quien la compra y cada héroe que puso algo en ella |
 | `mercado`, `barracon` | asentamiento | **estado**: 1 si tiene ese edificio activo |
 | `nivel` | asentamiento | **estado**: el nivel de la plaza |
 | `pueblos` | asentamiento | completa un pueblo |
@@ -49,7 +54,7 @@ Cada avance se suma **en origen**, en el sitio que produce el hecho y al ocurrir
 | `aldeas` | asentamiento | **estado**: las aldeas agrícolas activas |
 | `capital` | Facción | **estado**: 1 si tiene capital **efectiva** (`Diplomacia_Facciones.md` §3.7: la designada o, sin ella, su plaza más antigua), es decir, en cuanto tiene una plaza; se mira al fundar y al conquistar (decisión del autor del 2026-10-28: antes pedía la capital designada, con Palacio, y F1 cerraba la cadena de Facción durante días) |
 | `cargos` | Facción | asigna un Embajador o un cargo local en una de sus plazas |
-| `fundaciones` | Facción | funda una plaza |
+| `fundaciones` | héroe y Facción | funda una plaza: cada fundador (los de la columna que pasan a residir en ella, Fundacion_Y_Refundacion §5.2) y su Facción |
 | `tecnologias` | Facción | adopta una tecnología |
 | `politicas` | Facción | activa una política |
 | `trueques` | Facción | cumple un trueque con otra Facción (las dos) |
@@ -133,12 +138,12 @@ Detalle en `Docs/Coordinacion/05_Contrato_de_Sesion.md`. Los títulos y textos d
 
 ## 6. Parámetros
 
-Cada misión del bloque lleva su `id`, su `previa` (si es de una cadena), sus `condiciones`, `habilitada` (por defecto `true`), su recompensa fija (`participacion` en `asentamiento`, `xp` en `faccion`, ninguna en `heroe`) y la lista `recompensas` con la forma de §4.1. Las cantidades van en unidades: enteras en los recursos y el oro; la experiencia admite decimales (`"cantidad": 2.5`). Un catálogo **se rechaza entero** (no carga) si:
+Cada misión del bloque lleva su `id`, su `previa` (si es de una cadena), sus `condiciones`, `habilitada` (por defecto `true`), `conPlaza` (por defecto `false`; §2), su recompensa fija (`participacion` en `asentamiento`, `xp` en `faccion`, ninguna en `heroe`) y la lista `recompensas` con la forma de §4.1. Las cantidades van en unidades: enteras en los recursos y el oro; la experiencia admite decimales (`"cantidad": 2.5`). Un catálogo **se rechaza entero** (no carga) si:
 
 - falta la recompensa fija de su tipo o no es mayor que 0, o una misión de héroe no lleva nada en `recompensas`;
 - hay un `tipo` desconocido, una `cantidad` que no es mayor que 0 o un recurso u oro con decimales;
 - la lista repite un elemento (el mismo recurso, el oro, la experiencia, la misma tropa o el mismo objeto) o la recompensa fija, o lleva `"recurso": "oro"`;
-- una misión colectiva lleva `tropa` u `objeto`;
+- una misión colectiva lleva `tropa` u `objeto`, o una que no es de héroe lleva `conPlaza`;
 - un recurso, una tropa o un objeto no existen, una tropa pide más soldados de los que lleva su escuadra, un objeto es un material (crisol o plano) o su cantidad no es un entero;
 - lleva una clave de antes (`oro` o `recursos`) o la fija de otro tipo (`xp` en una de plaza, `participacion` en una de Facción): se rechaza en vez de perder la recompensa en silencio.
 
@@ -158,7 +163,12 @@ Cada misión del bloque lleva su `id`, su `previa` (si es de una cadena), sus `c
     { "id": "H10", "previa": "H9", "condiciones": { "bandidos": 1 }, "recompensas": [{ "tipo": "oro", "cantidad": 50 }] },
     { "id": "H11", "previa": "H3", "condiciones": { "alijos": 1 }, "recompensas": [{ "tipo": "oro", "cantidad": 20 }] },
     { "id": "H12", "previa": "H5", "condiciones": { "entregas": 1 }, "recompensas": [{ "tipo": "oro", "cantidad": 20 }] },
-    { "id": "H13", "condiciones": { "atributos": 1 }, "recompensas": [{ "tipo": "oro", "cantidad": 10 }] }
+    { "id": "H13", "condiciones": { "atributos": 1 }, "recompensas": [{ "tipo": "oro", "cantidad": 10 }] },
+    { "id": "H14", "condiciones": { "ciudadania": 1 }, "recompensas": [{ "tipo": "objeto", "objeto": "medalla_heroe_muy_pequena", "cantidad": 3 }] },
+    { "id": "H15", "previa": "H14", "condiciones": { "bandidos": 1 }, "recompensas": [{ "tipo": "objeto", "objeto": "medalla_heroe_muy_pequena", "cantidad": 3 }, { "tipo": "recurso", "recurso": "trigo", "cantidad": 5 }] },
+    { "id": "H16", "conPlaza": true, "previa": "H15", "condiciones": { "aportes": 20 }, "recompensas": [{ "tipo": "objeto", "objeto": "medalla_heroe_pequena", "cantidad": 3 }] },
+    { "id": "H17", "conPlaza": true, "previa": "H16", "condiciones": { "caravanas": 1 }, "recompensas": [{ "tipo": "objeto", "objeto": "medalla_heroe_pequena", "cantidad": 3 }] },
+    { "id": "H18", "conPlaza": true, "previa": "H17", "condiciones": { "fundaciones": 1 }, "recompensas": [{ "tipo": "objeto", "objeto": "medalla_heroe_mediana", "cantidad": 3 }, { "tipo": "objeto", "objeto": "medalla_tropa_mediana", "cantidad": 3 }] }
   ],
   "asentamiento": [
     { "id": "A1", "condiciones": { "aldeas": 1 }, "participacion": 10, "recompensas": [{ "tipo": "recurso", "recurso": "trigo", "cantidad": 300 }] },
