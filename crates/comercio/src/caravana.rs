@@ -13,7 +13,7 @@ use crate::encargo::{Encargo, Fase, Punta};
 use crate::precio::TablaPrecios;
 use crate::reparto::Candidata;
 use crate::tipos::{total, AcuerdoId, AsentamientoId, CaravanaId, Carga, EscuadraId, HeroeId, Lado};
-use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Peaje};
+use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Escala, Peaje};
 use asentamiento::datos::{por, UNO};
 use asentamiento::{Almacen, Recurso};
 use base::{entero, entero_arriba, Instante, Mil, Plan, Punto};
@@ -162,6 +162,8 @@ pub struct Caravana {
     pub plan: Option<Plan>,
     /// Pasos forzados por ciudades ajenas que aún no ha cruzado (solo a la ida).
     pub peajes: Vec<Peaje>,
+    /// Las plazas del plan vigente que atraviesa y aún no ha dejado atrás, con cuándo entra y sale (bloque E, 2026-11-23). Las pone el núcleo al instalar el plan.
+    pub escalas: Vec<Escala>,
     /// Solo en el reparto automático: a qué trueque y a qué lado sirve.
     pub origen_acuerdo: Option<(AcuerdoId, Lado)>,
     /// Solo en `Preparando`: el instante en que sale.
@@ -313,6 +315,7 @@ impl Caravana {
             costes: Vec::new(),
             plan: None,
             peajes: Vec::new(),
+            escalas: Vec::new(),
             origen_acuerdo: None,
             prepara_hasta: None,
             escolta: Vec::new(),
@@ -615,6 +618,7 @@ impl Caravana {
         self.ruta.clear();
         self.costes.clear();
         self.peajes.clear();
+        self.escalas.clear();
         self.plan = None;
         self.anfitriona = None;
     }
@@ -694,6 +698,41 @@ impl Caravana {
         self.peajes.first().and_then(|p| instante_de_progreso(plan, p.progreso))
     }
 
+    /// La escala en la que está en `t`, si está dentro de una plaza de paso.
+    pub fn en_escala(&self, t: Instante) -> Option<&Escala> {
+        self.escalas.iter().find(|e| e.entra <= t && t < e.sale)
+    }
+
+    /// La próxima escala en la que entra después de `t`.
+    pub fn proxima_escala(&self, t: Instante) -> Option<&Escala> {
+        self.escalas.iter().find(|e| e.entra > t)
+    }
+
+    /// Cobra el peaje de la ciudad `ciudad` al entrar en ella (bloque E, 2026-11-23), con la regla de [`Caravana::cobrar_peajes`]: lo quita de los pendientes
+    /// y devuelve lo cobrado. `None` si no le debía peaje (una plaza propia, una vuelta sin encargo) o no había nada que cobrar.
+    pub fn cobrar_peaje_de(&mut self, ciudad: AsentamientoId, tasa: i64, precios: &TablaPrecios, oro: &mut Mil) -> Option<CobroPeaje> {
+        if !self.cruza_peajes() {
+            return None;
+        }
+        let i = self.peajes.iter().position(|p| p.ciudad == ciudad)?;
+        self.peajes.remove(i);
+        let cobro = self.cobrar_uno(ciudad, tasa, precios, oro);
+        self.contenido.retain(|_, n| *n > 0);
+        cobro
+    }
+
+    /// Un peaje: el 2 % del valor de lo que lleva, en oro hasta donde llegue `oro` y en especie lo que falte.
+    fn cobrar_uno(&mut self, ciudad: AsentamientoId, tasa: i64, precios: &TablaPrecios, oro: &mut Mil) -> Option<CobroPeaje> {
+        // El oro se mueve en unidades enteras (el almacén no guarda fracciones): se debe hacia arriba, como el oro de una compra en el mostrador.
+        let debido = entero_arriba(por(precios.valor(&self.contenido), tasa));
+        let pagado = entero(debido.min(*oro).max(0));
+        *oro -= pagado;
+        // Sin deuda en oro (carga sin valor) la fracción sin pagar es toda la tasa, como siempre.
+        let tasa_especie = if debido > 0 { (tasa as i128 * (debido - pagado) as i128 / debido as i128) as i64 } else { tasa };
+        let cobrado = cobrar_en_especie(&mut self.contenido, tasa_especie);
+        (pagado > 0 || !cobrado.is_empty()).then_some(CobroPeaje { ciudad, oro: pagado, cobrado })
+    }
+
     /// Cobra los peajes alcanzados en `ahora` (§7.3, solo a la ida; con encargo, también a la vuelta): para cada uno se debe en **oro** `PEAJE_PASO.tasa` del
     /// **valor** de lo que lleva en ese momento (ya reducido por los anteriores), a los precios de `precios`. El pagador es la capital de la Facción dueña y
     /// `oro` es lo que tiene: se paga hasta donde llegue y baja en lo pagado. Lo que falta se paga en **especie de la carga** con la regla de siempre
@@ -709,16 +748,7 @@ impl Caravana {
         self.peajes = pendientes;
         let mut cobros = Vec::new();
         for pj in alcanzados {
-            // El oro se mueve en unidades enteras (el almacén no guarda fracciones): se debe hacia arriba, como el oro de una compra en el mostrador.
-            let debido = entero_arriba(por(precios.valor(&self.contenido), tasa));
-            let pagado = entero(debido.min(*oro).max(0));
-            *oro -= pagado;
-            // Sin deuda en oro (carga sin valor) la fracción sin pagar es toda la tasa, como siempre.
-            let tasa_especie = if debido > 0 { (tasa as i128 * (debido - pagado) as i128 / debido as i128) as i64 } else { tasa };
-            let cobrado = cobrar_en_especie(&mut self.contenido, tasa_especie);
-            if pagado > 0 || !cobrado.is_empty() {
-                cobros.push(CobroPeaje { ciudad: pj.ciudad, oro: pagado, cobrado });
-            }
+            cobros.extend(self.cobrar_uno(pj.ciudad, tasa, precios, oro));
         }
         self.contenido.retain(|_, n| *n > 0);
         cobros
@@ -753,6 +783,7 @@ impl Caravana {
             self.ruta.clear();
             self.costes.clear();
             self.peajes.clear();
+            self.escalas.clear();
             self.plan = None;
             return Ok(Llegada::Parada { punta });
         }
@@ -777,6 +808,7 @@ impl Caravana {
         self.ruta = invertir_ruta(&self.ruta);
         self.costes.reverse();
         self.peajes.clear();
+        self.escalas.clear();
         Ok(if self.tipo == TipoCaravana::Acarreo { Llegada::Acarreo { destino, contenido } } else { Llegada::Entrega { destino, contenido, origen_acuerdo } })
     }
 
@@ -798,6 +830,7 @@ impl Caravana {
         self.destino = Some(ruina);
         self.origen_acuerdo = None;
         self.peajes.clear();
+        self.escalas.clear();
         self.prepara_hasta = None;
         self.plan = Some(plan);
         Ok(())
@@ -900,6 +933,7 @@ impl Caravana {
         self.pasar(EstadoCaravana::Retornando)?;
         self.destino = self.anfitriona.take();
         self.peajes.clear();
+        self.escalas.clear();
         self.plan = Some(plan);
         Ok(())
     }

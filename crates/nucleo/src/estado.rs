@@ -338,7 +338,9 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// `exclusion_campamento`. BAN65 y anteriores ya no se leen.
 /// BAN67: BAN66 con `Encargo::llego_en` (2026-11-23, «Tamaños y distancias del mapa», bloque E: la parada mínima), un `opt_i64` tras `detener`. BAN66 y
 /// anteriores ya no se leen.
-const MAGIA: &[u8; 5] = b"BAN67";
+/// BAN68: BAN67 con las escalas de cada caravana (2026-11-23, bloque E: las plazas que atraviesa), tras sus peajes, y el suceso `EntradaEnPlaza`. BAN67 y
+/// anteriores ya no se leen.
+const MAGIA: &[u8; 5] = b"BAN68";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -934,8 +936,11 @@ pub enum SucesoComercio {
     FinPasoEncargo,
     /// Pulso de un minuto de una caravana con encargo que espera existencias en su parada (la entidad es la caravana); se repite mientras falte algo.
     PulsoEncargo,
-    /// Acaba la estancia de una caravana dentro de una plaza (la entidad es la caravana; 2026-11-23): el carro de acarreo que descargó en su madre vuelve al mapa.
+    /// Acaba la estancia de una caravana dentro de una plaza (la entidad es la caravana; 2026-11-23): el carro de acarreo que descargó en su madre, o la caravana
+    /// que hizo escala en una plaza de paso, vuelve al mapa.
     SalidaDeLaPlaza,
+    /// Una caravana comercial llega al contorno de una plaza de paso y entra en ella (la entidad es la caravana; bloque E, 2026-11-23): paga el peaje si es ajena y sale del mapa.
+    EntradaEnPlaza,
 }
 
 impl SucesoComercio {
@@ -943,7 +948,7 @@ impl SucesoComercio {
     /// de rango `r` deja pasar `r` veces a los eventos del mismo instante que ya estaban en la cola antes de ejecutarse.
     pub fn rango(self) -> u8 {
         match self {
-            SucesoComercio::LlegadaCaravana | SucesoComercio::PeajeCaravana => 0,
+            SucesoComercio::LlegadaCaravana | SucesoComercio::PeajeCaravana | SucesoComercio::EntradaEnPlaza => 0,
             SucesoComercio::FinPreparacion | SucesoComercio::FinPasoEncargo | SucesoComercio::SalidaDeLaPlaza => 1,
             SucesoComercio::CaducaTrueque | SucesoComercio::CaducaOrden => 2,
             SucesoComercio::PulsoReparto | SucesoComercio::ReponeMercenarios | SucesoComercio::PulsoEncargo => 3,
@@ -961,6 +966,7 @@ impl SucesoComercio {
             SucesoComercio::FinPasoEncargo => 7,
             SucesoComercio::PulsoEncargo => 8,
             SucesoComercio::SalidaDeLaPlaza => 9,
+            SucesoComercio::EntradaEnPlaza => 10,
         }
     }
     pub(crate) fn de_u8(i: u8) -> Option<Self> {
@@ -975,6 +981,7 @@ impl SucesoComercio {
             7 => Some(SucesoComercio::FinPasoEncargo),
             8 => Some(SucesoComercio::PulsoEncargo),
             9 => Some(SucesoComercio::SalidaDeLaPlaza),
+            10 => Some(SucesoComercio::EntradaEnPlaza),
             _ => None,
         }
     }
@@ -1555,10 +1562,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN67`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN68`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN67): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN68): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));

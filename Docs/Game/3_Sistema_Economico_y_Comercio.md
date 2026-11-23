@@ -270,6 +270,10 @@ caravana y ya no le cabe sin ellos se queda en ella al aparcarla; si la caravana
 
 **Si cae la plaza anfitriona, las caravanas aparcadas en ella se destruyen** (decidido el 2026-10-13): carros, animales y carga se pierden, sin captura.
 
+### 3.13.7b Las plazas del camino (2026-11-23)
+
+Una caravana comercial **atraviesa** las plazas que encuentra en su camino, propias o ajenas, y no las rodea (las columnas y los ejércitos sí). En cada una entra por el borde, desaparece del mapa y para un rato: la descarga de sus carros, nunca menos de 2 minutos. Dentro no se ve ni se le puede atacar. Al acabar sale por el otro lado y sigue. En una plaza ajena paga el peaje al entrar; en una propia no paga nada. En estas paradas no comercia.
+
 ### 3.13.8 Carro de acarreo (2026-10-11)
 
 Cada pueblo extractor (4.2.2) tiene un carro propio, una caravana de tipo `acarreo` ligada a él: **1 carro básico con buey** (500 de capacidad, velocidad 24) que hace una ruta fija entre el pueblo y su plaza madre.

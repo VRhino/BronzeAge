@@ -117,7 +117,7 @@ Hoy el A* solo mira el terreno, por decisión del autor del 2026-10-27: «los el
 - **La escala dura** `tiempoDescargaMinutosPorCarro` × los carros con animal de la caravana, **con un mínimo de 2 min**. Si en esa plaza tiene que dejar o recoger (una parada de su encargo, o la de una ruta compuesta: entrada 80), la parada dura lo de hoy (§5.8.5), con el mismo mínimo y sin sumarle nada.
 - **Mínimo de 2 min en todas las reglas que ya existen** (decisión del autor del 2026-11-23): ninguna estancia de una caravana dentro de una plaza dura menos de 2 min. Hoy una parada que no mueve nada tarda 0 y el lanzamiento a mano de un solo carro sale en el acto (`kPorCarro × (carros − 1)`). El mínimo vale para cada parada de un encargo (descarga más carga) y para la preparación del lanzamiento a mano, también con un solo carro: ninguna caravana sale antes de 2 min (confirmado por el autor el 2026-11-23).
 
-> **Implementado en Rust (2026-11-23):** el mínimo de 2 min (`ENCARGO.paradaMinimaMinutos`, `CARAVANA_PREPARACION.minimoMinutos`) y el carro de acarreo, que entra en su plaza y no se ve mientras descarga. Ver `Comercio_Caravanas.md` §5.6, §5.8.5 y §12. Falta la escala de las caravanas comerciales en las plazas que cruzan.
+> **Implementado en Rust (2026-11-23):** el mínimo de 2 min (`ENCARGO.paradaMinimaMinutos`, `CARAVANA_PREPARACION.minimoMinutos`) y el carro de acarreo, que entra en su plaza y no se ve mientras descarga. Ver `Comercio_Caravanas.md` §5.6, §5.8.5 y §12. **También la escala** de las caravanas comerciales en cada plaza que cruzan, con el peaje al entrar (`Comercio_Caravanas.md` §7.3 y §7.5). Con esto el bloque E está entero.
 
 **Carro de acarreo (pueblo o aldea → su plaza): entra, no rodea.**
 

@@ -850,8 +850,10 @@ El trazado **no vuelve a examinar** el tramo hasta la ciudad: si roza otra zona 
 
 ### 7.3 Peaje (en `avanzarCaravanas`, a la ida; con encargo, también a la vuelta)
 
+**Desde el 2026-11-23 (bloque E de Tamaños y distancias) el peaje se paga al entrar en la ciudad de escala** (§7.5), en su contorno, y no al pasar por su centro: es el mismo cobro, de esa ciudad. El cobro por avance de abajo queda para una ciudad del trazado en cuyo disco la caravana no llega a entrar.
+
 Tras mover, para cada `peajes[i]` con `progreso_i ≤ progreso` actual (en orden): `debido = ⌈ valor(contenido de ese momento, ya reducido por peajes anteriores) × PEAJE_PASO.tasa ⌉` **en oro** (valor a los precios de referencia, §2; unidades enteras hacia arriba). Lo paga la **capital** de la Facción dueña de la caravana (`pagado = min(debido, oro de esa capital)`) y lo cobra la **capital** de la Facción de la ciudad cruzada (topado por su almacén de oro; lo que no cabe se pierde). Lo que falta (`debido − pagado`) se cobra **en especie de la carga**, a la fracción de la tasa que queda sin pagar (`tasa × (debido − pagado) / debido`), con la regla de unidades enteras de abajo, y va al almacén de la propia ciudad cruzada (topado). Con la capital sin oro paga, pues, el 2 % entero en especie, como antes de la tanda 69; con oro de sobra, la carga no se toca. Una carga sin valor (sin precio de referencia) paga la tasa entera en especie. Una Facción sin capital (o una caravana sin Facción) paga con la plaza de origen, y una ciudad cruzada sin Facción o sin capital cobra en sí misma. Evento `comercio.peaje_paso` (con `asentamientoId` = la ciudad cruzada; lleva `oroPagado` y lo cobrado en especie por recurso; lo oyen la ciudad y las dos capitales). Después se
-descartan de `peajes` todos los ya alcanzados, se haya cobrado o no. **La ciudad no se detiene a nadie**: la caravana sigue de largo. El regreso va sin peajes (`peajes` solo se aplica a la ida) y vacío. **Con encargo (Rust)** los peajes se cruzan también en `retornando`: la vuelta se traza de nuevo, va cargada y paga lo mismo sobre el valor de lo que lleve en ese momento (una vuelta vacía no paga nada); ver §5.8.6. Dos peajes en el mismo instante gastan el mismo oro de la capital: el segundo paga lo que quede.
+descartan de `peajes` todos los ya alcanzados, se haya cobrado o no. La caravana entra en la ciudad de escala, paga y sigue tras la estancia de §7.5. El regreso va sin peajes (`peajes` solo se aplica a la ida) y vacío. **Con encargo (Rust)** los peajes se cruzan también en `retornando`: la vuelta se traza de nuevo, va cargada y paga lo mismo sobre el valor de lo que lleve en ese momento (una vuelta vacía no paga nada); ver §5.8.6. Dos peajes en el mismo instante gastan el mismo oro de la capital: el segundo paga lo que quede.
 
 > **Implementado en Rust (2026-11-08, tanda 69: el oro del comercio sale de la capital y entra en la capital).** `Caravana::cobrar_peajes(ahora, tasa, precios, &mut oro)` en `crates/comercio/src/caravana.rs` (con `CobroPeaje { ciudad, oro, cobrado }` y la función `cobrar_en_especie`) y `Nucleo::cobrar_peajes` en `crates/nucleo/src/nucleo/viaje.rs`; la capital de la Facción de una plaza la da `Nucleo::plaza_de_oro` (`nucleo/mercado.rs`: la capital efectiva o, sin ella, la propia plaza). Cifra: `PEAJE_PASO.tasa` (0,02, sin cambios). **Economía entera (2026-10-24):** la parte en especie va en unidades enteras hacia abajo y **cada peaje en especie cobra como mínimo una unidad** a toda caravana con carga (EE-4): si la tasa no llega a una unidad en ningún recurso, se cobra una del recurso que más lleva (a igualdad, el primero del catálogo). **El peaje en especie nunca deja la carga en cero** (decisión del autor, 2026-10-24): el mínimo vale para cualquier carga de dos unidades o más, y una caravana de una sola unidad pasa sin pagar. Pruebas: `crates/comercio/src/caravana.rs` (`el_peaje_se_paga_en_oro_y_la_especie_cubre_solo_lo_que_la_bolsa_no_alcanza`) y `crates/nucleo/tests/{caravanas,encargos}.rs`.
 
@@ -862,6 +864,17 @@ descartan de `peajes` todos los ya alcanzados, se haya cobrado o no. **La ciudad
 }
 ```
 <!-- /parametros -->
+
+### 7.5 Escalas: las plazas que atraviesa (Tamaños y distancias del mapa, bloque E, 2026-11-23)
+
+Las caravanas comerciales **no rodean las plazas**: las atraviesan y paran en ellas (decisión del autor del 2026-11-23). Las columnas y los ejércitos sí las rodean (Movimiento_Ejercitos §4.3).
+
+- **Qué es una escala.** Cada plaza en cuyo disco (`radio_de_plaza`, el tamaño de su nivel) se mete el plan de una caravana comercial sin ser donde empieza ni donde acaba: las ciudades ajenas a las que el trazado lleva para el peaje (§7.2) y cualquier plaza, propia o ajena, que el camino cruce. Rozar el disco no cuenta. Una plaza se visita una vez por plan. Pueblos, aldeas, avanzadas y campamentos no son escalas: se cruzan. El carro de acarreo no hace escalas (§12).
+- **Cómo va en el plan** (`Nucleo::con_escalas`, `crates/nucleo/src/nucleo/viaje.rs`). Al instalar cada plan se pone un vértice en el contorno por donde entra y otro por donde sale. Lo de dentro dura la **estancia**, `max(tiempoDescarga × carros con animal, paradaMinimaMinutos)` (2 min con un carro), en lugar de lo que tardaba en cruzarla, y el resto del plan se corre lo mismo. La caravana guarda sus escalas (`Caravana::escalas`: plaza, `entra`, `sale`; foto `BAN68`). Rehacer el plan (un camino nuevo, una pausa por batalla, otra velocidad) no añade vértices ni estancias, y las escalas ya hechas se olvidan.
+- **Al entrar** (suceso `EntradaEnPlaza`, en `entra`): si es ajena y la caravana le debe peaje, lo paga ahí (§7.3). Sale del mapa: la rejilla de encuentros la olvida, no está en la vista ni se le puede salir al paso (`Nucleo::caravana_en_el_mapa`), y lo programado con el plan se descarta. Hecho `comercio.caravana_entra_en_plaza` (`caravana`, `plaza`, `sale`).
+- **Al salir** (suceso `SalidaDeLaPlaza`, en `sale`): vuelve al mapa por el contorno del otro lado con el mismo plan y sigue. Hecho `comercio.caravana_sale_de_plaza` (`caravana`, `plaza`).
+- **En una plaza propia** entra y sale igual, sin pagar nada. En la escala no comercia: comerciar en las plazas del camino es de las rutas compuestas (`Docs/Disenos_Por_Implementar/Rutas_Compuestas.md`).
+- **Lo que ve el cliente:** el peaje pendiente (`Peaje.en_ms`) lleva el instante de la entrada en la ciudad. La vuelta de una caravana lanzada a mano, que desanda su ruta, también hace escala en las mismas plazas, aunque vaya vacía y no pague.
 
 ### 7.4 La red de caminos (`engine/redCaminos.ts`)
 
@@ -1263,9 +1276,9 @@ Los códigos de los hechos de dominio de este documento (4H T5, 2026-10-23; cont
 ```json
 [
   "comercio.caravana_animal_comprado", "comercio.caravana_cancelada", "comercio.caravana_carga", "comercio.caravana_carro_agregado", "comercio.caravana_carro_movido",
-  "comercio.caravana_construida", "comercio.caravana_descarga", "comercio.caravana_en_batalla", "comercio.caravana_en_casa", "comercio.caravana_enviada_al_origen",
+  "comercio.caravana_construida", "comercio.caravana_descarga", "comercio.caravana_en_batalla", "comercio.caravana_en_casa", "comercio.caravana_entra_en_plaza", "comercio.caravana_enviada_al_origen",
   "comercio.caravana_escolta_cedida", "comercio.caravana_escolta_retirada", "comercio.caravana_espera", "comercio.caravana_llega", "comercio.caravana_perdida",
-  "comercio.caravana_preparando", "comercio.caravana_renombrada", "comercio.caravana_reserva", "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_vuelve",
+  "comercio.caravana_preparando", "comercio.caravana_renombrada", "comercio.caravana_reserva", "comercio.caravana_sale", "comercio.caravana_sale_de_batalla", "comercio.caravana_sale_de_plaza", "comercio.caravana_vuelve",
   "comercio.carga_caravana_aparcada", "comercio.carros_perdidos", "comercio.encargo_dado", "comercio.encargo_terminado", "comercio.entrega_escoltada",
   "comercio.flota_traspasada", "comercio.peaje_paso", "comercio.trueque_aceptado", "comercio.trueque_cancelado", "comercio.trueque_cumplido",
   "comercio.trueque_expirado", "comercio.trueque_propuesto", "comercio.trueque_rechazado", "mercado.comercio_en_plaza", "mercado.orden_cancelada",

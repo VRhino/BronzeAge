@@ -90,7 +90,7 @@ pub fn auditar_contenedores(n: &Nucleo) -> Violaciones {
 /// camino tiene el suyo, cada plaza tiene exactamente un minuto y todo lo que está en curso en ella tiene su cita de fin.
 pub fn auditar_cola(n: &Nucleo) -> Violaciones {
     let (e, mut v) = (n.estado(), Violaciones::default());
-    let mut por_suceso: [BTreeSet<u64>; 8] = Default::default();
+    let mut por_suceso: [BTreeSet<u64>; 9] = Default::default();
     let mut minutos: Vec<u64> = Vec::new();
     let (mut fines, mut caducan): (BTreeSet<(u64, i64)>, BTreeSet<(u64, i64)>) = Default::default();
     for ev in e.cola.volcar().iter().filter(|ev| e.generaciones.es_vigente(ev.clave)) {
@@ -107,18 +107,24 @@ pub fn auditar_cola(n: &Nucleo) -> Violaciones {
             Carga::Comercio { suceso: SucesoComercio::FinPasoEncargo, .. } => drop(por_suceso[5].insert(id)),
             Carga::Comercio { suceso: SucesoComercio::PulsoEncargo, .. } => drop(por_suceso[6].insert(id)),
             Carga::Comercio { suceso: SucesoComercio::SalidaDeLaPlaza, .. } => drop(por_suceso[7].insert(id)),
+            Carga::Comercio { suceso: SucesoComercio::EntradaEnPlaza, .. } => drop(por_suceso[8].insert(id)),
             _ => {}
         }
     }
-    let [llegadas, peajes, preparaciones, caducidades, pulsos, fines_de_paso, pulsos_de_encargo, salidas] = &por_suceso;
+    let [llegadas, peajes, preparaciones, caducidades, pulsos, fines_de_paso, pulsos_de_encargo, salidas, entradas] = &por_suceso;
     let en_camino = |s: EstadoCaravana| matches!(s, EstadoCaravana::EnTransito | EstadoCaravana::Retornando);
-    // Dentro de una plaza con el plan por empezar (el carro de acarreo que descarga, 2026-11-23): su cita es la salida, no la llegada.
+    // Dentro de una plaza con el plan por empezar (el carro de acarreo que descarga) o en una escala (bloque E, 2026-11-23): su cita es la salida, no la llegada.
     let dentro = |c: &comercio::caravana::Caravana| !Nucleo::caravana_en_el_mapa(c, e.ahora);
     for c in e.comercio.flota.iter().filter(|c| matches!(c.tipo, TipoCaravana::Comercial | TipoCaravana::Acarreo) && en_camino(c.estado)) {
         let cita = if dentro(c) { salidas.contains(&c.id) } else { llegadas.contains(&c.id) };
         v.sin_plan += (!c.plan.as_ref().is_some_and(|p| p.vertices.len() >= 2) || !cita) as u64;
     }
     v.cola += salidas.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| en_camino(c.estado) && dentro(c))).count() as u64;
+    // Fuera de una escala, la próxima tiene su entrada; y no hay entrada de una caravana sin escala por delante.
+    for c in e.comercio.flota.iter().filter(|c| en_camino(c.estado) && !dentro(c) && c.proxima_escala(e.ahora).is_some()) {
+        v.sin_plan += (!entradas.contains(&c.id)) as u64;
+    }
+    v.cola += entradas.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| en_camino(c.estado) && !dentro(c) && c.proxima_escala(e.ahora).is_some())).count() as u64;
     v.cola += llegadas.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| en_camino(c.estado))).count() as u64;
     v.cola += peajes.iter().filter(|&&id| !e.comercio.caravana(id).is_some_and(|c| c.proximo_peaje().is_some())).count() as u64;
     let esperando_con_encargo = |id: &u64| e.comercio.caravana(*id).is_some_and(|c| c.estado == EstadoCaravana::Esperando && c.encargo.is_some());

@@ -619,12 +619,16 @@ pub fn caravana(n: &Nucleo, c: &Caravana) -> pb::Caravana {
         encargo: c.encargo.as_ref().map(encargo),
         nombre: Some(c.nombre.clone()).filter(|x| !x.is_empty()),
         escoltada: c.estado == EstadoCaravana::Adjunta || !c.escolta.is_empty(),
-        // Los peajes que le quedan a la ida, con el instante en que su plan cruza cada zona (paridad P7); se cobran solo en tránsito.
+        // Los peajes que le quedan a la ida, con el instante en que los paga (paridad P7): al entrar en la ciudad de escala (bloque E, 2026-11-23) o, si no
+        // entra en ella, cuando su plan cruza su zona. Se cobran solo en tránsito.
         peajes: match (&c.plan, c.estado) {
             (Some(p), EstadoCaravana::EnTransito) => c
                 .peajes
                 .iter()
-                .filter_map(|x| Some(pb::Peaje { asentamiento_id: ids::asentamiento(u64::from(x.ciudad)), en_ms: comercio::viaje::instante_de_progreso(p, x.progreso)? }))
+                .filter_map(|x| {
+                    let en = c.escalas.iter().find(|e| e.plaza == x.ciudad).map(|e| e.entra).or_else(|| comercio::viaje::instante_de_progreso(p, x.progreso))?;
+                    Some(pb::Peaje { asentamiento_id: ids::asentamiento(u64::from(x.ciudad)), en_ms: en })
+                })
                 .collect(),
             _ => vec![],
         },
