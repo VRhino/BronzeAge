@@ -205,7 +205,10 @@ impl Nucleo {
             let c = self.estado.contratos.contratos.get(&m).filter(|c| Some(c.faccion) == faccion).ok_or_else(|| nombra(MERCENARIO_SIN_CONTRATO, "no tiene un contrato vigente con tu Facción"))?;
             let s = situacion.as_ref().ok_or_else(|| nombra(MERCENARIO_OBJETIVO_INVALIDO, "el objetivo no existe"))?;
             let puesto = puesto_para_ordenar(c, self.plaza_de_residencia(m), &puestos, tipo, &objetivo, s, heroe).map_err(de_orden)?;
-            let distancia = donde.zip(self.posicion_de(&c.objetivo, t)).map(|(a, b)| a.dist(b));
+            // Desde el borde de la zona si el objetivo del contrato es una plaza (decisión del autor del 2026-11-23: con la zona de 24 a 90 u, medido
+            // desde el centro no alcanzaba nunca a unos bandidos, que no se levantan dentro de una zona); desde su punto, si es otra cosa.
+            let borde = match c.objetivo { Objetivo::Plaza(id) => self.estado.asentamientos.get(&id).map_or(0, |a| a.radio), _ => 0 };
+            let distancia = donde.zip(self.posicion_de(&c.objetivo, t)).map(|(a, b)| (a.dist(b) - borde).max(0));
             admite(&d, c, tipo, &objetivo, distancia).map_err(de_orden)?;
             if c.orden.is_some_and(|o| o.tipo == tipo && o.objetivo == objetivo) {
                 continue;

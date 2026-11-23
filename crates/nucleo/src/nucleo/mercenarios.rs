@@ -208,7 +208,7 @@ impl Nucleo {
         let Some(puerta) = self.puerta_de_campamento(campamento) else { return false };
         match self.heroe(heroe).map(|h| h.heroe.presencia.ubicacion) {
             Some(Ubicacion::Mercenarios(c)) => c == campamento,
-            Some(Ubicacion::Columna(e)) => self.estado.ejercitos.get(&e).is_some_and(|e| e.posicion_en(t).dist(puerta) <= self.radio_puerta()),
+            Some(Ubicacion::Columna(e)) => self.estado.ejercitos.get(&e).is_some_and(|e| self.a_la_puerta(puerta, self.radio_de_campamento(), e.posicion_en(t))),
             _ => false,
         }
     }
@@ -244,10 +244,11 @@ impl Nucleo {
         self.campamento_junto_a(e.posicion)
     }
 
-    /// El campamento más cercano a cuya puerta está `aqui` (a `radio_puerta` o menos).
+    /// El campamento más cercano a cuya puerta está `aqui` (a `radio_puerta` o menos de su borde).
     fn campamento_junto_a(&self, aqui: Punto) -> Option<u32> {
         let todos = 0..u32::try_from(self.geografia.as_ref()?.mapa.campamentos.len()).ok()?;
-        todos.filter_map(|c| Some((aqui.dist(self.puerta_de_campamento(c)?), c))).filter(|&(d, _)| d <= self.radio_puerta()).min().map(|(_, c)| c)
+        let r = self.radio_de_campamento();
+        todos.filter_map(|c| Some((Self::desde_el_borde(self.puerta_de_campamento(c)?, r, aqui), c))).filter(|&(d, _)| d <= self.radio_puerta()).min().map(|(_, c)| c)
     }
 
     /// El campamento donde reside el héroe, si reside en uno.
@@ -492,11 +493,11 @@ impl Nucleo {
                 let (factor_reputacion, sin_asentamientos) = self.condiciones_de_recluta(*heroe, t);
                 let ofrece = self.tropas_que_ofrece_a(*heroe, campamento);
                 let mut reclutas = self.reclutas_de(campamento);
-                let puerta = self.puerta_de_campamento(campamento).expect("existe");
+                let (puerta, radio) = (self.puerta_de_campamento(campamento).expect("existe"), self.radio_de_campamento());
                 let Estado { militar, ejercitos, siguiente_id, .. } = &mut self.estado;
                 let h = &mut militar.heroes.get_mut(heroe).expect("existe").heroe;
                 let antes = h.escuadras.len();
-                let distancia = |c: u64| ejercitos.get(&c).map(|e| e.posicion_en(t).dist(puerta));
+                let distancia = |c: u64| ejercitos.get(&c).map(|e| Self::desde_el_borde(puerta, radio, e.posicion_en(t)));
                 let hecho = leva::reclutar(
                     &mr,
                     Campamento { id: campamento, viviendas: mr.mercenarios.viviendas, reclutas: &mut reclutas, ofrece: &ofrece },
@@ -582,9 +583,9 @@ impl Nucleo {
                 }
                 let columna = self.columna_de(*heroe);
                 let velocidad_antes = columna.and_then(|c| self.velocidad_de_ejercito(c)).unwrap_or(0);
-                let puerta = self.puerta_de_campamento(campamento).expect("existe");
+                let (puerta, radio) = (self.puerta_de_campamento(campamento).expect("existe"), self.radio_de_campamento());
                 let Estado { militar, ejercitos, .. } = &mut self.estado;
-                let distancia = |c: u64| ejercitos.get(&c).map(|e| e.posicion_en(t).dist(puerta));
+                let distancia = |c: u64| ejercitos.get(&c).map(|e| Self::desde_el_borde(puerta, radio, e.posicion_en(t)));
                 let repuestas = leva::reponer_prestamo(&mr, &mut militar.heroes.get_mut(heroe).expect("existe").heroe, campamento, &distancia).map_err(de_leva)?;
                 // La tropa repuesta que va en la columna a su puerta come más: se vuelve a anotar el consumo.
                 if let Some(c) = columna {

@@ -194,7 +194,7 @@ El margen existe para que un retraso entre Unity y el servidor no haga fallar un
 1. el héroe está **herido** (`batalla.invalida`);
 2. ya está en una batalla (`bloqueos.heroes`; `batalla.ya_combate`);
 3. no tiene **columna** (`batalla.sin_columna`), o su columna ya está en una batalla (`batalla.ya_combate`);
-4. su columna está a más de `LOGISTICA.radioEncuentro` del `punto` de la batalla (la plaza asediada, en un asedio; `batalla.lejos`);
+4. su columna está a más de `LOGISTICA.radioEncuentro` del `punto` de la batalla, medido desde el borde de lo que haya en él (la plaza asediada, en un asedio, desde el 2026-11-23; `batalla.lejos`);
 5. `ladoParaUnirse` no le da bando (§7.1, con el código de cada regla), o le toca **defender** un asedio, un pueblo o una avanzada y **no está dentro** (decisión del autor, 2026-10-22; `batalla.invalida`);
 6. el bando se pasaría de su `capacidadMaxima` (`yaDentro + entran > capacidad`): si está lleno, **no entra** (`batalla.lado_lleno`); la cola es solo de los que ya estaban al abrir.
 

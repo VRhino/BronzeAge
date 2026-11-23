@@ -160,7 +160,7 @@ fn aldea_con(m: &M, Opc { dir, pueblo, sin_tropa }: Opc) -> Aldea {
         let mapa = nucleo::economia::Mapa::de(&m.0);
         let (cobre, sitio) = (0..mapa.nodos.len())
             .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
-            .find_map(|i| sitio_junto_a(&x.n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+            .find_map(|i| sitio_junto_a(&x.n, &m.0, mapa.nodos[i].pos, 13_000).map(|p| (i as u32, p)))
             .expect("hay un nodo de cobre junto a un sitio rico");
         nodo_cobre = cobre;
         sitio

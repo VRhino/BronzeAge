@@ -122,14 +122,18 @@ impl Nucleo {
 
     // ───────────────────────────── Ayudas ─────────────────────────────
 
-    /// Los centros de lo que ya ocupa el mapa, con su diámetro de `TAMANOS_MAPA` (Doc 4.2.2): las avanzadas en cualquier estado (también unas ruinas sin dueño), los pueblos
-    /// extractores sobre su nodo y los campamentos de mercenarios y de bandidos.
+    /// Los centros de lo que ya ocupa el mapa, con el radio que reserva cada uno de `TAMANOS_MAPA` (Doc 4.2.2; el de su etapa o nivel más grande, para que
+    /// al crecer no pise nada): las avanzadas en cualquier estado (también unas ruinas sin dueño), los pueblos extractores sobre su nodo, las aldeas con sus
+    /// campos y los campamentos de mercenarios y de bandidos.
     fn elementos_de_mapa(&self) -> Vec<(Punto, Mil)> {
         let (asentamientos, combate) = (&self.estado.asentamientos, &self.estado.combate);
         let t = &self.estado.reglas.economia.datos.tamanos;
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
-        let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| (v.posicion, t.avanzada));
-        let pueblos = asentamientos.values().flat_map(|a| a.economia.pueblos.iter()).filter_map(|p| crate::economia::posicion_de_pueblo(nodos, p)).map(|pos| (pos, t.pueblo));
+        let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| (v.posicion, t.avanzada_mayor()));
+        let pueblos = asentamientos
+            .values()
+            .flat_map(|a| a.economia.pueblos.iter())
+            .filter_map(|p| crate::economia::posicion_de_pueblo(nodos, p).map(|pos| (pos, if p.es_aldea() { t.aldea_mayor() } else { t.pueblo })));
         let mercenarios = self.geografia.iter().flat_map(|g| g.mapa.campamentos.iter().map(|&c| (c, t.campamento_mercenarios)));
         avanzadas.chain(pueblos).chain(mercenarios).chain(combate.bandidos.values().map(|b| (b.posicion, t.campamento_bandidos))).collect()
     }
@@ -151,7 +155,8 @@ impl Nucleo {
     /// Una avanzada terminada es una cosa fija del espacio: ahí la encuentran las columnas (el hecho `avanzada.encuentro` solo salta si además se puede atacar).
     pub(super) fn situar_avanzada(&mut self, id: u64, posicion: Punto) {
         let entidad = entidad_avanzada(id);
-        self.espacio.rejilla.apuntar(entidad, self.estado.generaciones.actual(entidad), &plan_quieto(posicion, self.estado.ahora, 0));
+        let huella = self.avanzada(id).map_or(0, |(_, v)| self.radio_de_avanzada(v));
+        self.espacio.rejilla.apuntar_con_huella(entidad, self.estado.generaciones.actual(entidad), &plan_quieto(posicion, self.estado.ahora, 0), huella);
     }
 
     /// Las escuadras de jugadores dejan la avanzada y vuelven al campamento de su héroe, con 0 soldados si la causa es una derrota (Doc 5.15.2b). Devuelve cuántas.
@@ -289,7 +294,7 @@ impl Nucleo {
         match &p.comando {
             Comando::ColocarAvanzada { asentamiento, heroe, posicion } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                let (centro, radio) = (plaza.posicion, plaza.radio);
+                let centro = plaza.posicion;
                 self.autorizar_en_plaza(p, *asentamiento, Some(*heroe))?;
                 // Desde dentro de la madre, como la aldea (2026-11-04): el sitio, en tierra firme y con ruta por tierra hasta ella, por donde se le llevan los materiales.
                 let geo = self.geografia.as_ref().ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
@@ -302,7 +307,7 @@ impl Nucleo {
                 if !self.en_zona(*asentamiento, *posicion) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_ZONA, format!("el sitio cae fuera de la zona de as-{asentamiento}")));
                 }
-                datos.avanzadas.comprobar_sitio(centro, radio, *posicion, self.elementos_de_mapa()).map_err(de_avanzada)?;
+                datos.avanzadas.comprobar_sitio(centro, *posicion, self.elementos_de_mapa()).map_err(de_avanzada)?;
                 if self.camino_sin_red(*posicion, centro).is_none() {
                     return Err(rechazo(rechazos::AVANZADA_SIN_RUTA, format!("el sitio no tiene ruta por tierra hasta as-{asentamiento}")));
                 }
@@ -325,7 +330,7 @@ impl Nucleo {
                 if !self.entrega_un_ciudadano(p, e, faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "solo entregan los ciudadanos de la Facción de la obra".into()));
                 }
-                if e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
+                if !self.a_la_puerta(av.posicion, self.radio_de_avanzada(av), e.posicion_en(t)) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la obra".into()));
                 }
                 let disponible: asentamiento::Costo = self.material_de_columna(*ejercito).into_iter().collect();
@@ -438,7 +443,7 @@ impl Nucleo {
                 }
                 // A la puerta, o dentro: algún participante de la columna, de la cuenta, está dentro de la avanzada con ella (2026-11-07).
                 let dentro = e.columna.participantes.iter().any(|x| self.cuenta_de(x.heroe) == Some(p.actor.as_str()) && self.esta_dentro_con(x.heroe, *avanzada, *ejercito));
-                if !dentro && e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
+                if !dentro && !self.a_la_puerta(av.posicion, self.radio_de_avanzada(av), e.posicion_en(t)) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la avanzada ni dentro".into()));
                 }
                 if *cantidad <= 0 {
@@ -536,7 +541,7 @@ impl Nucleo {
             return Ok((cid, &self.estado.ejercitos[&cid]));
         }
         let (cid, e) = self.columna_a_bordo(heroe)?;
-        if !p.admin && e.posicion_en(t).dist(puerta) > self.radio_puerta() {
+        if !p.admin && !self.a_la_puerta(puerta, self.radio_en(puerta), e.posicion_en(t)) {
             return Err(Respuesta::rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada ni él dentro", v));
         }
         Ok((cid, e))
@@ -712,7 +717,7 @@ impl Nucleo {
             EstadoAvanzada::EnRuinas { invulnerable_hasta: Some(h) } if t < h => return Err(rechazo(rechazos::COMBATE_AVANZADA_INVULNERABLE, "unas ruinas de fuerte son invulnerables un día")),
             _ => {}
         }
-        let guerra = self.comprobar_agresion(e, t, posicion, Some(faccion_madre), declara_guerra)?;
+        let guerra = self.comprobar_agresion(e, t, posicion, self.estado.reglas.economia.datos.tamanos.avanzada(etapa.indice() as u32 + 1), Some(faccion_madre), declara_guerra)?;
         if self.bloqueos().avanzadas.contains(&x) {
             return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "esa avanzada ya está en una batalla"));
         }

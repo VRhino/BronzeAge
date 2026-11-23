@@ -82,6 +82,18 @@ fn cerca_de(centro: Punto, dx: Mil, dy: Mil, vale: impl Fn(&Punto) -> bool) -> P
         .expect("hay tierra cerca")
 }
 
+/// El primer punto donde la Facción `faccion` puede fundar ahora, buscando en anillos de 2 u alrededor de `centro + (dx, dy)` (hasta 40 u): con la orilla
+/// de 15 u, la plaza a 12 u de todo nodo y a 60 de toda plaza y todo campamento (2026-11-23), un punto suelto rara vez vale.
+#[allow(dead_code)]
+pub fn fundable_cerca(n: &Nucleo, centro: Punto, dx: Mil, dy: Mil, faccion: u32) -> Punto {
+    let c = Punto::new(centro.x + dx, centro.y + dy);
+    (0..=20)
+        .flat_map(|k| (0..if k == 0 { 1 } else { 36 }).map(move |g| (k * 2_000, ((g * 10) as f64).to_radians())))
+        .map(|(r, a)| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64))
+        .find(|&p| n.viabilidad(p, faccion).is_some_and(|v| v.motivo.is_none()))
+        .expect("hay sitio fundable cerca")
+}
+
 /// Funda en `p` una plaza de `faccion` con una columna de administración de la cuenta `dueno`; devuelve su id.
 pub fn fundar(n: &mut Nucleo, dueno: &str, faccion: u32, p: Punto) -> u64 {
     let t = n.ahora();

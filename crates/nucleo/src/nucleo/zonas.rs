@@ -137,7 +137,7 @@ pub struct InformeViabilidad {
     pub parcelas_libres: usize,
     /// Nodos de piedra en esa zona.
     pub piedra: usize,
-    /// Parcelas de bosque libres en la zona del techo del nivel 1 (10 u) del punto, recortada por las plazas de otras Facciones que tocan ese
+    /// Parcelas de bosque libres en la zona del techo del nivel 1 (30 u desde el 2026-11-23) del punto, recortada por las plazas de otras Facciones que tocan ese
     /// disco aunque no toquen el inicial (decidido el 2026-10-24). Con 0 la plaza **caerá en ruinas**: sin
     /// Leñera no hay madera para el mantenimiento y no llega a crecer lo bastante para alcanzar otro bosque (decidido el 2026-10-18).
     pub parcelas_en_techo: usize,
@@ -265,7 +265,7 @@ impl Nucleo {
     fn validar_fundacion(&self, geo: &Geografia, p: Punto) -> Result<(), Motivo> {
         let r = &self.estado.reglas.territorio;
         let plazas: Vec<Disco> = self.discos().into_iter().map(|(_, d)| d).collect();
-        let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento };
+        let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento, distancia_nodo: r.distancia_nodo };
         // La ladera empinada y el bosque cerrado se cruzan pero no se funda en ellos: la pendiente del raster de altura contra su
         // máximo, y la celda de bosque (0-255) contra el umbral, en milésimas.
         let datos = &self.estado.reglas.economia.datos;
@@ -277,7 +277,7 @@ impl Nucleo {
             Terreno::Firme if geo.junto_al_rio(p, datos.orilla.plaza, &datos.orilla) => Terreno::JuntoAlRio,
             t => t,
         };
-        territorio::validar(p, terreno, &plazas, geo.mapa.campamentos.iter().copied(), &dist)
+        territorio::validar(p, terreno, &plazas, geo.mapa.campamentos.iter().copied(), geo.mapa.nodos.iter().map(|n| n.pos), &dist)
     }
 
     // ───────────────────────────── Fronteras ─────────────────────────────

@@ -81,13 +81,14 @@ fn fertil(m: &Mundo, p: Punto) -> bool {
     (0..40).map(|i| (i as f64 / 40.0 * std::f64::consts::TAU, 6_000.0 * (i % 5) as f64 / 5.0)).any(|(a, r)| m.fertilidad_en(p.x + (r * a.cos()) as i64, p.y + (r * a.sin()) as i64).is_some_and(|f| f >= 77))
 }
 
+/// Un sitio fundable, verde y rico a `r` del punto `c` (o, si no hay, a 2, 4 o 6 u más: el nodo sigue en la zona inicial de 24 u).
 fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
-    (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
+    (0..4).flat_map(|k| (0..36).map(move |g| (r + k * 2_000, ((g * 10) as f64).to_radians()))).map(|(r, a)| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
         n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3 && !v.condenada) && fertil(m, p)
     })
 }
 
-/// La plaza madre de Ana (F1) a 6 u de un nodo de cobre, ya de nivel 2, con la auto-construcción parada y la zona agrandada para que el nodo
+/// La plaza madre de Ana (F1) a 13 u de un nodo de cobre (la plaza no se funda a menos de 12 de un nodo), ya de nivel 2, con la auto-construcción parada y la zona agrandada para que el nodo
 /// quede dentro. El tiempo corre solo cuando se pide.
 struct Escenario {
     n: Nucleo,
@@ -186,7 +187,7 @@ fn montar_donde(n: Nucleo, m: &M, nivel: u32, vale: impl Fn(Punto) -> bool) -> E
     let mapa = Mapa::de(&m.0);
     let (cobre, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
-        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).filter(|&p| vale(p)).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 13_000).filter(|&p| vale(p)).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     montar_en(n, mapa, nivel, cobre, sitio)
 }
@@ -312,7 +313,7 @@ fn un_nodo_sin_ruta_por_tierra_hasta_la_madre_no_admite_pueblo() {
     // Un nodo de pueblo y un sitio fundable a unas unidades sin camino por tierra entre los dos (un río o un barranco de por medio).
     let sin_ruta = |i: usize| {
         let nodo = mapa.nodos[i].pos;
-        (5..=11).step_by(2).flat_map(|d| (0..24).map(move |g| (d * 1_000, g))).find_map(|(d, g)| {
+        (13..=23).step_by(2).flat_map(|d| (0..24).map(move |g| (d * 1_000, g))).find_map(|(d, g)| {
             let a = ((g * 15) as f64).to_radians();
             let p = Punto::new(nodo.x + (d as f64 * a.cos()) as i64, nodo.y + (d as f64 * a.sin()) as i64);
             (m.1.ruta(nodo, p, &rutas::Opciones::default()).is_none() && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none())).then_some(p)
@@ -344,7 +345,7 @@ fn vale_desde_el_nivel_1_y_respeta_el_cupo_que_libera_destruirlo_a_mano() {
 
     // Una plaza con al menos otros dos nodos de pueblo a 12 u (la zona de nivel 2 llega a 15): con el relieve de 2026-10-30 no todos los sitios los tienen.
     let mapa = Mapa::de(&m.0);
-    let con_nodos = |p: Punto| mapa.nodos.iter().filter(|x| x.tipo.es_de_pueblo() && x.tipo != Tipo::MinaHierro && x.pos.dist(p) <= 12_000).count() >= 3;
+    let con_nodos = |p: Punto| mapa.nodos.iter().filter(|x| x.tipo.es_de_pueblo() && x.tipo != Tipo::MinaHierro && x.pos.dist(p) >= 12_000 && x.pos.dist(p) <= 24_000).count() >= 3;
     let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 2, con_nodos);
     let plaza = e.plaza;
     let primero = e.marcar();
@@ -1247,7 +1248,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN66");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -1303,8 +1304,10 @@ fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mi
     let mut e = montar(m, 7, 2);
     let pueblo = e.pueblo_levantado();
     let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
-    // Una columna de F2 (un héroe solo: ve 15) espera a 10 u del pueblo y se va lejos.
-    let tierra = |r: i64| (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(sitio.x + (r as f64 * a.cos()) as i64, sitio.y + (r as f64 * a.sin()) as i64)).find(|q| m.0.transitable_en(q.x, q.y)).expect("tierra");
+    // Una columna de F2 (un héroe solo: ve 15) espera a 10 u del pueblo, fuera de lo que ocupa cualquier plaza (allí se quedaría en su contorno), y se va lejos.
+    let plazas: Vec<(Punto, i64)> = e.n.estado().asentamientos.values().map(|a| (a.posicion, e.n.radio_de_plaza(a))).collect();
+    let libre = |q: &Punto| plazas.iter().all(|&(c, r)| q.dist(c) > r + 1_000);
+    let tierra = |r: i64| (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(sitio.x + (r as f64 * a.cos()) as i64, sitio.y + (r as f64 * a.sin()) as i64)).find(|q| m.0.transitable_en(q.x, q.y) && libre(q)).expect("tierra");
     let (junto, lejos) = (tierra(10_000), tierra(60_000));
     let col = e.columna("beto", 2, junto);
     e.avanzar(MIN);
@@ -1365,17 +1368,17 @@ impl Escenario {
 }
 
 #[test]
-fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_20_u_y_la_siguiente_en_el_anillo_que_suma_el_nivel_2() {
+fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_30_u_y_la_siguiente_en_el_anillo_que_suma_el_nivel_2() {
     let m = con_mundo!();
     // Decisión del autor del 2026-10-31: la aldea número k va en el anillo que añade a la zona el primer nivel cuyo cupo llega a k, para que no se levanten
-    // todas juntas. Con el cupo 2 / 3 / 4 / 5 / 6 y los techos 20 / 30 / 40 / 50 / 60 u (el doble desde el 2026-11-05), las dos primeras hasta 20 u y la tercera de 20 a 30 u.
+    // todas juntas. Con el cupo 2 / 3 / 4 / 5 / 6 y los techos 30 / 50 / 70 / 80 / 90 u (desde el 2026-11-23), las dos primeras hasta 30 u y la tercera de 30 a 50 u.
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     let centro = e.n.estado().asentamientos[&plaza].posicion;
     let mut puestas = vec![];
     for k in 1..=2 {
-        let punto = e.n.sitio_de_aldea(plaza, Cultivo::Trigo).expect("hay tierra fértil a 20 u o menos");
-        assert!(centro.dist(punto) <= 20_000, "la aldea {k} va a 20 u o menos: {}", centro.dist(punto));
+        let punto = e.n.sitio_de_aldea(plaza, Cultivo::Trigo).expect("hay tierra fértil a 30 u o menos");
+        assert!(centro.dist(punto) <= 30_000, "la aldea {k} va a 30 u o menos: {}", centro.dist(punto));
         e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
         puestas.push(punto);
     }
@@ -1383,17 +1386,17 @@ fn las_aldeas_van_por_anillos_las_del_cupo_del_nivel_1_hasta_20_u_y_la_siguiente
     let rastro = e.n.hash_estado();
     assert_eq!(e.rechazada("ana", Comando::MarcarAldea { asentamiento: plaza, punto: puestas[0], cultivo: Cultivo::Trigo }), rechazos::PUEBLO_FUERA_DE_SU_ANILLO);
     assert_eq!(e.n.hash_estado(), rastro);
-    let punto = e.n.sitio_de_aldea(plaza, Cultivo::Trigo).expect("hay tierra fértil de 20 a 30 u");
+    let punto = e.n.sitio_de_aldea(plaza, Cultivo::Trigo).expect("hay tierra fértil de 30 a 50 u");
     let d = centro.dist(punto);
-    assert!(d > 20_000 && d <= 30_000, "el panel propone el anillo del nivel 2: {d}");
+    assert!(d > 30_000 && d <= 50_000, "el panel propone el anillo del nivel 2: {d}");
     e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo });
     assert_eq!(e.n.pueblos_de(plaza).iter().filter(|p| p.es_aldea()).count(), 3);
 }
 
-/// Los puntos transitables del entorno de `centro` (anillos de 0,5 u y 24 rumbos, desde 3,5 u) cuya fertilidad en las capas de trigo y de vid (u8, en ese orden) cumple `vale`.
+/// Los puntos transitables del entorno de `centro` (anillos de 0,5 u y 24 rumbos, desde 15,5 u, donde ya caben aldeas) cuya fertilidad en las capas de trigo y de vid (u8, en ese orden) cumple `vale`.
 fn puntos_con_capas(m: &Mundo, centro: Punto, vale: impl Fn(u8, u8) -> bool) -> Vec<Punto> {
     (0..24)
-        .flat_map(|k| (0..24).map(move |g| (3_500 + k * 500, g)))
+        .flat_map(|k| (0..30).map(move |g| (15_500 + k * 500, g)))
         .map(|(d, g)| {
             let a = ((g * 15) as f64).to_radians();
             Punto::new(centro.x + (d as f64 * a.cos()) as i64, centro.y + (d as f64 * a.sin()) as i64)
@@ -1402,12 +1405,12 @@ fn puntos_con_capas(m: &Mundo, centro: Punto, vale: impl Fn(u8, u8) -> bool) -> 
         .collect()
 }
 
-/// Un sitio de plaza con tierra para la vid y para la oliva en su zona de nivel 2 (hasta 14 u): la oliva es escasa en el mundo (la capa del generador la
+/// Un sitio de plaza con tierra para la vid y para la oliva en el primer anillo de aldeas (de 15,5 a 26 u): la oliva es escasa en el mundo (la capa del generador la
 /// pone en pocos sitios), así que no toda plaza tiene donde plantar una aldea de oliva.
 fn con_vid_y_oliva(m: &Mundo) -> impl Fn(Punto) -> bool + '_ {
     move |c| {
         let hay = |capa: fn(&Mundo, i64, i64) -> Option<u8>| {
-            (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 450, g))).any(|(d, g)| {
+            (0..24).flat_map(|k| (0..24).map(move |g| (15_500 + k * 450, g))).any(|(d, g)| {
                 let a = ((g * 15) as f64).to_radians();
                 let q = Punto::new(c.x + (d as f64 * a.cos()) as i64, c.y + (d as f64 * a.sin()) as i64);
                 m.transitable_en(q.x, q.y) && capa(m, q.x, q.y).is_some_and(|f| f >= 77)
@@ -1518,10 +1521,10 @@ fn el_nivel_de_otra_faccion_no_desbloquea_el_cultivo() {
 /// Una capa de fertilidad del mundo, como `Mundo::fertilidad_cebada_en`.
 type Capa = fn(&Mundo, i64, i64) -> Option<u8>;
 
-/// Un sitio de plaza con tierra para el cultivo de `capa` (≥ 77 de 255) en su zona de nivel 2 (hasta 14 u).
+/// Un sitio de plaza con tierra para el cultivo de `capa` (≥ 77 de 255) en el primer anillo de aldeas (de 15,5 a 26 u).
 fn con_capa(m: &Mundo, capa: Capa) -> impl Fn(Punto) -> bool + '_ {
     move |c| {
-        (0..24).flat_map(|k| (0..24).map(move |g| (3_500 + k * 450, g))).any(|(d, g)| {
+        (0..24).flat_map(|k| (0..24).map(move |g| (15_500 + k * 450, g))).any(|(d, g)| {
             let a = ((g * 15) as f64).to_radians();
             let q = Punto::new(c.x + (d as f64 * a.cos()) as i64, c.y + (d as f64 * a.sin()) as i64);
             m.transitable_en(q.x, q.y) && capa(m, q.x, q.y).is_some_and(|f| f >= 77)
@@ -1550,7 +1553,10 @@ fn la_cebada_y_el_sesamo_se_marcan_desde_los_niveles_3_y_4_con_la_fertilidad_de_
 #[test]
 fn la_fertilidad_de_la_aldea_es_la_de_la_capa_de_su_cultivo() {
     let m = con_mundo!();
-    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 3, con_vid_y_oliva(&m.0));
+    // Con vid y con tierra buena para el trigo y mala para la vid en el anillo de las aldeas (unos cuantos puntos: los hay junto al río).
+    let vid = con_vid_y_oliva(&m.0);
+    let vale = |c: Punto| vid(c) && puntos_con_capas(&m.0, c, |trigo, vid| trigo >= 77 && vid <= 76).len() >= 8;
+    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 3, vale);
     let plaza = e.plaza;
     let centro = e.n.estado().asentamientos[&plaza].posicion;
     // El mínimo se mira en la capa del cultivo: donde el trigo llega (≥ 77 de 255, el 30 %) y la vid no (≤ 76), la aldea de vid se rechaza y la de trigo se acepta.
@@ -1790,7 +1796,8 @@ fn a_la_puerta_con_su_columna_tambien_se_deja_y_se_recoge_la_guarnicion_del_pueb
     let (_, neutral) = e.visita("neu", 3, pueblo);
     let de_neutral = e.milicia(neutral);
     let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
-    let lejos = e.columna("leo", 1, Punto { x: sitio.x + 3 * radio, y: sitio.y });
+    let borde = e.n.radio_en(sitio);
+    let lejos = e.columna("leo", 1, Punto { x: sitio.x + borde + 3 * radio, y: sitio.y });
     let leo = e.n.ejercito(lejos).unwrap().columna.lider;
     let de_leo = e.milicia(leo);
 

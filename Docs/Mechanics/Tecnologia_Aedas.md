@@ -472,7 +472,7 @@ la Era de cada tecnología propia (decide lo que cuesta adoptarla o comprarla); 
   "racion": {
     "cadaMinutos": 30
   },
-  "radioExclusionFundar": 20,
+  "radioExclusionFundar": 60,
   "radioProteccion": 10,
   "origenes": 3,
   "edificiosFijos": [

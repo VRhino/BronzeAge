@@ -107,7 +107,8 @@ impl Nucleo {
 
     /// Lo que `MarcarAldea` mira de un punto antes de la ruta: tierra firme, en la zona real de la plaza, fuera del cauce de los ríos con sus campos
     /// (`ORILLA_RIO`), en el anillo de su siguiente aldea
-    /// ([`Self::anillo_de_aldea`]) y a `separacionMinima` de toda plaza y todo pueblo, de cualquier Facción. Devuelve la fertilidad del punto
+    /// ([`Self::anillo_de_aldea`]), a `separacionAPlaza` del centro de toda plaza y a `separacionAPueblo` de todo pueblo, extractor o aldea, de cualquier
+    /// Facción (dos datos desde el 2026-11-23). Devuelve la fertilidad del punto
     /// en la capa de `cultivo` (ppm); el mínimo lo mira la regla (`iniciar_aldea`).
     fn sitio_de_aldea_sin_ruta(&self, plaza: u64, pos: Punto, cultivo: Cultivo) -> Result<i64, (&'static str, String)> {
         let geo = self.geografia.as_ref().ok_or((rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
@@ -126,10 +127,10 @@ impl Nucleo {
                 return Err((rechazos::PUEBLO_FUERA_DE_SU_ANILLO, format!("la siguiente aldea de as-{plaza} va a más de {} u y hasta {} u de la plaza; el punto está a {} u", u(desde), u(hasta), u(d))));
             }
         }
-        let separacion = self.estado.reglas.economia.datos.pueblos.aldea.separacion_minima;
+        let (a_plaza, a_pueblo) = { let r = &self.estado.reglas.economia.datos.pueblos.aldea; (r.separacion_a_plaza, r.separacion_a_pueblo) };
         let nodos = &geo.mapa.nodos;
         let cerca = self.estado.asentamientos.values().any(|a| {
-            a.posicion.dist(pos) < separacion || a.economia.pueblos.iter().filter_map(|x| crate::economia::posicion_de_pueblo(nodos, x)).any(|q| q.dist(pos) < separacion)
+            a.posicion.dist(pos) < a_plaza || a.economia.pueblos.iter().filter_map(|x| crate::economia::posicion_de_pueblo(nodos, x)).any(|q| q.dist(pos) < a_pueblo)
         });
         if cerca {
             return Err((rechazos::PUEBLO_DEMASIADO_CERCA, "el punto está demasiado cerca de otro pueblo o de una plaza".into()));
@@ -138,12 +139,12 @@ impl Nucleo {
     }
 
     /// El panel de la aldea agrícola: el punto de la zona de la plaza más fértil para `cultivo` (en su capa) donde `MarcarAldea` se aceptaría ahora,
-    /// muestreado en anillos de 0,5 u y 24 rumbos desde la separación mínima hasta el radio de la zona (solo valen los del anillo de su siguiente
+    /// muestreado en anillos de 0,5 u y 24 rumbos desde la separación a la plaza hasta el radio de la zona (solo valen los del anillo de su siguiente
     /// aldea). `None` si no hay ninguno (o no hay mundo).
     pub fn sitio_de_aldea(&mut self, plaza: u64, cultivo: Cultivo) -> Option<Punto> {
         let a = self.estado.asentamientos.get(&plaza)?;
         let (centro, radio) = (a.posicion, a.radio);
-        let (separacion, minima) = { let r = &self.estado.reglas.economia.datos.pueblos.aldea; (r.separacion_minima, r.fertilidad_minima) };
+        let (separacion, minima) = { let r = &self.estado.reglas.economia.datos.pueblos.aldea; (r.separacion_a_plaza, r.fertilidad_minima) };
         let mut sitios: Vec<(i64, Punto)> = (0..)
             .map(|k| separacion + 500 + k * 500)
             .take_while(|&d| d <= radio)
@@ -262,7 +263,7 @@ impl Nucleo {
                     return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "solo entregan los ciudadanos de la Facción de la obra".into()));
                 }
                 let sitio = self.posicion_de_pueblo(pu.id).expect("un pueblo está sobre un nodo del mapa");
-                if e.posicion_en(t).dist(sitio) > self.radio_puerta() {
+                if !self.a_la_puerta(sitio, self.radio_de_pueblo(pu), e.posicion_en(t)) {
                     return Err(rechazo(rechazos::PUEBLO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la obra".into()));
                 }
                 let disponible: Costo = self.material_de_columna(*ejercito).into_iter().collect();

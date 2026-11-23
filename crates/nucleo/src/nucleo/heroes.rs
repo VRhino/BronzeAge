@@ -508,13 +508,15 @@ impl Nucleo {
         let tecnologia_adoptada = self.tiene_tecnologia(faccion, &mr.tropas.tropa(tropa).tecnologia);
         let columna = if reside { None } else { self.columna_que_lleva(heroe) };
         let soldados = self.soldados_del_campamento(asentamiento);
+        let radio = self.estado.asentamientos.get(&asentamiento).map_or(0, |a| self.radio_de_plaza(a));
         let resumen = self
             .con_exterior(asentamiento, t, |eco, x| eco.resumen_de_reclutamiento(x.reglas, x))
             .ok_or_else(|| Respuesta::rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado", v))?;
         let Estado { militar, asentamientos, ejercitos, siguiente_id, .. } = &mut self.estado;
         let plaza = asentamientos.get_mut(&asentamiento).expect("existe");
         let (posicion, eco) = (plaza.posicion, &mut plaza.economia);
-        let distancia = |c: u64| ejercitos.get(&c).map(|e| e.posicion_en(t).dist(posicion));
+        // Desde el borde de la plaza (2026-11-23).
+        let distancia = |c: u64| ejercitos.get(&c).map(|e| Self::desde_el_borde(posicion, radio, e.posicion_en(t)));
         let sitio = Plaza {
             id: plaza32,
             edificios: &eco.edificios,
@@ -633,7 +635,7 @@ impl Nucleo {
         let f = h.faccion?;
         let aqui = self.estado.ejercitos.get(&c)?.posicion_en(self.estado.ahora);
         let r = self.radio_puerta();
-        self.estado.asentamientos.values().filter(|a| a.faccion == f).map(|a| (aqui.dist(a.posicion), a.id)).filter(|&(d, _)| d <= r).min().map(|(_, a)| (a, c))
+        self.estado.asentamientos.values().filter(|a| a.faccion == f).map(|a| (Self::desde_el_borde(a.posicion, self.radio_de_plaza(a), aqui), a.id)).filter(|&(d, _)| d <= r).min().map(|(_, a)| (a, c))
     }
 
     /// ¿Va la escuadra `escuadra` del héroe en la columna `columna`?

@@ -122,7 +122,13 @@ impl Esc {
     }
 }
 
-/// El último instante de `[desde, hasta]` en que el plan estaba a `≤ radio` de `p`, muestreando cada 50 ms (la referencia de fuerza bruta).
+/// De dónde sale y adónde va la columna que pasa junto a la plaza de `sitio`: sale a 18 u al oeste (fuera de su vista de 15; en el primer punto en tierra),
+/// pasa a la vista y se va a 70 u al este. Con el mundo del 2026-11-23 la plaza de estas pruebas es otra y la ruta de 60 u al oeste a 70 u al este, como antes, la rodea a 21 u:
+/// ya no pasa a la vista.
+fn de_paso(m: &M, sitio: Punto) -> (Punto, Punto) {
+    (en_tierra(&m.0, sitio, -18 * U, 0), en_tierra(&m.0, sitio, 70 * U, 10 * U))
+}
+
 fn ultimo_visto(plan: &Plan, quieto: Punto, desde: Instante, hasta: Instante, p: Punto, radio: Mil) -> Option<Instante> {
     (0..=(hasta - desde) / 50).map(|k| hasta - k * 50).find(|&t| {
         let q = plan.posicion_en(t).unwrap_or(quieto);
@@ -205,10 +211,11 @@ fn la_ficha_de_una_plaza_ajena_es_lo_ultimo_que_se_vio_de_ella_y_cuando_y_nunca_
     let sitio = sitio_rico(&e.n, &m.0, 1, 2);
     let plaza = e.plaza("gus", 2, sitio);
     let nivel_antes = e.n.estado().asentamientos[&plaza].nivel();
-    // Una columna de F1 (un héroe solo: ve 15) pasa a unas 10 u de la plaza de F2 y se aleja.
-    let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
+    // Una columna de F1 (un héroe solo: ve 15) pasa junto a la plaza de F2 ([`de_paso`]) y se aleja.
+    let (desde, hasta) = de_paso(m, sitio);
+    let col = e.columna("ana", 1, desde);
     e.avanzar(MIN);
-    let plan = e.marchar("ana", col, en_tierra(&m.0, sitio, 70 * U, 10 * U));
+    let plan = e.marchar("ana", col, hasta);
     let (t0, fin) = (plan.vertices[0].en, plan.fin().unwrap());
     let radio = e.n.alcance_de_vista(col).unwrap();
     let visto = ultimo_visto(&plan, plan.vertices[0].p, t0, fin, sitio, radio).expect("el camino pasa a la vista de la plaza");
@@ -428,7 +435,7 @@ fn la_memoria_es_la_misma_con_sesiones_y_sin_ellas_y_avanzando_a_trozos_y_viaja_
     assert!(mem.exploracion.contains_key(&1) && mem.fichas.contains_key(&1) && !mem.personal.is_empty() && !mem.vigias.is_empty(), "la partida graba de todo");
 
     let bytes = a.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN66");
     let vuelta = Estado::deserializar(&bytes, &reglas(), m.0.hash()).expect("la foto vuelve");
     assert_eq!(vuelta.memoria, *mem);
     assert_eq!(vuelta.serializar(), bytes);
@@ -443,8 +450,9 @@ fn recuperar_la_foto_y_el_registro_reproduce_la_memoria_aunque_las_columnas_ande
     let sitio = sitio_rico(&n, &m.0, 1, 2);
     let mut e = Esc { n, peticiones: 0 };
     e.plaza("gus", 2, sitio);
-    let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
-    e.marchar("ana", col, en_tierra(&m.0, sitio, 70 * U, 10 * U));
+    let (desde, hasta) = de_paso(m, sitio);
+    let col = e.columna("ana", 1, desde);
+    e.marchar("ana", col, hasta);
     e.avanzar(2 * MIN);
     // A media marcha: lo andado no está grabado; tras recuperar, la columna sigue sin grabarlo y lo graba igual al tocarla.
     let mut n = e.n;
@@ -465,9 +473,10 @@ fn partida_hasta_estacionar(m: &M, sitio: Punto, col: u64) -> Nucleo {
     let arranque = Arranque { reglas: reglas(), ajustes: Ajustes { foto_cada: 3, ..Ajustes::default() }, semilla: 7, inicio: 0, rutas: m.1.clone(), mundo_hash: m.0.hash().into(), mundo: Some(m.0.clone()) };
     let mut e = Esc { n: Nucleo::con_persistencia(arranque, dir.path(), Default::default()).unwrap(), peticiones: 0 };
     e.plaza("gus", 2, sitio);
-    let c = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
+    let (desde, hasta) = de_paso(m, sitio);
+    let c = e.columna("ana", 1, desde);
     assert_eq!(c, col);
-    e.marchar("ana", col, en_tierra(&m.0, sitio, 70 * U, 10 * U));
+    e.marchar("ana", col, hasta);
     e.avanzar(2 * MIN);
     let t = e.n.ahora();
     assert!(e.n.aplicar_en(t, Peticion::nueva("ana", "parar", Comando::Estacionar { ejercito: col })).aceptada());
@@ -492,7 +501,7 @@ fn la_vista_lleva_la_zona_fundida_el_suelo_bajo_cada_columna_propia_y_el_almacen
     let a = e.plaza("ana", 1, sa);
     e.ok("admin", Comando::FijarNivelFaccion { faccion: 1, nivel: 5 });
     // La segunda plaza de F1, en el sitio fundable más cercano; las dos zonas crecen hasta solaparse.
-    let sb = (1..60).flat_map(|r| (0..36).map(move |g| (r, g))).map(|(r, g)| {
+    let sb = (60..120).flat_map(|r| (0..36).map(move |g| (r, g))).map(|(r, g)| {
         let ang = ((g * 10) as f64).to_radians();
         Punto::new(sa.x + (r as f64 * 1_000.0 * ang.cos()) as i64, sa.y + (r as f64 * 1_000.0 * ang.sin()) as i64)
     }).find(|&p| e.n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none())).expect("hay un sitio fundable cerca");

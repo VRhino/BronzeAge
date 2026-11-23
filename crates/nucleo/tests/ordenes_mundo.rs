@@ -279,7 +279,7 @@ fn plaza_de_ana(m: &M, unity: bool) -> (Prep, u64, Punto, u32) {
     let mapa = Mapa::de(&m.0);
     let (cobre, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
-        .find_map(|i| sitio_junto_a(&p.n, mapa.nodos[i].pos, 6_000).map(|s| (i as u32, s)))
+        .find_map(|i| sitio_junto_a(&p.n, mapa.nodos[i].pos, 13_000).map(|s| (i as u32, s)))
         .expect("hay un nodo de cobre junto a un sitio rico, lejos de los campamentos");
     let plaza = p.plaza("ana", 1, sitio);
     p.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
@@ -385,7 +385,7 @@ async fn un_pueblo_se_marca_se_entrega_y_se_destruye_por_el_contrato_con_la_obra
 async fn una_avanzada_se_coloca_se_entrega_y_se_destruye_por_el_contrato() {
     let m = con_mundo!();
     let (mut p, plaza, centro, _) = plaza_de_ana(m, false);
-    let sitio = Punto::new(centro.x + 8_000, centro.y);
+    let sitio = Punto::new(centro.x + 16_000, centro.y);
     let (col, heroe) = p.columna("ana", 1, sitio);
     for (r, n) in [(Madera, 150_000), (Piedra, 150_000), (Oro, 50_000)] {
         p.ok("admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: n });

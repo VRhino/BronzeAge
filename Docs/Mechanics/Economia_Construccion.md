@@ -96,7 +96,7 @@ Validaciones, en este orden (cada una lanza `FundacionInvalidaError`):
 
 1. Entre 1 y `FUNDACION.maxJugadoresFundacionGrupal` (5) héroes fundadores.
 2. La posición está dentro del mapa.
-3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `FUNDACION.separacionPlazas` (20) o más de cualquier plaza** (Doc 1.0a). **Desde el 2026-11-04** (decisión del autor) la separación fue **10** (antes 30), y **20 desde el 2026-11-05**, y el motor lee las cifras del territorio de los bloques (`ZONA_INFLUENCIA`, `FUNDACION.separacionPlazas`, `MERCENARIOS.radioExclusionFundar`; antes iban escritas en el código, `ReglasTerritorio`). Con 20 y las zonas al doble, junto a una plaza de nivel 1 (zona de 12 a 20) manda la separación y junto a una más grande manda su zona (hasta 60 de radio): no se funda dentro de ella.
+3. `posicionLibreParaFundar`: el punto **no cae dentro de la zona real (recortada) de ningún asentamiento existente** (de cualquier Facción, también la propia) y está **a `FUNDACION.separacionPlazas` (60) o más de cualquier plaza** (Doc 1.0a). **Desde el 2026-11-04** (decisión del autor) la separación fue **10** (antes 30), y **20 desde el 2026-11-05**, y el motor lee las cifras del territorio de los bloques (`ZONA_INFLUENCIA`, `FUNDACION.separacionPlazas`, `MERCENARIOS.radioExclusionFundar`; antes iban escritas en el código, `ReglasTerritorio`). **Desde el 2026-11-23** (decisión del autor, «Tamaños y distancias del mapa»: las plazas se veían montadas unas encima de otras) la separación es **60** y la zona va de 24 a 90 u: junto a una plaza de nivel 1 o 2 (techos de 30 y 50 u) manda la separación y junto a una de nivel 3 o más, su zona (hasta 90 de radio): no se funda dentro de ella. Antes fue 20, con la zona de 12 a 60. **Y lejos de los nodos** (paso nuevo del 2026-11-23): el punto ha de estar a `FUNDACION.distanciaMinimaANodo` (12) o más de **todo nodo de recurso** del mapa, explotado o no (`fundacion.cerca_de_nodo`; a 12 exactos se funda), para que la ciudad, que llega a 8 u de radio con muralla, no se levante encima de una mina. Es la última comprobación de la posición, después de los campamentos.
 4. El terreno no es `cima`, ni `agua`, ni una celda **no transitable** del artefacto (río sin vado, pendiente: la plaza quedaría incomunicada). En Rust las tres comprobaciones de terreno van antes que las de zona y distancia.
 5. La Facción existe y no ha llegado al tope de fundación `calcularCapFundacion(nivel de Facción)` (cuenta los asentamientos que ya tiene).
 
@@ -133,7 +133,7 @@ Leñera en la zona real con que nacería ∧ hay ≥ 1 nodo de piedra sin explot
 
 > **Implementado en Rust (2026-10-13)**: `crates/territorio/src/zona.rs` (reglas puras) y `crates/nucleo/src/nucleo/zonas.rs` (estado, órdenes y eventos).
 
-La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (12) y **solo crece por obra, nunca por tiempo**: cada edificio completado la agranda `crecimientoPorEdificioCompletado` (2), sin pasar del **techo de su nivel** (`radioMaximoPorNivel`: 20 / 30 / 40 / 50 / 60). **Al doble desde el 2026-11-05** (decisión del autor: las zonas se quedaban pequeñas; las velocidades no cambian): antes 6, 1 y 10 / 15 / 20 / 25 / 30, así que el techo se alcanza con los mismos edificios. Subir de nivel solo levanta el techo: el radio no salta. La construcción llama a `AgrandarZona` al completar cada edificio (hasta entonces la administración); el ascenso, a `FijarNivelAsentamiento`.
+La zona es un **disco** (centro = la plaza). Nace con `radioInicial` (24) y **solo crece por obra, nunca por tiempo**: cada edificio completado la agranda `crecimientoPorEdificioCompletado` (2), sin pasar del **techo de su nivel** (`radioMaximoPorNivel`: 30 / 50 / 70 / 80 / 90). **Desde el 2026-11-23** (decisión del autor, «Tamaños y distancias del mapa», con las plazas a 60 u): antes 12 y 20 / 30 / 40 / 50 / 60 (desde el 2026-11-05, el doble de 6 y 10 / 15 / 20 / 25 / 30). El crecimiento por edificio no cambia: del radio inicial al techo del nivel 1 van 3 edificios (antes 4), y del 1 al 2, 10. Subir de nivel solo levanta el techo: el radio no salta. La construcción llama a `AgrandarZona` al completar cada edificio (hasta entonces la administración); el ascenso, a `FijarNivelAsentamiento`.
 
 **Contacto.** Como el radio solo cambia en esos instantes, no hay eventos programados: al fundar y al agrandar una zona se comprueba qué plazas de **otra Facción** quedan tocándola (`distancia ≤ suma de radios`) y se anuncia una sola vez por pareja (`zona.frontera`, `Estado.contactos`). Las zonas nunca se encogen, así que un contacto no se deshace.
 
@@ -1949,7 +1949,8 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "caducidadCaravanaHoras": 48,
   "densidadBosqueMaximaParaFundar": 0.7,
   "pendienteMaximaParaFundar": 0.3,
-  "separacionPlazas": 20
+  "separacionPlazas": 60,
+  "distanciaMinimaANodo": 12
 }
 ```
 <!-- /parametros -->
@@ -1957,14 +1958,14 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 <!-- parametros:ZONA_INFLUENCIA -->
 ```json
 {
-  "radioInicial": 12,
+  "radioInicial": 24,
   "crecimientoPorEdificioCompletado": 2,
   "radioMaximoPorNivel": {
-    "1": 20,
-    "2": 30,
-    "3": 40,
-    "4": 50,
-    "5": 60
+    "1": 30,
+    "2": 50,
+    "3": 70,
+    "4": 80,
+    "5": 90
   },
   "segmentosPoligono": 48,
   "pasoFusionContorno": 1
@@ -1972,7 +1973,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
 ```
 <!-- /parametros -->
 
-**Nada encima del río (decisión del autor del 2026-11-18).** Ninguna maqueta del mapa puede quedar dentro del cauce que se ve. El río corta el paso solo en las celdas de 4 u que pisa su trazo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md); hasta el 2026-11-18 tampoco en el hueco de cada vado), así que «transitable» no bastaba: un pueblo, una aldea o una plaza podían caer a décimas del trazo, encima del agua dibujada (en la partida de Render, una aldea de trigo de un bot). Desde entonces, al **fundar**, **marcar un pueblo extractor**, **marcar una aldea**, **colocar una avanzada** y cuando el sistema **levanta un campamento de bandidos**, el motor mide la distancia del punto al trazo de cada río y la rechaza si es menor que la media anchura del cauce dibujado (`mediaAnchura`, 0,75 u; `mediaAnchuraNavegable`, 1,5 u en los ríos navegables) más el radio de lo que se levanta (`radio`): lo que ocupa su maqueta en el mapa 3D del cliente (escala 0,8 de las maquetas, ×1,6 pueblos y avanzadas, ×2 campamentos), redondeado hacia arriba. La plaza cuenta con la ciudad más grande que puede llegar a tener (la de la zona en su techo de 60 u: la ciudad del cliente es el 10 % del radio de la zona), para que al crecer tampoco entre en el agua. La aldea cuenta con sus campos, no solo con la empalizada. Rechazos: `fundacion.junto_al_rio` (también en el aviso de viabilidad), `pueblo.junto_al_rio` (pueblo y aldea; el nodo junto al río ya no sale entre los candidatos del panel, y el muestreo de sitios de aldea lo salta) y `avanzada.junto_al_rio`. Los nodos del mundo no se mueven (no cambia el mundo ni hace falta partida nueva): los que quedan junto al río simplemente no se pueden explotar (14 de 4.986 en el mundo de la semilla 42 del 2026-11-18, `a98e65c7…`; 27 en el anterior). Lo ya levantado antes de la regla no se toca.
+**Nada encima del río (decisión del autor del 2026-11-18).** Ninguna maqueta del mapa puede quedar dentro del cauce que se ve. El río corta el paso solo en las celdas de 4 u que pisa su trazo ([`Generacion_Del_Mundo.md`](Generacion_Del_Mundo.md); hasta el 2026-11-18 tampoco en el hueco de cada vado), así que «transitable» no bastaba: un pueblo, una aldea o una plaza podían caer a décimas del trazo, encima del agua dibujada (en la partida de Render, una aldea de trigo de un bot). Desde entonces, al **fundar**, **marcar un pueblo extractor**, **marcar una aldea**, **colocar una avanzada** y cuando el sistema **levanta un campamento de bandidos**, el motor mide la distancia del punto al trazo de cada río y la rechaza si es menor que la media anchura del cauce dibujado (`mediaAnchura`, 0,75 u; `mediaAnchuraNavegable`, 1,5 u en los ríos navegables) más el radio de lo que se levanta. **Desde el 2026-11-23** el pueblo, la aldea y la avanzada usan su radio real de `TAMANOS_MAPA` (el pueblo, 2,04 u; la aldea, la de nivel 3 con sus campos, 3,58 u; la avanzada, la ciudadela, 1,44 u), y en `ORILLA_RIO.radio` solo quedan la **plaza**, con un margen propio de **15 u** (su ciudad más grande es de 8 u: el resto es para que el río no le roce las murallas ni los campos), y el campamento de bandidos (0,8 u). Hasta entonces las cuatro cifras venían de las maquetas del cliente 3D (plaza 4,8, pueblo 0,75, aldea 1,8 y avanzada 0,65). Rechazos: `fundacion.junto_al_rio` (también en el aviso de viabilidad), `pueblo.junto_al_rio` (pueblo y aldea; el nodo junto al río ya no sale entre los candidatos del panel, y el muestreo de sitios de aldea lo salta) y `avanzada.junto_al_rio`. Los nodos del mundo no se mueven (no cambia el mundo ni hace falta partida nueva): los que quedan junto al río simplemente no se pueden explotar (14 de 4.986 en el mundo de la semilla 42 del 2026-11-18, `a98e65c7…`; 27 en el anterior). Lo ya levantado antes de la regla no se toca.
 
 <!-- parametros:ORILLA_RIO -->
 ```json
@@ -1980,10 +1981,7 @@ Listas del catálogo (también en `constants.ts`): `EDIFICIOS_UNICOS`, `EDIFICIO
   "mediaAnchura": 0.75,
   "mediaAnchuraNavegable": 1.5,
   "radio": {
-    "plaza": 4.8,
-    "pueblo": 0.75,
-    "aldea": 1.8,
-    "avanzada": 0.65,
+    "plaza": 15,
     "bandidos": 0.8
   }
 }
@@ -2415,8 +2413,8 @@ Ninguna abierta (las encontradas al documentar se resolvieron el 2026-10-11; ver
 > **Cambio del 2026-11-11 (decisión del autor): la aldea de trigo y la ganadera se separan.** La de trigo ya **no lleva corrales** (`cultivos.trigo.corrales: false`): solo cultiva. Los corrales y el rebaño pasan a la **aldea ganadera**, un «cultivo» más de `MarcarAldea` (`ganado`, `Cultivo::Ganado`, al final de la lista por la foto) con `"granjas": false` (campo nuevo de `cultivos.<cultivo>`, por defecto `true`): **ninguna granja**, los corrales de su nivel (`aldea.niveles`: 1 / 2 / 3) y la cría de siempre (pie de cría, leche, sacrificio en ganado y carne, saqueo de la mitad). Se marca desde el **nivel 1** de la madre (`nivelMadre: 1`), con el mismo coste, obra, niveles, anillos, separación y guarnición que cualquier aldea, y pide el mismo mínimo de fertilidad **en la capa del trigo** (`Geografia::fertilidad_en` con `Ganado` lee la de trigo: pasta donde se daría el trigo; la fertilidad no cambia la cría). Su recurso principal es el ganado (`Pueblo::recurso`) y su carro lleva ganado, carne y leche (`Pueblo::recursos`); pide 4 pesants por corral y ninguno por granja (`ReglasAldea::granjas`). Su planta tiene un **Corral por ancla** (`Nucleo::planta_de_pueblo`). El hito «Corral activo» y la «obra de corral» de la épica miran **solo las aldeas con corrales** (`Pueblo::tiene_corrales`); las demás aldeas cuentan como obra de su Granja. En el contrato, `Pueblo.cultivo` es `ganado` y `OrdenMarcarAldea.cultivo` lo acepta (sin cambio de `.proto`). Cambia la huella de las reglas: **partida nueva**. Pruebas: `la_aldea_de_trigo_cultiva_con_la_fertilidad_de_su_punto_sin_corrales_y_llena_su_almacen`, `la_aldea_ganadera_cria_sin_granjas_y_da_ganado_carne_y_leche_contra_un_almacen_compartido`, `el_carro_de_cada_aldea_lleva_solo_lo_suyo` y `la_aldea_ganadera_nace_con_su_pie_de_cria_y_el_saqueo_se_lleva_la_mitad_de_las_cabezas` (`asentamiento`, `pueblos.rs`); la planta, en `la_planta_de_una_aldea_lleva_sus_granjas_y_sus_corrales_y_crece_con_el_nivel` (`nucleo`, `urbanismo.rs`).
 
 > **Implementado en Rust (2026-11-08, tanda 69):** **cada aldea es de un solo cultivo**, que se elige al marcarla (`MarcarAldea { asentamiento, punto, cultivo }`: `trigo`, `vid`, `oliva` y, desde el 2026-11-09, `cebada` o `sesamo`; sin cultivo es trigo; otro nombre, `orden.forma_invalida`) y no cambia (`Sitio::Punto { pos, fertilidad, cultivo }`, `Cultivo` y `ReglaCultivo` en `crates/asentamiento/src/pueblos.rs`; el bloque `PUEBLOS_EXTRACTORES.aldea.cultivos`). Sus granjas dan el producto del cultivo: trigo, **uva** (vid), **aceituna** (oliva), **cebada** o **sésamo**. La vid y la cebada piden el nivel 3 y la oliva y el sésamo el 4 (`nivelMadre`; el trigo, el 1), y **desde el 2026-11-09 lo mira la Facción, no la madre** (decisión del autor): basta que **alguna plaza de la Facción** que exista ahora haya **alcanzado** ese nivel (`Asentamiento.nivel`, no el operativo; `Nucleo::nivel_maximo_de_plazas(faccion)`, que `iniciar_aldea` recibe como `nivel_en_faccion`), y la madre puede ser de cualquier nivel (su cupo de pueblos sigue siendo el suyo). Si esa plaza se pierde (una plaza en ruinas sale del estado), las aldeas que ya hay siguen; solo se cierran las nuevas de ese cultivo. Con menos, `MarcarAldea` rechaza con **`pueblo.cultivo_bloqueado`** (`ErrorPueblo::CultivoBloqueado`). **Solo la aldea de trigo lleva corrales** (`cultivos.<cultivo>.corrales`): las de los demás cultivos no tienen rebaño. *(Desde el 2026-11-11, solo la ganadera: ver la nota de arriba.)* La fertilidad del punto sale de **la capa del mundo de su cultivo** (`fertilidad`, `fertilidad_vid`, `fertilidad_oliva`, `fertilidad_cebada` o `fertilidad_sesamo`, Generación del mundo; `Geografia::fertilidad_en(punto, cultivo)` en `zonas.rs`), con el mismo mínimo de 0,3; el panel `Nucleo::sitio_de_aldea(plaza, cultivo)` busca el punto más fértil para el cultivo pedido. El nivel de plaza de la quesera, la bodega y la prensa es el de su cultivo (§5.3); la cerveza de la bodega y el aceite de sésamo de la prensa salen de las aldeas de cebada y de sésamo.
-- **Dónde.** En un **punto** de la zona real de la madre, sin nodo (`Pueblo.sitio` es `Nodo(n)` o `Punto { pos, fertilidad }`): tierra firme, fertilidad del artefacto en el punto ≥ `fertilidadMinima` (0,3), a `separacionMinima` (3 u) de toda plaza y todo pueblo de cualquier Facción y con ruta por tierra hasta la madre. Desde el **nivel 1** de la madre (`nivelMadreMinimo` es por tipo: `{extractor: 1, aldea: 1}` desde el 2026-10-31; el extractor pedía 2). Una plaza puede tener varias aldeas si el cupo se lo permite.
-- **Por anillos (2026-11-01, decisión del autor: que no se levanten todas juntas).** La aldea número k de la plaza (cuentan las que tiene en cualquier estado, no los pueblos extractores, que van donde está su nodo) va en el **anillo que añade a la zona el primer nivel cuyo cupo llega a k**: con el cupo 2 / 3 / 4 / 5 / 6 y los techos de la zona 20 / 30 / 40 / 50 / 60 u (`TERRITORIO.techos`; el doble desde el 2026-11-05), las dos primeras hasta 20 u de la plaza, la tercera de 20 a 30 u, la cuarta de 30 a 40 u, y así; el anillo es `(desde, hasta]` y lo recorta la zona real de la plaza. Fuera de su anillo, `MarcarAldea` rechaza con **`pueblo.fuera_de_su_anillo`** (se mira tras la zona y antes de la separación). `Nucleo::anillo_de_aldea`. Prueba: `las_aldeas_van_por_anillos_…` (`tests/pueblos.rs`).
+- **Dónde.** En un **punto** de la zona real de la madre, sin nodo (`Pueblo.sitio` es `Nodo(n)` o `Punto { pos, fertilidad }`): tierra firme, fertilidad del artefacto en el punto ≥ `fertilidadMinima` (0,3), a `separacionAPlaza` (15 u) de toda plaza y a `separacionAPueblo` (7,5 u) de todo pueblo y toda aldea, de cualquier Facción, y con ruta por tierra hasta la madre (desde el 2026-11-23, decisión del autor: antes una sola `separacionMinima` de 3 u para las dos cosas). Desde el **nivel 1** de la madre (`nivelMadreMinimo` es por tipo: `{extractor: 1, aldea: 1}` desde el 2026-10-31; el extractor pedía 2). Una plaza puede tener varias aldeas si el cupo se lo permite.
+- **Por anillos (2026-11-01, decisión del autor: que no se levanten todas juntas).** La aldea número k de la plaza (cuentan las que tiene en cualquier estado, no los pueblos extractores, que van donde está su nodo) va en el **anillo que añade a la zona el primer nivel cuyo cupo llega a k**: con el cupo 2 / 3 / 4 / 5 / 6 y los techos de la zona 30 / 50 / 70 / 80 / 90 u (`TERRITORIO.techos`; desde el 2026-11-23, antes 20 / 30 / 40 / 50 / 60), las dos primeras hasta 30 u de la plaza, la tercera de 30 a 50 u, la cuarta de 50 a 70 u, y así; el anillo es `(desde, hasta]` y lo recorta la zona real de la plaza. Fuera de su anillo, `MarcarAldea` rechaza con **`pueblo.fuera_de_su_anillo`** (se mira tras la zona y antes de la separación). `Nucleo::anillo_de_aldea`. Prueba: `las_aldeas_van_por_anillos_…` (`tests/pueblos.rs`).
 - **Coste y obra.** Como cualquier obra de mapa: su nivel 1 (`coste`, 30 madera) + `costeAdicional` (50 madera) + el carro con su buey (20 madera, 12 oro) = **100 madera y 12 oro** (`Asentamiento::costo_de_aldea`), llevados en una columna y entregados con `EntregarMateriales`; obra de 4 h.
 - **Subir de nivel** (`MejorarAldea { pueblo }`, aldea activa sin mejora en curso y con nivel siguiente): deja una mejora «pendiente de materiales» con el coste del nivel siguiente (2: 180 madera y 60 piedra; 3: 360 y 120; triplicados por decisión del autor del 2026-10-31, antes 60/20 y 120/40), que se entrega igual que una obra; entregada, obra de 2 h. **La aldea sigue produciendo mientras tanto** con su nivel de antes; al acabar sube (`aldea.subio`) y crecen granjas, corrales y el tope del rebaño.
 - **Producción.** Por minuto, el trigo es `granjas × produccionBaseTrigo(Granja, nivel 1) × fertilidad del punto × ratioManoObra × factorProduccionTrigo` (la fertilidad del punto, no la de la zona de la madre; **80** por granja desde el 2026-11-11, antes 120). Trabajan 4 pesants por granja y 4 por corral de la madre. **El almacén local es uno para todo lo que produce la aldea** (`capacidadAlmacenLocal`, 1.000 entre el producto del cultivo y, en la ganadera —en la de trigo hasta el 2026-11-11—, ganado, carne y leche): el cultivo entra primero y el rebaño con el hueco que queda. Las granjas de vid y de oliva cosechan con la misma fórmula (`produccionBaseTrigo` de la Granja × granjas × fertilidad del punto de su capa × `ratioManoObra` × `factorProduccionTrigo`), pero dan uva o aceituna.
@@ -2501,7 +2499,8 @@ Todo se hace con el héroe **dentro** del pueblo o la aldea (`entrarEnPueblo`) y
   },
   "aldea": {
     "fertilidadMinima": 0.3,
-    "separacionMinima": 3,
+    "separacionAPlaza": 15,
+    "separacionAPueblo": 7.5,
     "granjeros": {
       "escuadra": 30
     },
@@ -2583,7 +2582,7 @@ Una avanzada es la otra obra de mapa (§14, «Obras de mapa»). Reglas puras en 
     "fuerte": 4000,
     "ciudadela": 20000
   },
-  "fraccionCiudadDeLaZona": 0.05,
+  "distanciaALaMadre": 15,
   "fraccionReparacion": 0.5,
   "obras": {
     "atalaya": {
@@ -2614,29 +2613,38 @@ Una avanzada es la otra obra de mapa (§14, «Obras de mapa»). Reglas puras en 
 ```
 <!-- /parametros -->
 
-Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras` es el coste de **cada paso** (construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela), con su duración en minutos de mundo: los «viajes de carro de 500» del documento son unidades de mapa, a **placeholder**. `nivelMadre` es el nivel operativo mínimo de la plaza madre para tener esa etapa y `cupoPorNivelDeLaMadre`, cuántas avanzadas admite por nivel (2 en el nivel 2 … 5 en el 5, contando las pendientes y las que están en ruinas). `capacidadAlmacen` es la cabida **por recurso** de cada etapa (la atalaya no tiene almacén). Lo que mide la avanzada en el mapa es su tamaño de `TAMANOS_MAPA` (abajo). `fraccionCiudadDeLaZona` es lo que mide la ciudad de la plaza en el mapa como fracción del radio de su zona (una vigésima desde el 2026-11-05, al doblar las zonas, para que la ciudad mida lo mismo que antes; antes una décima: «la ciudad nunca pasa de una décima de su provincia», Calibración de distancias §4.2): una avanzada no se coloca a menos de ese radio más la mitad de su tamaño del centro de la madre. `fraccionReparacion` es el 50 % del coste de la etapa que cuesta reparar unas ruinas.
+Las etapas son las tres de Doc 5.17 (atalaya → fuerte → ciudadela) y `obras` es el coste de **cada paso** (construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela), con su duración en minutos de mundo: los «viajes de carro de 500» del documento son unidades de mapa, a **placeholder**. `nivelMadre` es el nivel operativo mínimo de la plaza madre para tener esa etapa y `cupoPorNivelDeLaMadre`, cuántas avanzadas admite por nivel (2 en el nivel 2 … 5 en el 5, contando las pendientes y las que están en ruinas). `capacidadAlmacen` es la cabida **por recurso** de cada etapa (la atalaya no tiene almacén). Lo que mide la avanzada en el mapa es su radio de `TAMANOS_MAPA` (abajo). `distanciaALaMadre` (15 u) es lo más cerca que se coloca una avanzada del centro de su plaza madre (desde el 2026-11-23, decisión del autor; hasta entonces `fraccionCiudadDeLaZona`, la ciudad como una vigésima del radio de la zona más la mitad del tamaño de la avanzada). `fraccionReparacion` es el 50 % del coste de la etapa que cuesta reparar unas ruinas.
 
-**Tamaños de los elementos del mapa** (decisión del autor del 2026-10-27). `TAMANOS_MAPA` dice cuánto mide cada elemento en el mapa del mundo: el **diámetro**, en unidades de mapa, del disco que ocupa. Sirven para **pintar y para colocar**, nunca para el movimiento: el A\* de las rutas solo mira el terreno y ningún elemento le estorba (`Movimiento_Ejercitos.md` §4). Al colocar una avanzada, dos elementos se pisan si sus centros distan menos de la media de sus diámetros; la ciudad de una plaza no tiene cifra aquí, porque mide `fraccionCiudadDeLaZona` del radio de su zona. Los elementos que se mueven (héroe, columna, ejército, caravana) y el nodo y el alijo solo los usan los clientes al pintar. Viajan en `/v1/datos` con los demás bloques. Las cifras de hoy son el «como mucho 0,2 de mapa» del canon (Doc 4.2.2 y 5.17) para todos: **placeholder**, para ajustar.
+**Tamaños de los elementos del mapa** (decisión del autor del 2026-10-27; tamaños reales desde el 2026-11-23). `TAMANOS_MAPA.radio` dice cuánto mide cada elemento en el mapa del mundo: el **radio**, en unidades de mapa, del disco que ocupa su maqueta, medido en la escena «Distancias de plaza» de Conquest. La plaza lo tiene **por nivel, con y sin muralla** (`plaza.sinMuralla` y `plaza.conMuralla`, 1,49 u en el nivel 1 y 8,05 u en el 5 con muralla); la aldea y su caserío, por nivel; la avanzada, por etapa (`atalaya`, `fuerte`, `ciudadela`); el pueblo y el campamento de mercenarios, una cifra. El tamaño **ya no depende de la zona**: la ciudad mide lo que dice su nivel. Sirven para **pintar, para colocar y para la puerta** (desde el 2026-11-23 la puerta es todo el contorno, a `radioPuerta` del borde, y la marcha a un lugar acaba en él: [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §11.1), nunca para la ruta: el A\* solo mira el terreno y ningún elemento le estorba (`Movimiento_Ejercitos.md` §4). Al colocar, cada elemento reserva **su etapa o su nivel mayor** (la avanzada, la ciudadela; la aldea, la de nivel 3), para que al crecer no pise nada; dos elementos se pisan si sus centros distan menos de la suma de sus radios. Lo que vale 0,1 (el campamento de bandidos, los elementos que se mueven, el nodo y el alijo) es un **placeholder** que solo usan los clientes al pintar. Viaja en `/v1/datos` con los demás bloques. Hasta el 2026-11-23 eran diámetros, todos de 0,2 u (el «como mucho 0,2 de mapa» del canon, Doc 4.2.2 y 5.17).
 
 <!-- parametros:TAMANOS_MAPA -->
 ```json
 {
-  "avanzada": 0.2,
-  "pueblo": 0.2,
-  "campamentoMercenarios": 0.2,
-  "campamentoBandidos": 0.2,
-  "nodo": 0.2,
-  "alijo": 0.2,
-  "heroe": 0.2,
-  "columna": 0.2,
-  "ejercito": 0.2,
-  "caravana": 0.2
+  "radio": {
+    "plaza": {
+      "sinMuralla": { "1": 1.49, "2": 3.2, "3": 5.6, "4": 6.4, "5": 7.2 },
+      "conMuralla": { "1": 1.49, "2": 3.42, "3": 6.27, "4": 7.09, "5": 8.05 }
+    },
+    "pueblo": 2.04,
+    "aldea": { "1": 2.3, "2": 3.0, "3": 3.58 },
+    "caserioDeAldea": { "1": 0.86, "2": 1.0, "3": 1.27 },
+    "caserioDeAldeaGanadera": 0.93,
+    "avanzada": { "atalaya": 0.68, "fuerte": 1.28, "ciudadela": 1.44 },
+    "campamentoMercenarios": 2.2,
+    "campamentoBandidos": 0.1,
+    "nodo": 0.1,
+    "alijo": 0.1,
+    "heroe": 0.1,
+    "columna": 0.1,
+    "ejercito": 0.1,
+    "caravana": 0.1
+  }
 }
 ```
 <!-- /parametros -->
 
 > **Implementado en Rust (2026-10-22, fase 4F).** Foto `BAN15` (hoy `BAN16`).
-> - **Colocar** (`ColocarAvanzada { asentamiento, heroe, posicion }`, 106): el Gobernador o el Maestro de Obras de la madre, que reside en ella y está **dentro** (como al marcar la aldea, desde el 2026-11-04; antes con su columna en el sitio; o la administración), la marca en tierra firme (`avanzada.fuera_del_sitio`), dentro de la zona real de la madre, con ruta por tierra hasta ella (`avanzada.sin_ruta`), sin pisar su ciudad (`avanzada.dentro_del_asentamiento`: a menos de `radio de la zona × fraccionCiudadDeLaZona + TAMANOS_MAPA.avanzada / 2` de su centro) ni otro elemento del mapa (`avanzada.pisa_otro_elemento`: otra avanzada en cualquier estado, un pueblo sobre su nodo o un campamento de mercenarios o de bandidos a menos de la media de los dos diámetros de `TAMANOS_MAPA`). La madre ha de tener nivel operativo ≥ 2 y cupo. La obra queda **«pendiente de materiales»** (no se ve como puesto, no se ataca, no ve, ocupa cupo), no cobra nada al almacén y no pasa por la cola de construcción.
+> - **Colocar** (`ColocarAvanzada { asentamiento, heroe, posicion }`, 106): el Gobernador o el Maestro de Obras de la madre, que reside en ella y está **dentro** (como al marcar la aldea, desde el 2026-11-04; antes con su columna en el sitio; o la administración), la marca en tierra firme (`avanzada.fuera_del_sitio`), dentro de la zona real de la madre, con ruta por tierra hasta ella (`avanzada.sin_ruta`), lejos de su ciudad (`avanzada.dentro_del_asentamiento`: a menos de `AVANZADAS.distanciaALaMadre`, 15 u, de su centro, desde el 2026-11-23) ni sobre otro elemento del mapa (`avanzada.pisa_otro_elemento`: otra avanzada en cualquier estado, un pueblo, una aldea o un campamento de mercenarios o de bandidos a menos de la suma de los dos radios de `TAMANOS_MAPA`, con la ciudadela para toda avanzada y la aldea de nivel 3 para toda aldea). La madre ha de tener nivel operativo ≥ 2 y cupo. La obra queda **«pendiente de materiales»** (no se ve como puesto, no se ataca, no ve, ocupa cupo), no cobra nada al almacén y no pasa por la cola de construcción.
 > - **Entregar** (`EntregarMaterialesAAvanzada { ejercito, avanzada }`, 107): con la columna a la puerta de la obra y de la misma Facción, y dada por un héroe de la columna ciudadano de esa Facción (como en un pueblo), lo que lleva su carro y sus caravanas adjuntas, recurso a recurso, como en un pueblo. Con todo entregado arranca la obra y su **fin tiene cita propia** (`SucesoCombate::FinObraAvanzada`, ligada a la avanzada —`entidad_obra_de_avanzada`—, prioridad 1, en su instante exacto: no espera al paso de minuto).
 > - **Mejorar** (108) y **reparar** (109) son la misma obra con otro coste: pasar a la etapa siguiente (a nivel de la madre suficiente) o reparar unas ruinas de fuerte o ciudadela (la mitad del coste de la etapa, la duración entera). Mientras se mejora la avanzada sigue funcionando; mientras se repara sigue en ruinas. Un ataque que la derriba pierde la obra. **Cancelar** (`CancelarObraDeAvanzada { heroe, avanzada }`, 116): la mejora o la reparación, pendiente de materiales o ya en marcha, se abandona **sin reembolso** (lo entregado se pierde) y la avanzada sigue como estaba (operativa en su etapa, o en ruinas). Rechazos: `avanzada.nada_que_cancelar` (sin obra, o la primera, que se cancela destruyendo la avanzada), `avanzada.desconocida`, `no_autorizado`. Su cita de fin deja de ser vigente (sube la generación de la entidad de su obra: lo mismo que pasa al destruir la avanzada, derribarla un ataque o caer su madre) y el hecho es `avanzada.obra_cancelada` (avanzada, tipo).
 > - **Destruir a mano** (110): atalaya y fuerte, también si solo es una obra pendiente; la ciudadela no. No recupera nada.
@@ -2653,12 +2661,13 @@ Los bloques de parámetros de este documento venían del motor TypeScript. Valor
 
 | Parámetro | Bloque (TypeScript) | Vigente |
 |---|---|---|
-| `ZONA_INFLUENCIA.radioInicial` | 30 | **12** (6 hasta el 2026-11-05) |
-| `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **20 / 30 / 40 / 50 / 60** (10 / 15 / 20 / 25 / 30 hasta el 2026-11-05) |
+| `ZONA_INFLUENCIA.radioInicial` | 30 | **24** (12 hasta el 2026-11-23; 6 hasta el 2026-11-05) |
+| `ZONA_INFLUENCIA.radioMaximoPorNivel` | 60 / 90 / 120 / 150 / 180 | **30 / 50 / 70 / 80 / 90** (20 / 30 / 40 / 50 / 60 hasta el 2026-11-23; 10 / 15 / 20 / 25 / 30 hasta el 2026-11-05) |
 | `ZONA_INFLUENCIA.crecimientoPorEdificioCompletado` | 5 | **2** (1 hasta el 2026-11-05) |
-| `FUNDACION.separacionPlazas` | — | **20** (Doc 1.0a; 30 hasta el 2026-11-04, 10 ese día; en el bloque desde entonces) |
+| `FUNDACION.separacionPlazas` | — | **60** (desde el 2026-11-23; Doc 1.0a; 20 desde el 2026-11-05, 30 hasta el 2026-11-04, 10 ese día; en el bloque desde entonces) |
+| `FUNDACION.distanciaMinimaANodo` | — | **12** (nuevo el 2026-11-23) |
 | `ZONA_INFLUENCIA.cuotaParcelasPorAsentamiento` | — | **se borra** (2026-11-06, decisión del autor: la frontera entre zonas ya reparte el bosque; antes 50 %, en el bloque desde el 2026-11-04) |
-| `MERCENARIOS.radioExclusionFundar` | 100 | **20** |
+| `MERCENARIOS.radioExclusionFundar` | 100 | **60** (20 hasta el 2026-11-23) |
 | `ESCALA` / `radioUrbanoDe` | existían | **se borran**: el espacio local y el del mapa son independientes (Doc 1.0a). La ciudad usa su propio `radioCiudad` (30, +5 por edificio, máximos 60-180; `Trazado_Urbano.md`) |
 | `MANTENIMIENTO.escalaDistancia` | 400 | **300**, ya en el bloque desde el 2026-10-26 (80 hasta el 2026-10-25; P1 del batch político) |
 | `LINEAS_PRODUCCION` | 25 / 150 / 90 | **se elimina** (decisión previa del autor) |

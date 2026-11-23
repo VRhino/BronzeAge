@@ -358,3 +358,18 @@ fn una_plaza_apuntada_como_quieta_es_un_candidato_fijo_de_una_columna_que_pasa()
     assert!(rej.encuentros_de(2, &acampada_junto, 3_000, Entradas::Nuevas).is_empty());
     assert_eq!(rej.encuentros_de(2, &acampada_junto, 3_000, Entradas::Todas).len(), 1);
 }
+
+#[test]
+fn con_huella_el_encuentro_se_mide_desde_el_contorno() {
+    // Una plaza quieta de 5 u de radio en (20, 0) y una columna que pasa por y = 5,5: a 1 u de radio, solo la encuentra desde su contorno.
+    let mut rej = Rejilla::nueva(50_000, 300_000, 15_000);
+    let plaza = crate::plan_quieto(Punto::new(20_000, 0), 0, 0);
+    let paso = Plan::nuevo(1, vec![Vertice { p: Punto::new(0, 5_500), en: 0 }, Vertice { p: Punto::new(40_000, 5_500), en: 40_000 }]);
+    rej.apuntar(1, 0, &plaza);
+    rej.apuntar(2, 1, &paso);
+    assert!(rej.encuentros_de(2, &paso, 1_000, Entradas::Todas).is_empty(), "como un punto, no se encuentran");
+    rej.apuntar_con_huella(1, 0, &plaza, 5_000);
+    let e = rej.encuentros_de(2, &paso, 1_000, Entradas::Todas);
+    assert_eq!(e.len(), 1);
+    assert_eq!(e[0].otra, 1);
+}

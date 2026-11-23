@@ -183,3 +183,12 @@ Sistema 1 de la fase 6 (mundo y territorio) implementado; el informe de batch es
 - **Separación de metales aislados (`PARAMETROS_METALES.espacioAislado`):** bajada de 120 a 100 u porque con 64 de estaño (16 en frontera) la semilla 42 no admitía 16 nodos a 110. No está en el canon; si se cambia la semilla o el reparto por anillos, revisarla.
 - **Cobertura de metales por la población sintética (Fase 7):** estaño 67 / 38 / 0 % (foco / frontera / lejana) y oro 100 / 33 / 0 %: el batch nunca se aleja más de 120 u del campamento; el gradiente 5 / 25 / 70 se mide de verdad con los bots de la fase 7.
 - **Facciones sin plaza (26 %, Fase 7):** 400 Facciones sobre 9 campamentos saturan el foco (105 %); un jugador real buscaría más lejos. Vigilar con los bots.
+
+## Mapa: menos piedra y metal y plazas a 60 (2026-11-23)
+
+«Tamaños y distancias del mapa», tanda 1 (bloques A, B y D). Para vigilar en la partida nueva, sin batch todavía:
+
+- **Menos piedra, cobre y hierro:** los totales de partida entre 2,25 (semilla 42, `7160008d…`: 1.240 de piedra, 377 de cobre y 562 de hierro; antes 2.790, 843 y 1.265). La zona inicial de 24 u abarca cuatro veces más terreno que la de 12, así que una plaza nueva debería ver más o menos lo mismo, pero el reparto entre plazas y el ritmo de la piedra en la construcción no se han medido.
+- **Cuatro veces más tierra al nacer:** con la zona inicial de 24 u la plaza nueva tiene unas cuatro veces más parcelas de bosque y tierra fértil que antes. El crecimiento por edificio sigue en 2: del inicial al techo del nivel 1 bastan 3 edificios.
+- **Plazas a 60 y campamentos a 60:** menos sitio para fundar junto a cada campamento; con 400 Facciones sobre 9 campamentos (Fase 7) ya había un 26 % sin plaza. Vigilar con los bots.
+- **Nada a menos de 12 u de un nodo:** cuánta tierra fundable queda con los nodos nuevos no está medido.

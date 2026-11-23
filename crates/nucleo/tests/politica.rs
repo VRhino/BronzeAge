@@ -356,7 +356,7 @@ fn quien_deja_su_casa_dentro_sigue_de_visita_si_la_puerta_le_admite_y_si_no_sale
     let Ubicacion::Columna(c) = h.heroe.presencia.ubicacion else { panic!("sale al mapa: {:?}", h.heroe.presencia.ubicacion) };
     assert_eq!((h.heroe.residencia, suya(&e, bea, escuadras[1])), (Some(Residencia::Campamento(cercano)), Some(militar::escuadra::Contenedor::Campamento)));
     let col = &e.n.ejercito(c).unwrap().columna;
-    assert_eq!((col.escuadras.len(), col.faccion, e.n.ejercito(c).unwrap().posicion), (0, None, p));
+    assert_eq!((col.escuadras.len(), col.faccion, e.n.ejercito(c).unwrap().posicion), (0, None, e.n.al_borde(p)));
     let echada = e.hechos("heroe.expulsado").into_iter().find(|x| dato(x, "heroe") == bea as i64).expect("bea sale expulsada");
     assert_eq!((dato(&echada, "ejercito"), dato(&echada, "motivo")), (c as i64, 0));
     let abandonada = e.hechos("faccion.abandonada").into_iter().find(|x| dato(x, "heroe") == bea as i64).unwrap();
@@ -498,7 +498,7 @@ fn la_politica_viaja_en_la_foto() {
     let e = guion(m, &|e, ms| e.avanzar(ms));
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN66");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.politica.clone(), s.hash()), (e.n.estado().politica.clone(), e.n.hash_estado()));
     assert!(s.politica.facciones.iter().count() == 2 && s.militar.heroes.values().any(|h| h.residencia_cambiada_en.is_some()));
@@ -617,7 +617,8 @@ fn la_distancia_a_la_capital_sube_el_mantenimiento_de_la_plaza_lejana() {
     let (vigente, sin_factor) = (lejana(None), lejana(Some(i64::MAX / 4)));
     assert!(vigente.is_some() && sin_factor.is_some(), "con 300 u la plaza lejana sigue en pie (P1)");
     assert!(vigente < sin_factor, "la plaza lejana paga ×(1 + d/300): {vigente:?} de madera frente a {sin_factor:?}");
-    assert!(lejana(Some(80_000)).is_none(), "con la escala de 80 u de antes caía en ruinas");
+    // Con las zonas de 24 u (2026-11-23) la plaza tiene más bosque: la escala de 80 u de antes ya no la tumba en dos días; una de 20 u, sí.
+    assert!(lejana(Some(20_000)).is_none(), "con una escala mucho más corta cae en ruinas");
 }
 
 /// El nombre: cada plaza nace con uno libre de la lista (`nombreDeCiudadLibre`); quien reside en ella lo cambia (recortado; vacío, sin nombre) y la ficha lo lleva.

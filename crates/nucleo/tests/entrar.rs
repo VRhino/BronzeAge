@@ -256,6 +256,7 @@ fn el_visitante_entra_con_todo_come_de_sus_viveres_y_sale_con_todo() {
     let soldados_de_la_plaza = e.n.soldados_del_campamento(a);
     let carga0 = e.ejercito(cb).columna.carga.clone();
     let viveres0 = e.viveres(cb);
+    let llego = e.ejercito(cb).posicion;
 
     e.ok("beto", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: b });
     // Todo lo suyo entra con él: la columna sigue siendo suya, dentro, fuera del mapa, con su tropa, su carro y sus víveres.
@@ -280,7 +281,7 @@ fn el_visitante_entra_con_todo_come_de_sus_viveres_y_sale_con_todo() {
     e.ok("beto", Comando::SalirDeAsentamiento { asentamiento: a, heroe: b });
     assert_eq!(e.n.heroe(b).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(cb));
     assert!(e.n.en_el_mapa(cb));
-    assert_eq!((e.ejercito(cb).columna.escuadras.clone(), e.ejercito(cb).columna.carga.clone(), e.ejercito(cb).posicion), (ids, carga0, e.plaza()));
+    assert_eq!((e.ejercito(cb).columna.escuadras.clone(), e.ejercito(cb).columna.carga.clone(), e.ejercito(cb).posicion), (ids, carga0, llego), "sale donde dejó la columna, en el contorno");
     assert_eq!(e.viveres(cb), dentro, "los víveres que quedaban");
 }
 
@@ -296,7 +297,7 @@ fn quien_entra_solo_sale_solo_y_el_rechazo_de_la_columna_aparcada_ya_no_existe()
     assert_eq!(e.n.heroe(h).unwrap().columna, None);
     e.ok("beto", Comando::SalirDeAsentamiento { asentamiento: a, heroe: h });
     let col = e.n.heroe(h).unwrap().columna.expect("nace una columna personal");
-    assert_eq!((e.n.heroe(h).unwrap().heroe.presencia.ubicacion, e.ejercito(col).posicion, e.ejercito(col).columna.tipo), (Ubicacion::Columna(col), e.plaza(), TipoColumna::Personal));
+    assert_eq!((e.n.heroe(h).unwrap().heroe.presencia.ubicacion, e.ejercito(col).posicion, e.ejercito(col).columna.tipo), (Ubicacion::Columna(col), e.n.al_borde(e.plaza()), TipoColumna::Personal));
     // Lo mismo en un campamento donde no reside: sale solo; y a quien no trajo nada no se le deja sacar tropa que no tiene aquí (su campamento está en su residencia).
     let z = e.ciudadano("zed", Some(1));
     e.ok("admin", Comando::FijarResidencia { heroe: z, residencia: None });
@@ -555,7 +556,7 @@ fn una_foto_con_el_acceso_cambiado_se_recupera_y_la_anterior_se_rechaza() {
     e.avanzar(HORA);
     e.ok("admin", comun::acceso(e.a, false, true, true));
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN66");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.asentamientos[&e.a].puerta.cerrada_a, Some(politica::Grupos::de([politica::Grupo::Aliados])));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));
@@ -568,7 +569,8 @@ fn al_arruinarse_la_plaza_el_visitante_sale_al_mapa_con_su_columna_y_su_carga_si
     let m = con_mundo!();
     let (mut e, c) = dos_plazas(m, 7);
     let a = e.a;
-    let pa = e.plaza();
+    // Donde estaba la plaza: sus ruinas no ocupan nada y quien sale sin columna nace en el centro.
+    let centro = e.plaza();
     // La plaza A no construye nada: sin madera para su mantenimiento acabará en ruinas.
     e.ok("admin", Comando::AlternarAutoConstruccion { asentamiento: a, pausada: true });
     let ana = e.residente("ana");
@@ -576,6 +578,8 @@ fn al_arruinarse_la_plaza_el_visitante_sale_al_mapa_con_su_columna_y_su_carga_si
     let (b, ids) = e.con_prestamo("beto", 1);
     e.ok("admin", Comando::DarAlmacenPersonal { heroe: b, recurso: Oro, cantidad: 30_000 });
     let cb = e.viaja_a_la_plaza("beto", b, &ids, &[(Oro, 20_000)], Politica::Rechazar);
+    // La columna se queda donde llegó, en el contorno de la plaza.
+    let pa = e.ejercito(cb).posicion;
     e.ok("beto", Comando::EntrarEnAsentamiento { asentamiento: a, heroe: b });
     let col = e.ok("ana", Comando::SalirAlMundo { asentamiento: a, heroe: ana, escuadras: vec![], carga: vec![] }).creadas[0];
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 40_000 });
@@ -600,7 +604,7 @@ fn al_arruinarse_la_plaza_el_visitante_sale_al_mapa_con_su_columna_y_su_carga_si
     // «ana» (residente) sale con una columna nueva que lleva su carro; su residencia pasa a la plaza hermana.
     let ha = e.n.heroe(ana).unwrap();
     let Ubicacion::Columna(nueva) = ha.heroe.presencia.ubicacion else { panic!("«ana» sale al mapa") };
-    assert_eq!((ha.heroe.residencia, e.ejercito(nueva).columna.carga.get(&Madera).copied(), e.ejercito(nueva).posicion, ha.carro.is_empty()), (Some(Residencia::Asentamiento(c as u32)), Some(40_000), pa, true));
+    assert_eq!((ha.heroe.residencia, e.ejercito(nueva).columna.carga.get(&Madera).copied(), e.ejercito(nueva).posicion, ha.carro.is_empty()), (Some(Residencia::Asentamiento(c as u32)), Some(40_000), centro, true));
     // Los dos salen al mapa; el fundador de la plaza, que reside en ella desde la fundación (5B) y está fuera en su columna, solo se muda.
     let reubicados = hechos(&e.n, "heroe.reubicado");
     assert!(reubicados.iter().all(|r| r.0 == ruina));
@@ -779,7 +783,7 @@ fn cerrar_la_puerta_saca_al_mapa_al_instante_y_con_todo_lo_suyo_a_quien_ya_no_pu
     let (res, _) = e.con_milicia("res");
     let sf = e.ciudadano("sf", Some(4));
     e.ok("admin", Comando::ColocarHeroe { heroe: sf, ubicacion: Ubicacion::Asentamiento(a as u32) });
-    let foto = |e: &Escenario, col: u64| (e.ejercito(col).columna.carga.clone(), e.ejercito(col).columna.escuadras.clone(), e.viveres(col));
+    let foto = |e: &Escenario, col: u64| (e.ejercito(col).columna.carga.clone(), e.ejercito(col).columna.escuadras.clone(), e.viveres(col), e.ejercito(col).posicion);
     let (f_ne, f_en) = (foto(&e, cne), foto(&e, cen));
     let dentro = |e: &Escenario, h: u64| e.n.heroe(h).unwrap().heroe.presencia.ubicacion == Ubicacion::Asentamiento(a as u32);
     assert!([al, ne, en, ci, sf, res].iter().all(|&h| dentro(&e, h)));
@@ -793,11 +797,11 @@ fn cerrar_la_puerta_saca_al_mapa_al_instante_y_con_todo_lo_suyo_a_quien_ya_no_pu
     for (h, col, antes) in [(ne, cne, f_ne), (en, cen, f_en)] {
         assert_eq!(e.n.heroe(h).unwrap().heroe.presencia.ubicacion, Ubicacion::Columna(col), "sale con la columna con la que entró");
         assert!(e.n.en_el_mapa(col));
-        assert_eq!((foto(&e, col), e.ejercito(col).posicion), (antes, e.plaza()), "con la tropa, el carro y los víveres de antes, a la puerta");
+        assert_eq!(foto(&e, col), antes, "con la tropa, el carro y los víveres de antes, a la puerta, donde dejó la columna");
     }
     let hs = e.n.heroe(sf).unwrap();
     let Ubicacion::Columna(nueva) = hs.heroe.presencia.ubicacion else { panic!("sale al mapa: {:?}", hs.heroe.presencia.ubicacion) };
-    assert_eq!((hs.columna, e.ejercito(nueva).columna.faccion, e.ejercito(nueva).columna.tipo, e.ejercito(nueva).posicion), (Some(nueva), Some(4), TipoColumna::Personal, e.plaza()));
+    assert_eq!((hs.columna, e.ejercito(nueva).columna.faccion, e.ejercito(nueva).columna.tipo, e.ejercito(nueva).posicion), (Some(nueva), Some(4), TipoColumna::Personal, e.n.al_borde(e.plaza())));
     let echados = hechos(&e.n, "heroe.expulsado");
     assert_eq!(echados.iter().map(|h| dato(h, "heroe")).collect::<Vec<_>>(), vec![ne as i64, en as i64, sf as i64], "por id, en el mismo instante");
     assert!(echados.iter().all(|h| (h.0, h.1.clone(), dato(h, "lugar"), dato(h, "sitio"), dato(h, "motivo")) == (t, vec![a], 0, a as i64, 0)));
@@ -904,7 +908,7 @@ fn el_desalojo_de_una_conquista_cumple_el_canon_el_defensor_sale_con_lo_que_uso_
     // 1. Cada héroe defensor queda fuera, en el mundo, con las escuadras que usó en la batalla (las que sobrevivieron), en su propia columna y con su carro.
     let ha = e.n.heroe(ana).unwrap();
     let Ubicacion::Columna(sale) = ha.heroe.presencia.ubicacion else { panic!("«ana» queda fuera: {:?}", ha.heroe.presencia.ubicacion) };
-    assert_eq!((e.ejercito(sale).columna.escuadras.clone(), e.ejercito(sale).posicion, e.ejercito(sale).columna.faccion), (vec![milicia], e.plaza(), Some(1)));
+    assert_eq!((e.ejercito(sale).columna.escuadras.clone(), e.ejercito(sale).posicion, e.ejercito(sale).columna.faccion), (vec![milicia], e.n.al_borde(e.plaza()), Some(1)));
     let usada = e.escuadra(ana, milicia);
     assert!(usada.cantidad > 0 && usada.cantidad < 25 && usada.contenedor == Contenedor::Ejercito(sale), "sobrevivió con bajas y va en su columna: {usada:?}");
     assert!(e.n.heroe_herido(ana), "los defensores en persona quedan heridos");
@@ -1086,4 +1090,33 @@ fn el_ejercito_de_visita_en_un_campamento_se_desarma_y_su_heroe_compra_y_reposta
     let r = e.ok("ana", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: Politica::Aceptar, caravana_fundacion: None });
     assert!(r.creadas.is_empty());
     assert_eq!((e.n.heroe(h).unwrap().heroe.presencia.ubicacion, e.ejercito(ej).columna.carga.get(&Cobre).copied()), (Ubicacion::Columna(ej), Some(7_000)));
+}
+
+#[test]
+fn la_puerta_es_todo_el_contorno_de_la_plaza_y_crece_con_su_nivel() {
+    // Tamaños y distancias del mapa, bloque C (2026-11-23): a la puerta es a `radioPuerta` (1 u) o menos del borde, por cualquier lado.
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, centro) = (e.a, e.plaza());
+    let puerta = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
+    let a_la_puerta = |e: &mut Escenario, dx: i64, dy: i64| {
+        let t = e.n.ahora();
+        let col = e.n.crear_ejercito(t, "leo", 1, Punto::new(centro.x + dx, centro.y + dy), 500, 100_000).unwrap();
+        let lider = e.ejercito(col).columna.lider;
+        e.n.lugar_de_repostar(lider) == Some(Ubicacion::Asentamiento(a as u32))
+    };
+    for nivel in [1, 3] {
+        if nivel > 1 {
+            e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel });
+        }
+        let r = e.n.radio_de_plaza(&e.n.estado().asentamientos[&a]);
+        assert_eq!(r, e.n.radio_en(centro));
+        for (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1)] {
+            assert!(a_la_puerta(&mut e, dx * (r + puerta), dy * (r + puerta)), "nivel {nivel}: a 1 u del borde, por ({dx}, {dy})");
+            assert!(!a_la_puerta(&mut e, dx * (r + puerta + 10), dy * (r + puerta + 10)), "nivel {nivel}: un poco más allá, no");
+        }
+    }
+    // La plaza de nivel 3 es más grande que la de nivel 1, y sale por su contorno.
+    assert!(e.n.radio_en(centro) > e.n.estado().reglas.economia.datos.tamanos.plaza(1, false));
+    assert_eq!(e.n.al_borde(centro).dist(centro), e.n.radio_en(centro));
 }

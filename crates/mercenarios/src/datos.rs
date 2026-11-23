@@ -66,7 +66,7 @@ pub enum Admite {
     GuardarObjetivo,
     IrA,
     Atacar,
-    /// `atacar` de lo que esté a ≤ `radioDefensa` del objetivo del contrato.
+    /// `atacar` de lo que esté a ≤ `radioDefensa` del objetivo del contrato (de una plaza, el núcleo lo mide desde el borde de su zona: 2026-11-23).
     AtacarEnRadio,
     Unirse,
 }

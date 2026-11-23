@@ -139,6 +139,36 @@ impl Camino {
     pub fn a_plan(&self, salida: Instante, velocidad: Mil, generacion: u32) -> Plan {
         a_plan(self, salida, velocidad, generacion)
     }
+
+    /// El camino hasta donde entra por primera vez en el disco de `centro` y `radio` (el contorno de un lugar del mapa: Tamaños y distancias del
+    /// mapa, bloque C, 2026-11-23): el último tramo se corta en el punto del contorno por donde llega, con su coste en proporción. Un origen ya dentro
+    /// del disco (a `radio` o menos) deja solo el origen. Sin entrar en el disco, el camino tal cual. Los `nodos` se quedan con los de antes del corte.
+    pub fn hasta_el_contorno(mut self, centro: Punto, radio: Mil) -> Camino {
+        let dentro = |p: Punto| p.dist2(centro) <= (radio as i128) * (radio as i128);
+        let Some(&origen) = self.puntos.first() else { return self };
+        if dentro(origen) {
+            return Camino { puntos: vec![origen], costes: vec![], nodos: vec![], espaciado: self.espaciado };
+        }
+        let Some(k) = (0..self.puntos.len().saturating_sub(1)).find(|&k| dentro(self.puntos[k + 1])) else { return self };
+        let (a, b) = (self.puntos[k], self.puntos[k + 1]);
+        // Bisección sobre la fracción del tramo, en millonésimas: `a` queda fuera y `b` dentro.
+        let en = |f: i64| Punto::new(a.x + ((b.x - a.x) as i128 * f as i128 / 1_000_000) as i64, a.y + ((b.y - a.y) as i128 * f as i128 / 1_000_000) as i64);
+        let (mut fuera, mut entra) = (0i64, 1_000_000i64);
+        while entra - fuera > 1 {
+            let m = (fuera + entra) / 2;
+            if dentro(en(m)) { entra = m } else { fuera = m }
+        }
+        let corte = en(entra);
+        let coste = (self.costes.get(k).copied().unwrap_or(0) as i128 * entra as i128 / 1_000_000) as i64;
+        self.puntos.truncate(k + 1);
+        self.costes.truncate(k);
+        if corte != a {
+            self.puntos.push(corte);
+            self.costes.push(coste);
+        }
+        self.nodos.truncate(k);
+        self
+    }
 }
 
 /// Convierte un camino en plan. El instante de cada vértice es `salida + redondeo(coste_acumulado × espaciado / velocidad)`

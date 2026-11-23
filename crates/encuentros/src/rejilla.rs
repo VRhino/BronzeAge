@@ -70,6 +70,8 @@ struct Indice {
 
 struct Apunte {
     generacion: u32,
+    /// El radio de lo que ocupa en el mapa (una plaza, una avanzada); 0 si es un punto. Se suma al radio del encuentro.
+    huella: Mil,
     tramos: Vec<Tramo>,
     indice: Indice,
 }
@@ -111,6 +113,12 @@ impl Rejilla {
 
     /// Apunta (o reapunta, quitando antes lo anterior) los tramos del plan de la entidad.
     pub fn apuntar(&mut self, entidad: u64, generacion: u32, plan: &Plan) {
+        self.apuntar_con_huella(entidad, generacion, plan, 0);
+    }
+
+    /// Como [`Rejilla::apuntar`], para algo que ocupa un disco de radio `huella` (Tamaños y distancias del mapa, bloque C, 2026-11-23): los
+    /// encuentros con ello se miden desde su contorno, no desde su centro. `huella` más el radio de la consulta no puede pasar del `margen`.
+    pub fn apuntar_con_huella(&mut self, entidad: u64, generacion: u32, plan: &Plan, huella: Mil) {
         self.quitar(entidad);
         let tramos = tramos_de(plan);
         let indice = self.indexar(&tramos);
@@ -123,7 +131,12 @@ impl Rejilla {
         for &k in &indice.fijas {
             self.fijos.entry(k).or_default().push(entidad);
         }
-        self.apuntes.insert(entidad, Apunte { generacion, tramos, indice });
+        self.apuntes.insert(entidad, Apunte { generacion, huella, tramos, indice });
+    }
+
+    /// El radio con que está apuntada la entidad (0 si es un punto); `None` si no está.
+    pub fn huella(&self, entidad: u64) -> Option<Mil> {
+        self.apuntes.get(&entidad).map(|a| a.huella)
     }
 
     pub fn quitar(&mut self, entidad: u64) {
@@ -139,15 +152,17 @@ impl Rejilla {
     }
 
     /// Primer acercamiento a ≤ `radio` de `entidad` (con el plan dado, esté o no apuntado ya) con cada candidata, por
-    /// instante y luego por entidad. `radio` no puede pasar del `margen` de la rejilla.
+    /// instante y luego por entidad; desde el contorno de cada una si tiene huella. `radio` con las huellas no puede pasar del `margen` de la rejilla.
     pub fn encuentros_de(&self, entidad: u64, plan: &Plan, radio: Mil, entradas: Entradas) -> Vec<Encuentro> {
-        assert!(radio <= self.margen, "radio {radio} mayor que el margen de la rejilla ({})", self.margen);
+        let mia = self.apuntes.get(&entidad).map_or(0, |a| a.huella);
         let mios = tramos_de(plan);
         let mut v: Vec<Encuentro> = self
             .buscar(entidad, &self.indexar(&mios))
             .into_iter()
             .filter_map(|otra| {
                 let a = &self.apuntes[&otra];
+                let radio = radio + mia + a.huella;
+                assert!(radio <= self.margen, "radio {radio} mayor que el margen de la rejilla ({})", self.margen);
                 let instante = primer_cruce(&mios, &a.tramos, radio, entradas)?;
                 let (pa, pb) = (posicion(&mios, instante), posicion(&a.tramos, instante));
                 Some(Encuentro { otra, otra_generacion: a.generacion, instante, punto: Punto::new((pa.x + pb.x) >> 1, (pa.y + pb.y) >> 1) })
@@ -160,7 +175,8 @@ impl Rejilla {
     /// Primer instante `>= desde` en que `a` y `b` (ya apuntadas) quedan a **más** de `radio`, estando a ≤ radio en `desde`: «la presa sale de la
     /// vista». Si ya no lo están en `desde`, `desde`. `None` si no se separan mientras duran sus planes, o si alguna no está apuntada.
     pub fn primera_salida(&self, a: u64, b: u64, radio: Mil, desde: Instante) -> Option<Instante> {
-        primera_salida(&self.apuntes.get(&a)?.tramos, &self.apuntes.get(&b)?.tramos, radio, desde)
+        let (a, b) = (self.apuntes.get(&a)?, self.apuntes.get(&b)?);
+        primera_salida(&a.tramos, &b.tramos, radio + a.huella + b.huella, desde)
     }
 
     fn buscar(&self, yo: u64, ix: &Indice) -> Vec<u64> {

@@ -204,7 +204,7 @@ fn madera_potencial(mapa: &Mapa, p: Punto) -> Mil {
 fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64, pendiente: Mil) -> (Vec<(Punto, bool)>, u32) {
     let mut rng = Rng::derivado(semilla, "poblacion");
     let r = &mapa.reglas;
-    let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento };
+    let dist = DistanciasDeFundacion { separacion_plazas: r.separacion_plazas, exclusion_campamento: r.exclusion_campamento, distancia_nodo: r.distancia_nodo };
     let (mut discos, mut puntos, mut sin_colocar) = (Vec::<Disco>::new(), Vec::new(), 0);
     for i in 0..plazas {
         let centro = mapa.campamentos[i as usize % mapa.campamentos.len()];
@@ -215,7 +215,7 @@ fn colocar(mundo: &Mundo, mapa: &Mapa, plazas: u32, semilla: u64, pendiente: Mil
                 let radio = (ANILLO_CAMPAMENTO.0 + rng.por_debajo((ANILLO_CAMPAMENTO.1 - ANILLO_CAMPAMENTO.0) as u64) as i64) as f64;
                 let ang = (rng.por_debajo(360_000) as f64 / 1000.0).to_radians();
                 let p = Punto::new(centro.x + (radio * ang.cos()) as i64, centro.y + (radio * ang.sin()) as i64);
-                if territorio::validar(p, terreno(mundo, p, pendiente), &discos, mapa.campamentos.iter().copied(), &dist).is_err() {
+                if territorio::validar(p, terreno(mundo, p, pendiente), &discos, mapa.campamentos.iter().copied(), mapa.nodos.iter().map(|n| n.pos), &dist).is_err() {
                     continue;
                 }
                 // No se funda a ciegas (decidido el 2026-10-18): sin madera potencial suficiente a 10 u (`MADERA_MINIMA_POTENCIAL`) la plaza cae en ruinas.
@@ -292,7 +292,7 @@ fn paso(v: &mut Villa, indice: u32, minuto: i64, re: &ReglasEconomia, mapa: &Map
     if minuto % CADA_MIN_ASCENSO == 0 && !a.pueblos.iter().any(|p| p.es_aldea()) {
         let carro = comercio::acarreo::coste_reposicion(&re.comercio.flota);
         let coste = Asentamiento::costo_de_aldea(reglas, &carro);
-        let sitio = Punto::new(pos.x + reglas.pueblos.aldea.separacion_minima + 500, pos.y);
+        let sitio = Punto::new(pos.x + reglas.pueblos.aldea.separacion_a_plaza + 500, pos.y);
         if a.almacen.tiene(&coste) && a.iniciar_aldea(reglas, ID_ALDEA, sitio, UNO, Cultivo::Trigo, a.nivel, &carro, &mut ev).is_ok() {
             a.almacen.pagar(&coste);
             let requerido = a.pueblo(ID_ALDEA).expect("recién marcada").falta();

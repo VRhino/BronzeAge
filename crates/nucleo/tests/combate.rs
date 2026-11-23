@@ -504,7 +504,7 @@ fn el_estado_del_combate_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     base.combate.encuentros.insert((1, 2), vec![300, 400]);
     base.combate.encuentros.insert((2, 5), vec![500]);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN66");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -835,7 +835,7 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     assert_eq!(h.heroe.residencia, Some(Residencia::Campamento(campamento_mas_cercano(&m.0, s.e.pos(b)))));
     let Ubicacion::Columna(salida) = h.heroe.presencia.ubicacion else { panic!("sale a la calle: {:?}", h.heroe.presencia.ubicacion) };
     let col = s.e.n.ejercito(salida).unwrap();
-    assert_eq!((col.columna.faccion, col.columna.participantes.len(), col.posicion), (Some(2), 1, s.e.pos(b)));
+    assert_eq!((col.columna.faccion, col.columna.participantes.len(), col.posicion), (Some(2), 1, s.e.n.al_borde(s.e.pos(b))));
     assert_eq!(col.columna.escuadras.len(), 1);
     assert!(s.e.n.soldados_de_columna(salida).unwrap() > 0 && col.columna.carga.is_empty());
     assert_eq!(hechos(&s.e.n, "heroe.desalojado").len(), 2, "beto y el fundador, que reside en ella desde la fundación (5B)");
@@ -1186,7 +1186,7 @@ fn con_pueblo(m: &M, semilla: u64) -> (Esc, u64) {
     ricos.sort_by_key(|&i| std::cmp::Reverse(mapa.nodos[i].inicial));
     let (cobre, sitio) = ricos
         .into_iter()
-        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 13_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     let a = fundar(&mut n, 0, "m", "ana", 1, sitio);
     let mut e = Esc { n, a, b: 0, cuenta: 0, fijo: None };
@@ -1689,7 +1689,12 @@ fn una_caravana_que_cruza_el_radio_de_un_campamento_de_bandidos_es_acosada_en_es
 fn una_caravana_adjunta_a_un_ejercito_se_defiende_en_una_emboscada_con_bajas_y_si_gana_la_columna_el_campamento_cae() {
     let m = con_mundo!();
     for (tropas, cae) in [(&[Tropa::MiliciaLanceros][..], true), (&[Tropa::ArquerosCompuesto][..], false)] {
-        let mut e = montar_lejos(m, 7, true); // lejos, como en la anterior: el acoso es fuera de toda zona
+        // Lejos, como en la anterior: el acoso es fuera de toda zona. Sin los campamentos que levanta el sistema (anillo y por plaza): con las zonas de 24 u
+        // (2026-11-23) uno de ellos caía en el camino y emboscaba antes que el de la prueba.
+        let mut arr = arranque(m, 7);
+        let b = &mut std::sync::Arc::make_mut(&mut arr.reglas.economia.combate).bandidos;
+        (b.anillo_minimo, b.anillo_maximo, b.por_plaza) = (0, 0, 0);
+        let mut e = montar_en(Nucleo::nuevo(arr), m, true, 3);
         let (a, b) = (e.a, e.b);
         let ca = e.caravana("ana", a, 1);
         let col = e.ejercito("ana", 1, e.pos(a), tropas);
@@ -2036,4 +2041,20 @@ fn tras_la_convocatoria(n: &mut Nucleo) {
     if let Some(h) = fin {
         n.avanzar_hasta(h);
     }
+}
+
+#[test]
+fn a_una_plaza_se_la_ataca_desde_su_borde() {
+    // Tamaños y distancias del mapa, bloque C (2026-11-23): `radioEncuentro` se mide desde el contorno de la plaza, no desde su centro.
+    let m = con_mundo!();
+    let mut s = asedio(m, 7, &[], &[Tropa::EspadachinesBronce]);
+    let b = s.e.b;
+    let (centro, radio) = (s.e.pos(b), s.e.n.radio_en(s.e.pos(b)));
+    let alcance = s.e.n.estado().reglas.economia.militar.logistica.radio_encuentro;
+    assert!(radio > 0);
+    // El ayudante pone la columna 1 u al este del punto que se le da.
+    let junto = s.e.ejercito("cai", 1, Punto::new(centro.x + radio + alcance - 1_000, centro.y), &[Tropa::EspadachinesBronce]);
+    let lejos = s.e.ejercito("dan", 1, Punto::new(centro.x + radio + alcance - 1_000 + 10, centro.y), &[Tropa::EspadachinesBronce]);
+    assert_eq!(codigo(&s.e.atacar("cai", junto.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::GUERRA_CONFIRMAR, "a su alcance del borde: solo falta la guerra");
+    assert_eq!(codigo(&s.e.atacar("dan", lejos.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::COMBATE_LEJOS, "un poco más allá, lejos");
 }

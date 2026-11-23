@@ -30,6 +30,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 75 | MILITAR / HÉROE | Estandartes y aspecto de las escuadras (D20, 2026-11-12): un tipo de objeto `estandarte`, su sitio en la escuadra y una orden para elegirlo, cuando haya estandartes en el catálogo y arte. Sección «75» | `SquadSnapshot.estandarte` y `aspecto` viajan vacíos |
 | 76 | BOTS / ADMIN | Lo que piden la clase y los objetos del héroe a BotsBrain y al AdminClient (D21, 2026-11-12). Sección «76» | el motor rechaza un héroe sin clase |
 | 78 | BATALLA / MUNDO | Campo de batalla del lugar (diseño de Conquest del 2026-11-22, en `Docs/Design/Campo_De_Batalla_Del_Lugar.md` de Conquest; aquí solo lo que toca al motor): el mapa interior de la batalla sale del punto del mundo (relieve, río y vado, costa, bosque, caminos), con escala interna de 8 u por 600 m. El vado es el único paso y el único efecto nuevo. Sección «78» | el ticket trae `mapa_referencia{mapa_id, centro}`, pero Conquest lo ignora y carga siempre el mismo campo plano |
+| 79 | MUNDO / REGLAS | Tamaños y distancias del mapa (diseño del 2026-11-23; `Docs/Disenos_Por_Implementar/Tamanos_Y_Distancias_Del_Mapa.md`): el motor es dueño del tamaño de cada elemento del mapa (la plaza, fija por nivel), zonas y separaciones mayores, la separación de aldea en dos datos, regla nueva plaza-nodo a 12 u, la puerta por todo el contorno a 1 u del borde, menos nodos en el generador y rutas que rodean las plazas. Pide mundo nuevo y partida nueva. Sección «79» | **Tanda 1 (bloques A, B y D) implementada el 2026-11-23** (nucleo 0.54.0, mundo `7160008d…`): tamaños reales, zonas 24-90, plazas y campamentos a 60, nodo a 12, aldea 15 / 7,5, avanzada a 15 de la madre y menos nodos. **Tanda 2 (C) implementada el 2026-11-23** (nucleo 0.55.0): la puerta es todo el contorno, a 1 u del borde; la marcha acaba en el contorno, la salida nace en el borde y se ataca desde el borde. Falta E (rutas que rodean las plazas): una columna de paso todavía cruza la plaza por encima |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -268,3 +269,19 @@ Lo que toca al motor:
 
 - `BattleMapReference` gana un `RecorteDelLugar` de unas 13 u de lado alrededor de `centro`: alturas del relieve cada 0,5 u con su bit de agua, las celdas de terreno, bosque y humedad, los trozos de río con sus vados, los tramos de camino con su escalón y la `procedencia` de cada bando.
 - Para más adelante: `centro` y el mismo recorte en `SettlementBattleSnapshot`, cuando los asedios entren.
+
+## 79. Tamaños y distancias del mapa (diseño del 2026-11-23)
+
+Diseño: `Docs/Disenos_Por_Implementar/Tamanos_Y_Distancias_Del_Mapa.md`. Sale de la escena «Distancias de plaza» de Conquest, donde el autor comparó las distancias del motor con el tamaño real de las maquetas. Pide mundo nuevo y partida nueva.
+
+Cinco bloques, en este orden:
+
+- **A, tamaños:** `TAMANOS_MAPA` con el tamaño real de cada elemento; la plaza, fija por nivel y con o sin muralla, deja de ser una fracción de la zona.
+- **B, colocación:** zona 24 u al fundar y techos 30 / 50 / 70 / 80 / 90; plazas a 60 u; mercenarios a 60 u; orilla de la plaza 15 u; la separación de aldea en dos datos (a plaza 15 u, a otro pueblo 7,5 u); ningún nodo a menos de 12 u de una plaza al fundar; avanzada a 15 u o más de su madre; orilla de pueblo, aldea y avanzada a su tamaño real.
+- **D, generador:** piedra, cobre e hierro de base entre 2,25 y 6 u entre nodos de distinto tipo.
+- **C, puerta:** todo el contorno, a 1 u del borde; la marcha a un asentamiento acaba en el borde y la salida nace en él.
+- **E, rutas:** las columnas y los ejércitos rodean todas las plazas y solo las cruzan si no hay otro camino; las caravanas comerciales las atraviesan con parada dentro (fuera del mapa, peaje en las ajenas, mínimo de 2 min en toda estancia en una plaza) y el carro de acarreo entra en su plaza. Cambia, solo para las plazas, la decisión del 2026-10-27 de que los elementos del mapa no estorban (rehecho con el autor el 2026-11-23).
+
+## 80. Rutas compuestas (diseño del 2026-11-23)
+
+Diseño: `Docs/Disenos_Por_Implementar/Rutas_Compuestas.md`. El encargo de transporte (`Comercio_Caravanas.md` §5.8) pasa de dos paradas a un circuito de hasta 5 que cierra el círculo (A → B → C → A). En cada parada primero deja, y solo lo recogido en otra parada, y luego recoge. Se valida el peor tramo contra la capacidad, lo que sobra sigue a bordo y las paradas ajenas comercian en su mercado. Va después del bloque E de la entrada 79, que pone las escalas.

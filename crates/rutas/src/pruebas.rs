@@ -549,3 +549,22 @@ fn mundo_real_las_rutas_cruzan_los_rios_por_el_punto_del_vado() {
     eprintln!("{} vados, {con_dos_orillas} con las dos orillas, {cruces} cruces probados, {por_el_vado} rutas por el punto de un vado", vados.len());
     assert!(con_dos_orillas * 4 >= vados.len() * 3, "la mayoría de los vados unen sus dos orillas");
 }
+
+#[test]
+fn el_camino_se_corta_donde_entra_en_el_contorno() {
+    let p = |x: i64, y: i64| Punto::new(x, y);
+    let camino = Camino { puntos: vec![p(0, 0), p(10_000, 0), p(20_000, 0)], costes: vec![10_000, 10_000], nodos: vec![7], espaciado: 1_000 };
+    // Un disco de 3 u en (20, 0): la ruta llega por el oeste y acaba a 3 u del centro, con el coste del último tramo en proporción.
+    let c = camino.clone().hasta_el_contorno(p(20_000, 0), 3_000);
+    assert_eq!(c.puntos.len(), 3);
+    assert!((c.puntos[2].dist(p(20_000, 0)) - 3_000).abs() <= 1, "{:?}", c.puntos);
+    assert!((c.costes[1] - 7_000).abs() <= 1, "{:?}", c.costes);
+    assert_eq!(c.nodos, vec![7]);
+    // Si entra en un tramo anterior, se queda ahí.
+    let c = camino.clone().hasta_el_contorno(p(12_000, 0), 4_000);
+    assert_eq!((c.puntos.len(), c.costes.len(), c.nodos.len()), (2, 1, 0));
+    assert!((c.puntos[1].x - 8_000).abs() <= 1);
+    // Ya dentro: solo el origen. Sin tocar el disco: tal cual.
+    assert_eq!(camino.clone().hasta_el_contorno(p(1_000, 0), 2_000).puntos, vec![p(0, 0)]);
+    assert_eq!(camino.clone().hasta_el_contorno(p(0, 50_000), 2_000), camino);
+}

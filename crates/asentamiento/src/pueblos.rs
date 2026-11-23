@@ -129,8 +129,11 @@ pub struct ReglasAldea {
     pub nivel_madre_minimo: u32,
     /// Fertilidad mínima del terreno en el punto (ppm).
     pub fertilidad_minima: i64,
-    /// Distancia mínima (milésimas de unidad) hasta cualquier otro pueblo.
-    pub separacion_minima: Mil,
+    /// Distancia mínima (milésimas de unidad) del punto al centro de toda plaza (`separacionAPlaza`: 15 u, la reserva de la plaza de nivel 5).
+    pub separacion_a_plaza: Mil,
+    /// Distancia mínima a todo otro pueblo, extractor o aldea, de cualquier Facción (`separacionAPueblo`: 7,5 u, dos aldeas de nivel 3).
+    /// Decisión del autor del 2026-11-23: antes un solo dato (`separacionMinima`, 3 u) hacía los dos trabajos.
+    pub separacion_a_pueblo: Mil,
     /// Guarnición de serie: granjeros sin dueño de la IA, fuera de cupo (se reponen al ritmo de los mineros).
     pub granjeros: u32,
     pub niveles: BTreeMap<u32, NivelAldea>,
@@ -210,7 +213,8 @@ impl ReglasPueblos {
         let aldea = ReglasAldea {
             nivel_madre_minimo: num(&b["nivelMadreMinimo"], "aldea") as u32,
             fertilidad_minima: ppm(num(a, "fertilidadMinima")),
-            separacion_minima: mil(num(a, "separacionMinima")),
+            separacion_a_plaza: mil(num(a, "separacionAPlaza")),
+            separacion_a_pueblo: mil(num(a, "separacionAPueblo")),
             granjeros: num(&a["granjeros"], "escuadra") as u32,
             niveles: a["niveles"]
                 .as_object()
@@ -839,7 +843,7 @@ mod pruebas {
         assert_eq!(r.cupo_por_nivel.values().copied().collect::<Vec<_>>(), vec![2, 3, 4, 5, 6]);
         assert_eq!(r.coste_adicional, vec![(Recurso::Madera, 50_000)]);
         let a = &r.aldea;
-        assert_eq!((a.nivel_madre_minimo, a.fertilidad_minima, a.separacion_minima, a.granjeros, a.nivel_maximo()), (1, 300_000, 3_000, 30, 3));
+        assert_eq!((a.nivel_madre_minimo, a.fertilidad_minima, a.separacion_a_plaza, a.separacion_a_pueblo, a.granjeros, a.nivel_maximo()), (1, 300_000, 15_000, 7_500, 30, 3));
         assert_eq!(a.niveles.values().map(|n| (n.granjas, n.corrales)).collect::<Vec<_>>(), vec![(2, 1), (4, 2), (6, 3)]);
         // Tanda 69 §12: la vid desde el nivel 3 de la madre y la oliva desde el 4, las dos sin corrales; la cebada desde el 3 y el sésamo desde el 4
         // (2026-11-09). Desde el 2026-11-11 el trigo va sin corrales y la ganadera, desde el nivel 1, lleva corrales y ninguna granja.

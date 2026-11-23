@@ -384,12 +384,17 @@ fn la_conquista_daña_un_30_por_ciento_el_anillo_completo_y_se_repara_sola_a_cos
     assert_eq!(codigo_de(&e.ord("ana", Comando::AbandonarRecinto { asentamiento: b, recinto: 1 })), rechazos::MURALLAS_YA_CERRADO);
     assert_eq!(codigo_de(&e.ord("ana", Comando::MejorarRecinto { asentamiento: b, cargo: Cargo::MaestroObras, recinto: 1 })), rechazos::MURALLAS_INCOMPLETO);
     // Se repara solo, una celda por cita, a costa de la plaza (el nuevo dueño), sin volver a anunciar el cierre.
-    // Se mide justo antes y en la cita: en los 15 minutos de antes las Leñeras producen más de lo que cuesta una celda.
+    // Se mide justo antes y en la cita: en los 15 minutos de antes las Leñeras producen más de lo que cuesta una celda. Con la zona de 24 u (2026-11-23) la plaza tiene
+    // más Leñeras y su paso de minuto, que cae en el mismo instante que la cita, también da madera: se descuenta lo que da un paso de minuto sin celda (el de justo antes).
+    e.hasta(t + 30_000 + 14 * MIN - 1);
+    let paso_antes = e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera);
+    e.hasta(t + 30_000 + 14 * MIN);
+    let produce = e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera) - paso_antes;
     e.hasta(t + 30_000 + 15 * MIN - 1);
     let madera = e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera);
     e.hasta(t + 30_000 + 15 * MIN);
     assert_eq!(e.recintos_de_b()[0].levantadas(), n - perdidas + 2, "la siguiente celda sale en su cita");
-    assert!(e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera) < madera, "la reparación cuesta materiales de la plaza");
+    assert!(e.n.economia(b).unwrap().almacen.cantidad(Recurso::Madera) < madera + produce, "la reparación cuesta materiales de la plaza");
     e.terminar(0);
     let rec = &e.recintos_de_b()[0];
     assert!(rec.completo() && rec.completado_en == completado_en && rec.siguiente_celda_en.is_none());

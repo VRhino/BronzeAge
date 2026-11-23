@@ -221,7 +221,7 @@ impl Nucleo {
             let c = self.quitar_fundacion(id).expect("existe");
             return self.hecho_de_fundacion(t, "fundacion.caravana_perdida", &c, vec![], vec![]);
         };
-        let camino = if desde.dist(hasta) <= self.radio_puerta() { Some(None) } else { self.camino_sin_red(desde, hasta).map(Some) };
+        let camino = if self.a_la_puerta(hasta, self.radio_en(hasta), desde) { Some(None) } else { self.camino_sin_red(desde, hasta).map(Some) };
         match camino {
             None => {
                 let c = self.quitar_fundacion(id).expect("existe");
@@ -355,7 +355,7 @@ impl Nucleo {
         if e.columna.faccion != c.faccion {
             return Err(rechazo(rechazos::CARAVANA_FACCION_AJENA, "la caravana es de otra Facción"));
         }
-        if !p.admin && e.posicion_en(t).dist(c.posicion) > self.radio_puerta() {
+        if !p.admin && !self.a_la_puerta(c.posicion, self.radio_en(c.posicion), e.posicion_en(t)) {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "el ejército no está a la puerta de donde está la caravana"));
         }
         // La lleva cualquier ejército de su Facción (decisión del autor del 2026-10-27): su titular sigue siéndolo si va en él; si no, lo pasa a ser el Líder que la engancha.
@@ -573,7 +573,7 @@ impl Nucleo {
             Situacion::Retornando(_) => {}
         }
         let (dueno, donde) = (k.faccion, k.posicion_en(t));
-        let guerra = self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, dueno, declara_guerra)?;
+        let guerra = self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, 0, dueno, declara_guerra)?;
         let modalidad = asalto::modalidad_de(self.zona_en(donde, dueno));
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_fundacion(t, heroe, id, x, donde, modalidad);
