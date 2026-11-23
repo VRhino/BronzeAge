@@ -113,7 +113,7 @@ pub fn cerrar_dependientes(
             }
             (EstadoCaravana::Aparcada, _) if c.anfitriona == Some(plaza) => accion(Accion::Destruye),
             // Esperando en el destino de su encargo (Comercio_Caravanas §10): está dentro de la plaza que cae.
-            (EstadoCaravana::Esperando, _) if c.encargo.as_ref().is_some_and(|e| e.punta == Punta::Destino && e.destino == plaza) => accion(Accion::Destruye),
+            (EstadoCaravana::Esperando, _) if c.encargo.as_ref().is_some_and(|e| e.punta == Punta::Destino && e.plaza_fuera() == plaza) => accion(Accion::Destruye),
             _ => {} // las demás siguen como estaban
         }
     }

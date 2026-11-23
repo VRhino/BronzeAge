@@ -314,7 +314,7 @@ impl<'n> Mirada<'n> {
         let mut con_caravana_dentro: BTreeSet<u64> = BTreeSet::new();
         for c in e.comercio.flota.iter().filter(|c| c.estado != EstadoCaravana::Disponible) {
             if c.estado == EstadoCaravana::Esperando {
-                if let Some(destino) = c.encargo.as_ref().filter(|x| x.punta == Punta::Destino).map(|x| x.destino) {
+                if let Some(destino) = c.encargo.as_ref().filter(|x| x.punta == Punta::Destino).map(|x| x.plaza_fuera()) {
                     if de_la_faccion(Some(c.origen)) && !de_la_faccion(Some(destino)) {
                         con_caravana_dentro.insert(u64::from(destino));
                     }

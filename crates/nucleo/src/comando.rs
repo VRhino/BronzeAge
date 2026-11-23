@@ -4,7 +4,7 @@
 use crate::codec::{ErrorFormato, Escritor, Lector};
 use crate::estado::Clase;
 use crate::codec_economia::{cargo_a_u8, cargo_de_u8, recurso_a_u8, recurso_de_u8, tipo_a_u8, tipo_de_u8};
-use crate::codec_comercio::{animal_a_u8, animal_de_u8, modo_a_u8, modo_de_u8, parada_escribir, parada_leer, tipo_carro_a_u8, tipo_carro_de_u8};
+use crate::codec_comercio::{animal_a_u8, animal_de_u8, mas_escribir, mas_leer, modo_a_u8, modo_de_u8, parada_escribir, parada_leer, tipo_carro_a_u8, tipo_carro_de_u8};
 use crate::codec_batallas::{asignacion_escribir, asignacion_leer, resultado_escribir, resultado_leer, salida_escribir, salida_leer, tokens_escribir, tokens_leer};
 use crate::codec_columna::{politica_a_u8, politica_de_u8};
 use crate::codec_contratos;
@@ -593,12 +593,13 @@ pub enum Comando {
     // ── Los encargos de las caravanas: rutas y envíos automáticos (2026-10-31; Comercio_Caravanas §5.8). Códigos 195 a 197. ──
     /// El Maestro de Caravanas, el Tesorero o el Gobernador del origen de la caravana, residente y dentro, le da un encargo de transporte: una ruta entre dos plazas de su Facción o un
     /// envío de una ida y vuelta a cualquier plaza, con lo que deja y recoge en cada punta.
-    EncargarCaravana { caravana: u64, destino: u64, modo: Modo, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada },
+    /// `mas`: las paradas después del destino (la ruta compuesta, 2026-11-23), cada una con su plaza.
+    EncargarCaravana { caravana: u64, destino: u64, modo: Modo, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada, mas: Vec<(u64, Parada)> },
     /// Desde el Mercado de la plaza `asentamiento`, toma a distancia `cantidad` de la orden de mercado `orden` de otra plaza de una región con informe de órdenes vigente (tanda 69 §7): lanza
     /// un envío en una caravana libre de la plaza con un encargo de una línea con el precio de la orden como tope. Los mismos cargos que `EncargarCaravana`.
     TomarOrdenADistancia { asentamiento: u64, orden: u64, cantidad: Mil },
     /// Cambia el encargo de la caravana (el modo no cambia): vale para todo paso que aún no ha empezado; el destino solo cambia con la caravana esperando en su origen.
-    CambiarEncargo { caravana: u64, destino: u64, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada },
+    CambiarEncargo { caravana: u64, destino: u64, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada, mas: Vec<(u64, Parada)> },
     /// Cancela el encargo de la caravana.
     CancelarEncargo { caravana: u64 },
     /// Detiene la ruta de la caravana (2026-11-04, código 212): acaba la ida y vuelta en curso comerciando como siempre y, al descargar en el origen, se queda sin encargo. Esperando en su
@@ -2419,7 +2420,7 @@ impl Peticion {
                 origen_escribir(&mut w, *origen);
                 w.u8(*tipo as u8);
             }
-            Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino } => {
+            Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino, mas } => {
                 w.u8(195);
                 w.u64(*caravana);
                 w.u64(*destino);
@@ -2427,14 +2428,16 @@ impl Peticion {
                 w.opt_i64(*salir_en);
                 parada_escribir(&mut w, en_origen);
                 parada_escribir(&mut w, en_destino);
+                mas_escribir(&mut w, mas);
             }
-            Comando::CambiarEncargo { caravana, destino, salir_en, en_origen, en_destino } => {
+            Comando::CambiarEncargo { caravana, destino, salir_en, en_origen, en_destino, mas } => {
                 w.u8(196);
                 w.u64(*caravana);
                 w.u64(*destino);
                 w.opt_i64(*salir_en);
                 parada_escribir(&mut w, en_origen);
                 parada_escribir(&mut w, en_destino);
+                mas_escribir(&mut w, mas);
             }
             Comando::CancelarEncargo { caravana } => {
                 w.u8(197);
@@ -3031,8 +3034,8 @@ impl Peticion {
             192 => Comando::CargarDePlaza { heroe: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             193 => Comando::DejarEnPlaza { heroe: r.u64()?, asentamiento: r.u64()?, recurso: recurso_de_u8(r.u8()?)?, cantidad: r.i64()? },
             194 => Comando::CerrarAlmacenACiudadanos { asentamiento: r.u64()?, cerrado: r.bool()? },
-            195 => Comando::EncargarCaravana { caravana: r.u64()?, destino: r.u64()?, modo: modo_de_u8(r.u8()?)?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
-            196 => Comando::CambiarEncargo { caravana: r.u64()?, destino: r.u64()?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)? },
+            195 => Comando::EncargarCaravana { caravana: r.u64()?, destino: r.u64()?, modo: modo_de_u8(r.u8()?)?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)?, mas: mas_leer(&mut r)? },
+            196 => Comando::CambiarEncargo { caravana: r.u64()?, destino: r.u64()?, salir_en: r.opt_i64()?, en_origen: parada_leer(&mut r)?, en_destino: parada_leer(&mut r)?, mas: mas_leer(&mut r)? },
             197 => Comando::CancelarEncargo { caravana: r.u64()? },
             212 => Comando::DetenerEncargo { caravana: r.u64()? },
             213 => Comando::CancelarConstruccion { asentamiento: r.u64()?, edificio: r.u32()? },
@@ -3231,13 +3234,17 @@ pub mod rechazos {
     // Encargos de las caravanas (`ErrorEncargo` y lo que comprueba el núcleo; rutas de caravanas automáticas, 2026-10-31).
     /// El destino del encargo es el origen de la caravana.
     pub const ENCARGO_MISMO_ORIGEN: &str = "encargo.mismo_origen";
-    /// Una ruta permanente a una plaza que no es de la Facción del origen (a una ajena solo va un envío).
-    pub const ENCARGO_DESTINO_AJENO: &str = "encargo.destino_ajeno";
+    /// Más de cinco paradas en el circuito, el origen incluido (la ruta compuesta, 2026-11-23).
+    pub const ENCARGO_DEMASIADAS_PARADAS: &str = "encargo.demasiadas_paradas";
+    /// La misma plaza en dos paradas seguidas del circuito, contando el cierre (la última con el origen).
+    pub const ENCARGO_PARADA_REPETIDA: &str = "encargo.parada_repetida";
+    /// Una parada deja un recurso que ninguna parada del circuito recoge (ella incluida: el sobrante da la vuelta); el oro siempre vale.
+    pub const ENCARGO_DEJA_SIN_RECOGER: &str = "encargo.deja_sin_recoger";
     /// Una línea con cantidad o tope de menos de una unidad, un recurso repetido en la misma lista, precio en una plaza propia u oro en una ajena.
     pub const ENCARGO_LINEA_INVALIDA: &str = "encargo.linea_invalida";
     /// Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar), o con un precio que no es positivo.
     pub const ENCARGO_FALTA_PRECIO: &str = "encargo.falta_precio";
-    /// Lo que se recoge en una parada pasa de la capacidad de la caravana.
+    /// En algún tramo de una vuelta con todo lo pedido, lo que lleva pasa de la capacidad de la caravana.
     pub const ENCARGO_SUPERA_CAPACIDAD: &str = "encargo.supera_capacidad";
     /// La caravana ya tiene un encargo: se cambia o se cancela.
     pub const ENCARGO_YA_TIENE: &str = "encargo.ya_tiene";
@@ -4387,9 +4394,10 @@ mod pruebas {
                     dejar: vec![LineaDejar { recurso: Recurso::Madera, tope: Some(30_000), precio_min: Some(1_500_000) }, LineaDejar { recurso: Recurso::Cobre, tope: None, precio_min: Some(4_000_000) }],
                     desechar_sobrante: true,
                 },
+                mas: vec![],
             },
-            Comando::EncargarCaravana { caravana: 4, destino: 6, modo: Modo::Ruta, salir_en: None, en_origen: Parada::default(), en_destino: Parada::default() },
-            Comando::CambiarEncargo { caravana: 4, destino: 7, salir_en: None, en_origen: Parada { dejar: vec![LineaDejar { recurso: Recurso::Piedra, tope: None, precio_min: None }], ..Parada::default() }, en_destino: Parada::default() },
+            Comando::EncargarCaravana { caravana: 4, destino: 6, modo: Modo::Ruta, salir_en: None, en_origen: Parada::default(), en_destino: Parada::default(), mas: vec![(8, Parada { recoger: vec![LineaRecoger { recurso: Recurso::Queso, cantidad: 2_000, precio_max: None }], ..Parada::default() })] },
+            Comando::CambiarEncargo { caravana: 4, destino: 7, salir_en: None, en_origen: Parada { dejar: vec![LineaDejar { recurso: Recurso::Piedra, tope: None, precio_min: None }], ..Parada::default() }, en_destino: Parada::default(), mas: vec![(9, Parada::default())] },
             Comando::CancelarEncargo { caravana: 4 },
             Comando::DetenerEncargo { caravana: 4 },
             Comando::TomarOrdenADistancia { asentamiento: 3, orden: 9, cantidad: 40_000 },

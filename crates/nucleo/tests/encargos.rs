@@ -89,11 +89,16 @@ fn parada(recoger: &[(Recurso, i64)], dejar: &[Recurso]) -> Parada {
 }
 
 fn encargar(caravana: u64, destino: u64, modo: Modo, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada) -> Comando {
-    Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino }
+    Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino, mas: vec![] }
+}
+
+/// Una ruta compuesta (2026-11-23): el destino y las paradas de después, en orden.
+fn circuito(caravana: u64, destino: u64, modo: Modo, en_origen: Parada, en_destino: Parada, mas: Vec<(u64, Parada)>) -> Comando {
+    Comando::EncargarCaravana { caravana, destino, modo, salir_en: None, en_origen, en_destino, mas }
 }
 
 fn cambiar(caravana: u64, destino: u64, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada) -> Comando {
-    Comando::CambiarEncargo { caravana, destino, salir_en, en_origen, en_destino }
+    Comando::CambiarEncargo { caravana, destino, salir_en, en_origen, en_destino, mas: vec![] }
 }
 
 /// Dos plazas de la Facción 1 con Mercado (`a` y `b`, de campamentos distintos), con el tiempo parado en el instante en que el Mercado de `a` ya está activo.
@@ -295,6 +300,56 @@ fn comision_esperada(n: &Nucleo, origen: u64, destino: u64, carga: &[(Recurso, i
 }
 
 // ───────────────────────────── 1. El ciclo ─────────────────────────────
+
+#[test]
+fn una_ruta_compuesta_recorre_el_circuito_dejando_y_recogiendo_en_cada_parada_y_cierra_el_circulo_en_el_origen() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    e.admin(Comando::FijarNivelFaccion { faccion: 1, nivel: 3 });
+    let pc = sitio_rico(&e.n, &m.0, 5, 1);
+    let c = fundar(&mut e.n, "rey_c", 1, pc);
+    e.dar(a, Cobre, 300_000);
+    e.dar(b, Estano, 300_000);
+    e.dar(c, Estano, 300_000);
+    let car = e.caravana(a, 1);
+    let (cobre_b, cobre_c, estano_a) = (cantidad(&e.n, b, Cobre), cantidad(&e.n, c, Cobre), cantidad(&e.n, a, Estano));
+    // A recoge 100 de cobre y deja el estaño; B deja 50 de cobre y recoge 30 de estaño; C deja el resto del cobre y recoge 20 de estaño (Comercio_Caravanas §5.8.11).
+    let en_b = Parada { dejar: vec![LineaDejar { recurso: Cobre, tope: Some(50_000), precio_min: None }], ..parada(&[(Estano, 30_000)], &[]) };
+    e.admin(circuito(car, b, Modo::Ruta, parada(&[(Cobre, 100_000)], &[Estano]), en_b, vec![(c, parada(&[(Estano, 20_000)], &[Cobre]))]));
+    assert_eq!(e.encargo(car).mas.len(), 1);
+    let sale = |e: &mut Escenario| {
+        let limite = e.n.ahora() + HORA;
+        while e.k(car).estado == EstadoCaravana::Esperando {
+            e.avanzar(MIN);
+            assert!(e.n.ahora() < limite, "debería haber salido");
+        }
+    };
+    sale(&mut e);
+    assert_eq!((e.k(car).estado, e.encargo(car).punta, e.encargo(car).tramo, e.k(car).destino), (EstadoCaravana::EnTransito, Punta::Destino, 0, Some(b as u32)));
+    // En B deja la mitad del cobre y recoge estaño; de ahí no vuelve: sigue a C.
+    e.viajar(car);
+    sale(&mut e);
+    assert_eq!(cantidad(&e.n, b, Cobre) - cobre_b, 50_000);
+    assert_eq!((e.k(car).estado, e.encargo(car).tramo, e.k(car).destino), (EstadoCaravana::EnTransito, 1, Some(c as u32)), "de B a C, todavía de ida");
+    assert_eq!((e.a_bordo(car, Cobre), e.a_bordo(car, Estano)), (50_000, 30_000));
+    // En C deja el resto del cobre, recoge estaño y cierra el círculo hacia A.
+    e.viajar(car);
+    assert_eq!((e.encargo(car).punta, e.encargo(car).tramo), (Punta::Destino, 1));
+    sale(&mut e);
+    assert_eq!(cantidad(&e.n, c, Cobre) - cobre_c, 50_000);
+    assert_eq!((e.k(car).estado, e.encargo(car).punta, e.k(car).destino), (EstadoCaravana::Retornando, Punta::Origen, Some(c as u32)));
+    assert_eq!(e.a_bordo(car, Estano), 50_000);
+    // En A suma la vuelta, deja todo el estaño y vuelve a recoger cobre.
+    e.viajar(car);
+    assert_eq!(e.encargo(car).vueltas, 1);
+    sale(&mut e);
+    assert_eq!((cantidad(&e.n, a, Estano) - estano_a, e.a_bordo(car, Cobre), e.encargo(car).tramo), (50_000, 100_000, 0));
+    assert!(hechos(&e.n, "comercio.caravana_descarga").iter().all(|h| dato(h, "comision") == 0), "una ruta no acuña");
+    // El contrato lleva las paradas de después del destino y en qué tramo va.
+    let vista = nucleo::proyeccion::propios::caravana(&e.n, e.k(car)).encargo.expect("con encargo");
+    assert_eq!((vista.mas_paradas.len(), vista.mas_paradas[0].asentamiento_id.clone(), vista.tramo), (1, format!("as-{c}"), 0));
+}
 
 #[test]
 fn una_ruta_entre_dos_plazas_propias_da_varias_vueltas_sin_comision() {
@@ -1174,12 +1229,16 @@ fn cada_rechazo_del_encargo_sale_con_su_codigo_y_no_cambia_el_estado() {
     assert_eq!(e.rechazada("admin", cambiar(car, b, None, vacia(), vacia())), rechazos::ENCARGO_NO_TIENE);
     // Lo que valida el crate, en su orden.
     assert_eq!(e.rechazada("admin", encargar(car, a, Modo::Ruta, None, vacia(), vacia())), rechazos::ENCARGO_MISMO_ORIGEN);
-    assert_eq!(e.rechazada("admin", encargar(car, c, Modo::Ruta, None, vacia(), vacia())), rechazos::ENCARGO_DESTINO_AJENO);
+    // Desde el 2026-11-23 una ruta también va a una plaza ajena, con precio en cada línea (rutas compuestas).
+    assert_eq!(e.rechazada("admin", encargar(car, c, Modo::Ruta, None, vacia(), parada(&[(Estano, 1_000)], &[]))), rechazos::ENCARGO_FALTA_PRECIO);
+    assert_eq!(e.rechazada("admin", circuito(car, b, Modo::Ruta, vacia(), vacia(), vec![(c, vacia()), (a, vacia())])), rechazos::ENCARGO_PARADA_REPETIDA, "la última no puede ser el origen");
+    assert_eq!(e.rechazada("admin", circuito(car, b, Modo::Ruta, vacia(), vacia(), vec![(c, vacia()), (b, vacia()), (c, vacia()), (b, vacia())])), rechazos::ENCARGO_DEMASIADAS_PARADAS);
     assert_eq!(e.rechazada("admin", encargar(car, b, Modo::Ruta, Some(ahora + HORA), vacia(), vacia())), rechazos::CARAVANA_SALIDA_INVALIDA, "una ruta sale en cuanto se le da");
     assert_eq!(e.rechazada("admin", encargar(car, b, Modo::Envio, Some(ahora), vacia(), vacia())), rechazos::CARAVANA_SALIDA_INVALIDA);
     assert_eq!(e.rechazada("admin", encargar(car, b, Modo::Envio, Some(ahora + 4 * DIA), vacia(), vacia())), rechazos::CARAVANA_SALIDA_INVALIDA);
     assert_eq!(e.rechazada("admin", encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 500)], &[]), vacia())), rechazos::ENCARGO_LINEA_INVALIDA);
     assert_eq!(e.rechazada("admin", encargar(car, c, Modo::Envio, None, vacia(), parada(&[(Estano, 1_000)], &[]))), rechazos::ENCARGO_FALTA_PRECIO);
+    assert_eq!(e.rechazada("admin", encargar(car, b, Modo::Ruta, None, vacia(), parada(&[], &[Cobre]))), rechazos::ENCARGO_DEJA_SIN_RECOGER, "nadie recoge el cobre que deja");
     assert_eq!(e.rechazada("admin", encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 400_000), (Estano, 200_000)], &[]), vacia())), rechazos::ENCARGO_SUPERA_CAPACIDAD);
     // Una caravana que no está disponible no recibe encargo.
     e.avanzar(11 * MIN);
@@ -1190,7 +1249,7 @@ fn cada_rechazo_del_encargo_sale_con_su_codigo_y_no_cambia_el_estado() {
     e.admin(encargar(car, b, Modo::Ruta, None, parada(&[(Cobre, 10_000)], &[]), vacia()));
     assert_eq!(e.rechazada("admin", encargar(car, b, Modo::Ruta, None, vacia(), vacia())), rechazos::ENCARGO_YA_TIENE);
     // Cambiar se valida igual que encargar, con el modo de siempre.
-    assert_eq!(e.rechazada("admin", cambiar(car, c, None, vacia(), vacia())), rechazos::ENCARGO_DESTINO_AJENO);
+    assert_eq!(e.rechazada("admin", cambiar(car, c, None, vacia(), parada(&[(Estano, 1_000)], &[]))), rechazos::ENCARGO_FALTA_PRECIO);
     assert_eq!(e.rechazada("admin", cambiar(car, a, None, vacia(), vacia())), rechazos::ENCARGO_MISMO_ORIGEN);
     assert_eq!(e.rechazada("admin", cambiar(car, b, None, parada(&[(Cobre, 500)], &[]), vacia())), rechazos::ENCARGO_LINEA_INVALIDA);
     assert_eq!(e.rechazada("admin", cambiar(car, b, None, parada(&[(Cobre, 600_000)], &[]), vacia())), rechazos::ENCARGO_SUPERA_CAPACIDAD);

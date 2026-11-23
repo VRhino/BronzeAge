@@ -366,6 +366,11 @@ impl Ctx<'_> {
     }
 
     /// Lo que hace la caravana en una punta del encargo; sin parada, no recoge ni deja nada.
+    /// Las paradas de la ruta compuesta después del destino (2026-11-23), cada una con su plaza.
+    fn mas_paradas(&self, ps: &[pb::ParadaEncargoEn]) -> R<Vec<(u64, Parada)>> {
+        ps.iter().map(|p| Ok((self.plaza(&p.asentamiento_id)?, self.parada(p.parada.as_ref())?))).collect()
+    }
+
     fn parada(&self, p: Option<&pb::ParadaEncargo>) -> R<Parada> {
         let Some(p) = p else { return Ok(Parada::default()) };
         Ok(Parada {
@@ -815,6 +820,7 @@ impl Ctx<'_> {
                 salir_en: o.salir_en_ms,
                 en_origen: self.parada(o.parada_origen.as_ref())?,
                 en_destino: self.parada(o.parada_destino.as_ref())?,
+                mas: self.mas_paradas(&o.mas_paradas)?,
             },
             Cuerpo::CambiarEncargo(o) => Comando::CambiarEncargo {
                 caravana: self.caravana(&o.caravana_id)?,
@@ -822,6 +828,7 @@ impl Ctx<'_> {
                 salir_en: o.salir_en_ms,
                 en_origen: self.parada(o.parada_origen.as_ref())?,
                 en_destino: self.parada(o.parada_destino.as_ref())?,
+                mas: self.mas_paradas(&o.mas_paradas)?,
             },
             Cuerpo::CancelarEncargo(o) => Comando::CancelarEncargo { caravana: self.caravana(&o.caravana_id)? },
             Cuerpo::DetenerEncargo(o) => Comando::DetenerEncargo { caravana: self.caravana(&o.caravana_id)? },

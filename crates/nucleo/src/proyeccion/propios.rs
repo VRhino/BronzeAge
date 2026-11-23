@@ -670,6 +670,8 @@ fn encargo(e: &Encargo) -> pb::Encargo {
         cancelado: e.cancelado,
         inicio_paso_ms: e.inicio_paso.filter(|_| e.fin_paso.is_some()),
         detener: e.detener,
+        mas_paradas: e.mas.iter().map(|p| pb::ParadaEncargoEn { asentamiento_id: ids::asentamiento(u64::from(p.plaza)), parada: Some(parada(&p.parada)) }).collect(),
+        tramo: if e.punta == Punta::Destino { u32::from(e.tramo) } else { 0 },
     }
 }
 

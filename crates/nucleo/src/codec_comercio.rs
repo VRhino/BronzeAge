@@ -15,7 +15,7 @@
 //! posición · ruta{n u64 · n × punto} · costes{n u64 · n × i64} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
 //! progreso i64)} · escalas{n u64 · n × (plaza u32, entra i64, sale i64)} (BAN68) · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
 //! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool · encargo{bool · modo u8 ·
-//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool · inicio_paso opt_i64 · detener bool (estos dos desde BAN56) · llego_en opt_i64 (BAN67)} (BAN52) · nombre texto (BAN55)`.
+//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool · inicio_paso opt_i64 · detener bool (estos dos desde BAN56) · llego_en opt_i64 (BAN67) · mas{n u64 · n × (plaza u32, parada)} · tramo u8 (BAN69)} (BAN52) · nombre texto (BAN55)`.
 //! Una parada: `recoger{n u64 · n × (recurso u8, cantidad i64, precio_max opt_i64)} · esperar_existencias bool · dejar{n u64 · n × (recurso u8, tope opt_i64,
 //! precio_min opt_i64)} · desechar_sobrante bool`.
 
@@ -24,7 +24,7 @@ use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
 use crate::estado_comercio::{EstadoComercio, EstadoMercenarios, RutaAcarreo, Trazado};
 use base::{Plan, Vertice};
 use comercio::caravana::{Animal, Caravana, Carro, Escuadra, EstadoCaravana, TipoCaravana, TipoCarro};
-use comercio::encargo::{Encargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, Punta};
+use comercio::encargo::{Encargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, ParadaEn, Punta};
 use comercio::mercenarios::{MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::{EstadoOrden, LibroOrdenes, OrdenMercado, TipoOrden};
 use comercio::red_caminos::{Arista, RedCaminos, RutaComercial};
@@ -385,7 +385,7 @@ pub(crate) fn modo_de_u8(i: u8) -> Result<Modo, ErrorFormato> {
 }
 
 fn encargo_escribir(w: &mut Escritor, e: &Encargo) {
-    let Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en } = e;
+    let Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en, mas, tramo } = e;
     w.u8(modo_a_u8(*modo));
     w.u32(*destino);
     w.opt_i64(*salir_en);
@@ -406,6 +406,12 @@ fn encargo_escribir(w: &mut Escritor, e: &Encargo) {
     w.opt_i64(*inicio_paso);
     w.bool(*detener);
     w.opt_i64(*llego_en);
+    w.u64(mas.len() as u64);
+    for ParadaEn { plaza, parada } in mas {
+        w.u32(*plaza);
+        parada_escribir(w, parada);
+    }
+    w.u8(*tramo);
 }
 
 pub(crate) fn parada_escribir(w: &mut Escritor, p: &Parada) {
@@ -444,7 +450,29 @@ fn encargo_leer(r: &mut Lector) -> Result<Encargo, ErrorFormato> {
     };
     let (fin_paso, cancelado) = (r.opt_i64()?, r.bool()?);
     let (inicio_paso, detener, llego_en) = (r.opt_i64()?, r.bool()?, r.opt_i64()?);
-    Ok(Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en })
+    let mut mas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        mas.push(ParadaEn { plaza: r.u32()?, parada: parada_leer(r)? });
+    }
+    let tramo = r.u8()?;
+    Ok(Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en, mas, tramo })
+}
+
+/// Las paradas de después del destino de una orden de encargo: `n u64 · n × (plaza u64, parada)`.
+pub(crate) fn mas_escribir(w: &mut Escritor, mas: &[(u64, Parada)]) {
+    w.u64(mas.len() as u64);
+    for (plaza, parada) in mas {
+        w.u64(*plaza);
+        parada_escribir(w, parada);
+    }
+}
+
+pub(crate) fn mas_leer(r: &mut Lector) -> Result<Vec<(u64, Parada)>, ErrorFormato> {
+    let mut mas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        mas.push((r.u64()?, parada_leer(r)?));
+    }
+    Ok(mas)
 }
 
 pub(crate) fn parada_leer(r: &mut Lector) -> Result<Parada, ErrorFormato> {
@@ -755,6 +783,8 @@ mod pruebas {
             inicio_paso: Some(100_000),
             detener: true,
             llego_en: Some(95_000),
+            mas: vec![ParadaEn { plaza: 9, parada: Parada { recoger: vec![linea_recoger(Recurso::Madera, 7_000, None)], ..Parada::default() } }],
+            tramo: 1,
         }
     }
 

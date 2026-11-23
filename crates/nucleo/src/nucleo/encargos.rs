@@ -22,7 +22,7 @@ use crate::nucleo::mercado::{id32, nivel_mercado};
 use asentamiento::Recurso;
 use base::MS_POR_MINUTO;
 use comercio::caravana::{Caravana, ErrorCaravana, TipoCaravana};
-use comercio::encargo::{a_recoger, carros_del_paso, repartir_descarga, ContextoEncargo, Encargo, ErrorEncargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, Punta};
+use comercio::encargo::{a_recoger, carros_del_paso, repartir_descarga, ContextoEncargo, Encargo, ErrorEncargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, ParadaEn, Punta};
 use comercio::evento::{Evento as EventoComercio, MotivoEncargo};
 use comercio::mostrador::{comprar, vender, ContextoParada};
 use comercio::orden_mercado::{EstadoOrden, TipoOrden};
@@ -34,18 +34,25 @@ fn rechazo_de_encargo(e: ErrorEncargo) -> (&'static str, &'static str) {
     use rechazos::*;
     match e {
         ErrorEncargo::MismoOrigen => (ENCARGO_MISMO_ORIGEN, "el destino del encargo es el origen de la caravana"),
-        ErrorEncargo::DestinoAjeno => (ENCARGO_DESTINO_AJENO, "una ruta solo va a una plaza de tu Facción; a una ajena va un envío"),
+        ErrorEncargo::DemasiadasParadas => (ENCARGO_DEMASIADAS_PARADAS, "el circuito tiene más de cinco paradas, el origen incluido"),
+        ErrorEncargo::ParadaRepetida => (ENCARGO_PARADA_REPETIDA, "la misma plaza en dos paradas seguidas del circuito, contando la vuelta al origen"),
+        ErrorEncargo::DejaSinRecoger => (ENCARGO_DEJA_SIN_RECOGER, "una parada deja un recurso que ninguna parada del circuito recoge"),
         ErrorEncargo::SalidaInvalida => rechazo_de_caravana(ErrorCaravana::SalidaInvalida),
         ErrorEncargo::LineaInvalida => (ENCARGO_LINEA_INVALIDA, "una línea del encargo tiene menos de una unidad, repite un recurso, lleva precio en una plaza propia u oro en una ajena"),
         ErrorEncargo::FaltaPrecio => (ENCARGO_FALTA_PRECIO, "toda línea hacia una plaza ajena necesita un precio positivo"),
-        ErrorEncargo::SuperaCapacidad => (ENCARGO_SUPERA_CAPACIDAD, "lo que se recoge en una parada pasa de la capacidad de la caravana"),
+        ErrorEncargo::SuperaCapacidad => (ENCARGO_SUPERA_CAPACIDAD, "en algún tramo de la vuelta la caravana llevaría más de lo que cabe"),
     }
 }
 
-/// La plaza de la parada en que está la caravana: su origen o su destino según la punta.
+/// La plaza de la parada en que está la caravana: su origen o la parada de fuera en que está.
 fn plaza_de_parada(c: &Caravana) -> Option<u64> {
     let e = c.encargo.as_ref()?;
-    Some(u64::from(if e.punta == Punta::Origen { c.origen } else { e.destino }))
+    Some(u64::from(if e.punta == Punta::Origen { c.origen } else { e.plaza_fuera() }))
+}
+
+/// Las paradas de una orden de encargo después del destino, con sus plazas en el formato del encargo.
+fn paradas_en(mas: &[(u64, Parada)]) -> Vec<ParadaEn> {
+    mas.iter().map(|(plaza, parada)| ParadaEn { plaza: id32(*plaza), parada: parada.clone() }).collect()
 }
 
 /// Quién oye un paso del encargo en `plaza` (Comercio_Caravanas §12): la plaza de la parada y, si es otra, el origen de la caravana, que así sabe lo que hace fuera.
@@ -65,11 +72,11 @@ impl Nucleo {
     /// salen como `Err` sin haber tocado el estado.
     pub(super) fn ejecutar_encargos(&mut self, t: Instante, p: &Peticion) -> Result<(), Respuesta> {
         match &p.comando {
-            Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino } => {
-                self.encargar(t, p, *caravana, Encargo::nuevo(*modo, id32(*destino), *salir_en, en_origen.clone(), en_destino.clone()))
+            Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino, mas } => {
+                self.encargar(t, p, *caravana, Encargo::nuevo(*modo, id32(*destino), *salir_en, en_origen.clone(), en_destino.clone()).con_mas(paradas_en(mas)))
             }
-            Comando::CambiarEncargo { caravana, destino, salir_en, en_origen, en_destino } => {
-                self.cambiar_encargo(t, p, *caravana, *destino, *salir_en, [en_origen.clone(), en_destino.clone()])
+            Comando::CambiarEncargo { caravana, destino, salir_en, en_origen, en_destino, mas } => {
+                self.cambiar_encargo(t, p, *caravana, *destino, *salir_en, [en_origen.clone(), en_destino.clone()], paradas_en(mas))
             }
             Comando::CancelarEncargo { caravana } => self.cancelar_encargo(t, p, *caravana),
             Comando::DetenerEncargo { caravana } => self.detener_encargo(t, p, *caravana),
@@ -78,12 +85,14 @@ impl Nucleo {
         }
     }
 
-    /// Comercio_Caravanas §5.8.2 y §5.8.3: valida `nuevo` como encargo de la caravana `i` (de la plaza `origen`) y lo compara con las dos plazas.
+    /// Comercio_Caravanas §5.8.2 y §5.8.3: valida `nuevo` como encargo de la caravana `i` (de la plaza `origen`) y lo compara con sus plazas, que existen.
     fn validar_encargo(&self, nuevo: &Encargo, i: usize, origen: u64, t: Instante) -> Result<(), Respuesta> {
-        let (o, d) = (&self.estado.asentamientos[&origen], &self.estado.asentamientos[&u64::from(nuevo.destino)]);
+        let faccion = self.estado.asentamientos[&origen].faccion;
+        let propia = |p: u32| self.estado.asentamientos.get(&u64::from(p)).is_some_and(|a| a.faccion == faccion);
         let contexto = ContextoEncargo {
             origen: id32(origen),
-            destino_propio: o.faccion == d.faccion,
+            destino_propio: propia(nuevo.destino),
+            mas_propias: nuevo.mas.iter().map(|p| propia(p.plaza)).collect(),
             capacidad: self.capacidad_de_caravana(&self.estado.comercio.flota[i]),
             ahora: t,
             max_programacion: self.estado.reglas.economia.comercio.flota.max_programacion,
@@ -101,14 +110,18 @@ impl Nucleo {
         let (i, origen) = self.caravana_de_orden(p, caravana)?;
         let destino = u64::from(nuevo.destino);
         self.plaza_o_rechazo(destino)?;
+        for p in &nuevo.mas {
+            self.plaza_o_rechazo(u64::from(p.plaza))?;
+        }
         if self.estado.comercio.flota[i].encargo.is_some() {
             return Err(Respuesta::rechazo(rechazos::ENCARGO_YA_TIENE, "la caravana ya tiene un encargo: se cambia o se cancela", v));
         }
         self.validar_encargo(&nuevo, i, origen, t)?;
         let (modo, salir_en) = (nuevo.modo, nuevo.salir_en);
+        let plazas = nuevo.plazas(id32(origen));
         let mut copia = self.estado.comercio.flota[i].clone();
         copia.dar_encargo(nuevo).map_err(|e| rechazo_en_caravana(e, v))?;
-        if self.trazar_ruta_comercial(origen, destino, t).is_none() {
+        if !self.circuito_por_tierra(&plazas, t) {
             return Err(rechazo_en_caravana(ErrorCaravana::SinRuta, v));
         }
         self.estado.comercio.flota[i] = copia;
@@ -123,21 +136,26 @@ impl Nucleo {
 
     /// `CambiarEncargo` (Comercio_Caravanas §5.8.7): sustituye el destino y las paradas y conserva `vueltas`, `punta`, `fase`, `fin_paso` y `cancelado`, así que el paso en curso sigue
     /// y lo nuevo vale desde el siguiente. El destino solo cambia con la caravana `Esperando` en el origen; la hora de salida solo cuenta mientras el envío espera a ella.
-    fn cambiar_encargo(&mut self, t: Instante, p: &Peticion, caravana: u64, destino: u64, salir_en: Option<Instante>, paradas: [Parada; 2]) -> Result<(), Respuesta> {
+    fn cambiar_encargo(&mut self, t: Instante, p: &Peticion, caravana: u64, destino: u64, salir_en: Option<Instante>, paradas: [Parada; 2], mas: Vec<ParadaEn>) -> Result<(), Respuesta> {
         let v = self.estado.version;
         let [en_origen, en_destino] = paradas;
         let (i, origen) = self.caravana_de_orden(p, caravana)?;
         self.plaza_o_rechazo(destino)?;
+        for p in &mas {
+            self.plaza_o_rechazo(u64::from(p.plaza))?;
+        }
         let c = &self.estado.comercio.flota[i];
         let Some(actual) = c.encargo.clone() else {
             return Err(Respuesta::rechazo(rechazos::ENCARGO_NO_TIENE, "la caravana no tiene encargo", v));
         };
         let en_origen_esperando = c.estado == EstadoCaravana::Esperando && actual.punta == Punta::Origen;
-        if id32(destino) != actual.destino && !en_origen_esperando {
+        // Las plazas del circuito solo cambian con la caravana esperando en su origen; las líneas, siempre (Comercio_Caravanas §5.8.11).
+        let otras_plazas = id32(destino) != actual.destino || mas.iter().map(|p| p.plaza).ne(actual.mas.iter().map(|p| p.plaza));
+        if otras_plazas && !en_origen_esperando {
             return Err(rechazo_en_caravana(ErrorCaravana::NoDisponible, v));
         }
         let espera_su_hora = en_origen_esperando && actual.vueltas == 0 && actual.fase == Fase::Espera && actual.salir_en.is_some_and(|hora| hora > t);
-        let mut nuevo = Encargo { destino: id32(destino), salir_en: if espera_su_hora { salir_en } else { None }, en_origen, en_destino, ..actual.clone() };
+        let mut nuevo = Encargo { destino: id32(destino), salir_en: if espera_su_hora { salir_en } else { None }, en_origen, en_destino, mas, ..actual.clone() };
         self.validar_encargo(&nuevo, i, origen, t)?;
         if !espera_su_hora {
             nuevo.salir_en = actual.salir_en;
@@ -145,7 +163,7 @@ impl Nucleo {
         if nuevo == actual {
             return Err(Respuesta::sin_cambios(v));
         }
-        if nuevo.destino != actual.destino && self.trazar_ruta_comercial(origen, destino, t).is_none() {
+        if otras_plazas && !self.circuito_por_tierra(&nuevo.plazas(id32(origen)), t) {
             return Err(rechazo_en_caravana(ErrorCaravana::SinRuta, v));
         }
         let nueva_hora = nuevo.salir_en;
@@ -248,16 +266,55 @@ impl Nucleo {
 
     // ───────────────────────────── El ciclo ─────────────────────────────
 
-    /// «El destino sigue vigente» (Comercio_Caravanas §5.8.4): existe y, en una ruta, es de la Facción del origen.
-    fn destino_vigente(&self, c: &Caravana) -> bool {
-        let Some(e) = c.encargo.as_ref() else { return false };
-        self.destino_propio(c).is_some_and(|propio| propio || e.modo == Modo::Envio)
+    /// Hay rutas por tierra entre cada par de paradas seguidas del circuito, contando el cierre (Comercio_Caravanas §5.8.11).
+    fn circuito_por_tierra(&mut self, plazas: &[u32], t: Instante) -> bool {
+        (0..plazas.len()).all(|i| self.trazar_ruta_comercial(u64::from(plazas[i]), u64::from(plazas[(i + 1) % plazas.len()]), t).is_some())
     }
 
-    /// Si el destino del encargo existe, si es de la Facción del origen.
+    /// «La parada sigue vigente» (Comercio_Caravanas §5.8.4 y §5.8.11): la parada de fuera `k` existe y, en una ruta, es de la Facción del origen o ya
+    /// era una parada de plaza ajena (tiene líneas y todas llevan precio). En un envío basta con que exista.
+    fn parada_vigente(&self, c: &Caravana, k: usize) -> bool {
+        let Some(e) = c.encargo.as_ref() else { return false };
+        let Some((plaza, parada)) = e.fuera_en(k) else { return false };
+        // Una parada propia no lleva precios (`encargo.linea_invalida`), así que una con líneas y todas con precio se dio como parada de plaza ajena.
+        // Sin líneas no se sabe: cuenta como propia, y si la plaza ya no lo es, se salta (no tenía nada que hacer allí).
+        let lineas = parada.recoger.len() + parada.dejar.len();
+        let con_precios = lineas > 0 && parada.recoger.iter().all(|l| l.precio_max.is_some()) && parada.dejar.iter().all(|l| l.precio_min.is_some());
+        self.es_propia(c, plaza).is_some_and(|propia| propia || e.modo == Modo::Envio || con_precios)
+    }
+
+    /// «El destino sigue vigente»: la parada de fuera en que está o hacia la que va.
+    fn destino_vigente(&self, c: &Caravana) -> bool {
+        c.encargo.as_ref().is_some_and(|e| self.parada_vigente(c, e.tramo as usize))
+    }
+
+    /// Si la plaza existe, si es de la Facción del origen de la caravana.
+    fn es_propia(&self, c: &Caravana, plaza: u32) -> Option<bool> {
+        let p = self.estado.asentamientos.get(&u64::from(plaza))?;
+        Some(self.estado.asentamientos.get(&u64::from(c.origen)).is_some_and(|o| o.faccion == p.faccion))
+    }
+
+    /// Si la parada de fuera en que está existe, si es de la Facción del origen.
     fn destino_propio(&self, c: &Caravana) -> Option<bool> {
-        let destino = self.estado.asentamientos.get(&u64::from(c.encargo.as_ref()?.destino))?;
-        Some(self.estado.asentamientos.get(&u64::from(c.origen)).is_some_and(|o| o.faccion == destino.faccion))
+        self.es_propia(c, c.encargo.as_ref()?.plaza_fuera())
+    }
+
+    /// La parada a la que sale la caravana desde donde está ([`Encargo::siguiente`]), saltando las de fuera que ya no valen; cada salto emite
+    /// `comercio.parada_saltada` (Comercio_Caravanas §5.8.11). Desde el origen, `None` si no queda ninguna parada válida: el encargo termina `destino_perdido`.
+    fn siguiente_parada(&mut self, t: Instante, id: u64) -> Option<(Punta, u8)> {
+        let c = self.estado.comercio.caravana(id)?;
+        let e = c.encargo.as_ref()?;
+        let (desde_origen, mut hacia) = (e.punta == Punta::Origen, e.siguiente());
+        let mut saltadas = Vec::new();
+        while hacia.0 == Punta::Destino && !self.parada_vigente(c, hacia.1 as usize) {
+            saltadas.push(e.fuera_en(hacia.1 as usize).map_or(0, |(p, _)| p));
+            hacia = if (hacia.1 as usize) < e.mas.len() { (Punta::Destino, hacia.1 + 1) } else { (Punta::Origen, 0) };
+        }
+        let origen = u64::from(c.origen);
+        for plaza in saltadas {
+            self.emitir_propio(t, "comercio.parada_saltada", vec![origen], vec![("caravana", id as i64), ("plaza", plaza as i64)]);
+        }
+        (!(desde_origen && hacia.0 == Punta::Origen)).then_some(hacia)
     }
 
     /// Paso 1 · Llegada (Comercio_Caravanas §5.8.4): la caravana acaba de quedar `Esperando` en una punta, con los peajes ya cobrados.
@@ -269,9 +326,9 @@ impl Nucleo {
         let Some(c) = self.estado.comercio.caravana(id) else { return };
         let Some(e) = c.encargo.as_ref() else { return };
         let cancelado = e.cancelado;
-        let vigente = self.destino_vigente(c);
         if punta == Punta::Origen {
-            // Un destino perdido gana a un encargo cancelado (Comercio_Caravanas §5.8.7, «Fin del encargo»).
+            // Un destino perdido gana a un encargo cancelado (Comercio_Caravanas §5.8.7, «Fin del encargo»): no queda ninguna parada de fuera que valga.
+            let vigente = (0..=e.mas.len()).any(|k| self.parada_vigente(c, k));
             if !vigente {
                 self.terminar(t, id, MotivoEncargo::DestinoPerdido);
             } else if cancelado {
@@ -279,7 +336,16 @@ impl Nucleo {
             } else {
                 self.descargar(t, id);
             }
-        } else if cancelado || !vigente {
+        } else if cancelado {
+            self.salir(t, id);
+        } else if !self.destino_vigente(c) {
+            // Una parada que ya no vale no tiene estancia: sigue a la siguiente en el acto.
+            let plaza = e.plaza_fuera();
+            if let Some(e) = self.estado.comercio.posicion_caravana(id).and_then(|i| self.estado.comercio.flota[i].encargo.as_mut()) {
+                e.llego_en = None;
+            }
+            let origen = u64::from(self.estado.comercio.caravana(id).map_or(0, |c| c.origen));
+            self.emitir_propio(t, "comercio.parada_saltada", vec![origen], vec![("caravana", id as i64), ("plaza", plaza as i64)]);
             self.salir(t, id);
         } else {
             self.descargar(t, id);
@@ -293,12 +359,12 @@ impl Nucleo {
         let c = &self.estado.comercio.flota[i];
         let Some(e) = c.encargo.as_ref() else { return };
         let (origen, en_origen) = (u64::from(c.origen), e.punta == Punta::Origen);
-        let plaza = if en_origen { origen } else { u64::from(e.destino) };
+        let plaza = if en_origen { origen } else { u64::from(e.plaza_fuera()) };
         let Some(a) = self.estado.asentamientos.get(&plaza) else { return };
         if !en_origen && self.destino_propio(c) == Some(false) {
             return self.vender_en_ajena(t, id, i, plaza);
         }
-        let parada = if en_origen { &e.en_origen } else { &e.en_destino };
+        let parada = if en_origen { &e.en_origen } else { e.parada_fuera() };
         let reparto = repartir_descarga(&c.contenido, &parada.dejar, parada.desechar_sobrante, &a.economia.almacen);
         let carros = carros_del_paso(total(&reparto.entra) + total(&reparto.tirado), self.capacidad_de_caravana(c), c.carros_con_traccion().count());
         let liquida = e.modo == Modo::Envio && !en_origen;
@@ -365,10 +431,10 @@ impl Nucleo {
         let c = &self.estado.comercio.flota[i];
         let Some(e) = c.encargo.as_ref() else { return };
         let en_origen = e.punta == Punta::Origen;
-        if en_origen && !self.destino_vigente(c) {
+        if en_origen && !(0..=e.mas.len()).any(|k| self.parada_vigente(c, k)) {
             return self.terminar(t, id, MotivoEncargo::DestinoPerdido);
         }
-        let plaza = if en_origen { u64::from(c.origen) } else { u64::from(e.destino) };
+        let plaza = if en_origen { u64::from(c.origen) } else { u64::from(e.plaza_fuera()) };
         let Some(a) = self.estado.asentamientos.get(&plaza) else { return self.salir(t, id) };
         if !en_origen && self.destino_propio(c) == Some(false) {
             return self.comprar_en_ajena(t, id, i, plaza);
@@ -379,7 +445,7 @@ impl Nucleo {
         }
         let c = &self.estado.comercio.flota[i];
         let e = c.encargo.as_ref().expect("comprobado arriba");
-        let parada = if en_origen { &e.en_origen } else { &e.en_destino };
+        let parada = if en_origen { &e.en_origen } else { e.parada_fuera() };
         let capacidad = self.capacidad_de_caravana(c);
         let carros_con_animal = c.carros_con_traccion().count();
         let toma = match a_recoger(&c.contenido, &parada.recoger, parada.esperar_existencias, capacidad, &a.economia.almacen) {
@@ -435,7 +501,7 @@ impl Nucleo {
     /// `recoger` ([`vender`], [`comprar`]). `None` si la plaza no tiene Mercado activo o ya no existe ella o el origen: no se comercia. Si no, lo servido por recurso (vacío si nada casó).
     fn comerciar_caravana(&mut self, t: Instante, i: usize, plaza: u64, vende: bool) -> Option<Mercancia> {
         let c = &self.estado.comercio.flota[i];
-        let parada = c.encargo.as_ref()?.en_destino.clone();
+        let parada = c.encargo.as_ref()?.parada_fuera().clone();
         let (id, capacidad) = (c.id, self.capacidad_de_caravana(c));
         let faccion = self.estado.asentamientos.get(&u64::from(c.origen))?.faccion;
         let pd = self.estado.asentamientos.get(&plaza)?;
@@ -481,19 +547,30 @@ impl Nucleo {
                 return;
             }
         }
+        let de_ida = self.estado.comercio.flota[i].encargo.as_ref().is_some_and(|e| e.punta == Punta::Origen);
+        let Some(mut hacia) = self.siguiente_parada(t, id) else {
+            return self.terminar(t, id, MotivoEncargo::DestinoPerdido);
+        };
+        let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
         let c = &self.estado.comercio.flota[i];
         let Some(e) = c.encargo.as_ref() else { return };
-        let (origen, destino, de_ida) = (u64::from(c.origen), u64::from(e.destino), e.punta == Punta::Origen);
-        let trazado = if de_ida {
-            if !self.destino_vigente(c) {
-                return self.terminar(t, id, MotivoEncargo::DestinoPerdido);
-            }
-            self.trazar_ruta_comercial(origen, destino, t)
+        let origen = u64::from(c.origen);
+        let (desde, aqui) = (if de_ida { origen } else { u64::from(e.plaza_fuera()) }, c.posicion);
+        let plaza_de = |e: &Encargo, h: (Punta, u8)| if h.0 == Punta::Origen { origen } else { e.fuera_en(h.1 as usize).map_or(origen, |(p, _)| u64::from(p)) };
+        let mut hasta = plaza_de(e, hacia);
+        let faccion = self.estado.asentamientos.get(&origen).map(|o| o.faccion);
+        let mut trazado = if de_ida {
+            self.trazar_ruta_comercial(origen, hasta, t)
         } else {
-            let aqui = c.posicion;
-            let del_origen = self.estado.asentamientos.get(&origen).map(|o| (o.posicion, o.faccion));
-            del_origen.and_then(|(pos_origen, faccion)| self.trazar_ruta(destino, origen, aqui, pos_origen, faccion, t))
+            let pos = self.estado.asentamientos.get(&hasta).map(|a| a.posicion);
+            pos.zip(faccion).and_then(|(pos, faccion)| self.trazar_ruta(desde, hasta, aqui, pos, faccion, t))
         };
+        // De una parada de fuera a otra sin camino por tierra (no debería pasar: se comprobó al darlo), vuelve al origen.
+        if trazado.is_none() && !de_ida && hacia.0 == Punta::Destino {
+            (hacia, hasta) = ((Punta::Origen, 0), origen);
+            let pos = self.estado.asentamientos.get(&origen).map(|a| a.posicion);
+            trazado = pos.zip(faccion).and_then(|(pos, faccion)| self.trazar_ruta(desde, origen, aqui, pos, faccion, t));
+        }
         let Some(z) = trazado else {
             if de_ida {
                 self.terminar(t, id, MotivoEncargo::DestinoPerdido);
@@ -504,15 +581,17 @@ impl Nucleo {
         };
         let peajes = peajes_de_paradas(&z.paradas, longitud_ruta(&z.puntos));
         let plan = self.plan_de(&self.estado.comercio.flota[i], &z.puntos, &z.costes, t);
-        if self.estado.comercio.flota[i].salir_de_parada(z.puntos.clone(), z.costes, peajes, plan.clone()).is_err() {
+        if self.estado.comercio.flota[i].salir_de_parada(hacia, z.puntos.clone(), z.costes, peajes, plan.clone()).is_err() {
             return;
         }
         if let Some(e) = self.estado.comercio.flota[i].encargo.as_mut() {
             e.llego_en = None;
         }
         self.instalar_plan(id, plan);
-        self.emitir_comercio(t, EventoComercio::CaravanaSale { caravana: id }, vec![origen, destino], &[]);
-        self.registrar_ruta_en_red(origen, destino, &z.puntos, t, &[id]);
+        // La red de caminos guarda cada tramo como una ruta del origen de la caravana a la otra plaza del tramo (la Facción es la del origen).
+        let otra = if hasta == origen { desde } else { hasta };
+        self.emitir_comercio(t, EventoComercio::CaravanaSale { caravana: id }, vec![origen, otra], &[]);
+        self.registrar_ruta_en_red(origen, otra, &z.puntos, t, &[id]);
     }
 
     /// Paso 7 · Terminar: la caravana queda `Disponible` en el origen sin encargo; su carga se vuelca en el almacén del origen (lo que no cabe se pierde), la escolta vuelve al campamento
