@@ -1,6 +1,6 @@
 //! Tecnología por Eras y Aedas (fase 6, sistema 6). Ver `Docs/Game/6_*` y `Docs/Mechanics/Tecnologia_Aedas.md` (TA).
 //!
-//! **Tanda 6A: reglas puras**, sin mundo ni núcleo (plan en `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`). Cada módulo trabaja sobre estructuras
+//! **Tanda 6A: reglas puras**, sin mundo ni núcleo (plan en `Sistema6_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git)). Cada módulo trabaja sobre estructuras
 //! que el núcleo guardará y aplicará (6B-6F): los instantes son `base::Instante` (ms de mundo), los costes `asentamiento::Costo` en unidades enteras
 //! (milésimas múltiplo de 1.000, decisión C3b), los factores en ppm y los contadores `u64` en unidades. Nada consume el generador aleatorio
 //! (TA §3: determinista y sin azar). Las tecnologías van por **índice del catálogo** ([`TecId`], el orden del bloque `TECNOLOGIAS`) y los

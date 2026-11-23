@@ -17,7 +17,7 @@ alrededor del casco urbano que se levanta celda a celda.
 - **Referencia en TypeScript** (`typescript-final`, verificado contra `e18c0b4`, 2026-10-09): `src/engine/muralla.ts` (≈980 líneas: trazo, comprometer, obra, mejora, ampliación, defensa, upkeep), `src/engine/trazado.ts`, `src/engine/combate.ts`,
   `src/engine/asentamientoQuery.ts`, `src/engine/mantenimiento.ts`, `src/session/comandos/murallas.ts`.
 - **En Rust:** el trazo es `trazado::muralla` (`crates/trazado/src/muralla.rs`, §3); la economía de los recintos (obra, mejora, defensa, upkeep) es `asentamiento::recintos` (`crates/asentamiento/src/recintos.rs`) y se guarda en la plaza; el núcleo (`crates/nucleo/src/nucleo/murallas.rs`) los traza, los ordena y los sincroniza con la ciudad.
-- **Canon:** Doc 4 «Murallas», Doc 4.5 (nivel 4), Doc 5.2.5 (el multiplicador en el combate), Doc 5.15.3 (guarnición). **Diseño e historia:** `typescript-final:Consideraciones/Murallas_Definicion.md`; contraste y plan: [`../Arquitectura/Murallas_Contraste_y_Plan.md`](../Arquitectura/Murallas_Contraste_y_Plan.md).
+- **Canon:** Doc 4 «Murallas», Doc 4.5 (nivel 4), Doc 5.2.5 (el multiplicador en el combate), Doc 5.15.3 (guarnición). **Diseño e historia:** `typescript-final:Consideraciones/Murallas_Definicion.md`; contraste y plan: `Murallas_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git).
 - Vocabulario de celdas, rejilla y red de calles: [`Trazado_Urbano.md`](Trazado_Urbano.md).
 - «Nivel de recinto» (1 empalizada, 2 muro de piedra, 3 muralla con adarve) no es el «nivel de plaza» (el del asentamiento, 1 a 5).
 
