@@ -58,7 +58,7 @@ fn parada(recoger: &[(Recurso, i64)], dejar: &[Recurso]) -> Parada {
 }
 
 fn encargar(caravana: u64, destino: u64, modo: Modo, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada) -> Comando {
-    Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino }
+    Comando::EncargarCaravana { caravana, destino, modo, salir_en, en_origen, en_destino, mas: vec![] }
 }
 
 /// Dos plazas de la Facción 1 con Mercado (`a` y `b`, de campamentos distintos), con el tiempo parado en el instante en que el Mercado de `a` ya está activo.

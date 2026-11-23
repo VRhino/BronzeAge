@@ -576,21 +576,22 @@ impl Caravana {
         Ok(())
     }
 
-    /// Comercio_Caravanas §5.8.4: una `Esperando` con encargo sale hacia la otra punta. Desde el origen pasa a `EnTransito` (`punta = Destino`); desde el destino
-    /// a `Retornando` (`punta = Origen`). Pone el destino del encargo, la posición en el primer punto de la ruta, la ruta, los costes, los peajes y el plan, y
-    /// el encargo queda en `Fase::Descarga` (lo primero que hará al llegar) y sin `fin_paso`. No toca la carga ni la escolta.
-    pub fn salir_de_parada(&mut self, ruta: Vec<Punto>, costes: Vec<i64>, peajes: Vec<Peaje>, plan: Plan) -> Result<(), ErrorCaravana> {
-        let (nuevo, punta) = match (self.estado, self.encargo.as_ref().map(|e| e.punta)) {
-            (EstadoCaravana::Esperando, Some(Punta::Origen)) => (EstadoCaravana::EnTransito, Punta::Destino),
-            (EstadoCaravana::Esperando, Some(Punta::Destino)) => (EstadoCaravana::Retornando, Punta::Origen),
-            _ => return Err(ErrorCaravana::EstadoInvalido),
-        };
-        self.pasar(nuevo)?;
+    /// Comercio_Caravanas §5.8.4: una `Esperando` con encargo sale hacia la parada `hacia` (la punta y el tramo; el núcleo la elige con [`Encargo::siguiente`], saltando
+    /// las que ya no valen). Hacia una parada de fuera pasa a `EnTransito`, y hacia el origen a `Retornando`. El destino de la caravana es la parada a la que va o, de
+    /// vuelta, la de la que viene. Pone la posición en el primer punto de la ruta, la ruta, los costes, los peajes y el plan, y el encargo queda en `Fase::Descarga`
+    /// (lo primero que hará al llegar) y sin `fin_paso`. No toca la carga ni la escolta.
+    pub fn salir_de_parada(&mut self, hacia: (Punta, u8), ruta: Vec<Punto>, costes: Vec<i64>, peajes: Vec<Peaje>, plan: Plan) -> Result<(), ErrorCaravana> {
+        if self.estado != EstadoCaravana::Esperando || self.encargo.is_none() {
+            return Err(ErrorCaravana::EstadoInvalido);
+        }
+        let (punta, tramo) = hacia;
+        self.pasar(if punta == Punta::Origen { EstadoCaravana::Retornando } else { EstadoCaravana::EnTransito })?;
         let e = self.encargo.as_mut().expect("comprobado arriba");
-        e.punta = punta;
+        let de_donde = e.plaza_fuera();
+        (e.punta, e.tramo) = (punta, if punta == Punta::Origen { 0 } else { tramo });
         e.fase = Fase::Descarga;
         (e.fin_paso, e.inicio_paso) = (None, None);
-        self.destino = Some(e.destino);
+        self.destino = Some(if punta == Punta::Origen { de_donde } else { e.plaza_fuera() });
         self.posicion = ruta.first().copied().unwrap_or(self.posicion);
         self.ruta = ruta;
         self.costes = costes;
@@ -825,7 +826,7 @@ impl Caravana {
     pub fn regresar_a_origen(&mut self, ruina: AsentamientoId, plan: Plan) -> Result<(), ErrorCaravana> {
         self.pasar(EstadoCaravana::Retornando)?;
         if let Some(e) = self.encargo.as_mut() {
-            (e.punta, e.cancelado) = (Punta::Origen, true);
+            (e.punta, e.tramo, e.cancelado) = (Punta::Origen, 0, true);
         }
         self.destino = Some(ruina);
         self.origen_acuerdo = None;
@@ -1775,7 +1776,8 @@ mod pruebas {
 
     fn sale(c: &mut Caravana, r: &ReglasFlota, peajes: Vec<Peaje>) {
         let plan = plan_de(c, r, 0);
-        c.salir_de_parada(ruta(), vec![1, 2], peajes, plan).unwrap();
+        let hacia = c.encargo.as_ref().unwrap().siguiente();
+        c.salir_de_parada(hacia, ruta(), vec![1, 2], peajes, plan).unwrap();
     }
 
     #[test]
@@ -1812,13 +1814,13 @@ mod pruebas {
         let r = r();
         let plan = plan_de(&buey(), &r, 0);
         let mut sin_encargo = Caravana { estado: Esperando, ..buey() };
-        assert_eq!(sin_encargo.salir_de_parada(ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
+        assert_eq!(sin_encargo.salir_de_parada((Punta::Destino, 0), ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
         let mut disponible = buey();
-        assert_eq!(disponible.salir_de_parada(ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
+        assert_eq!(disponible.salir_de_parada((Punta::Destino, 0), ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
         assert_eq!(disponible.estado, Disponible);
         let mut c = con_encargo();
         c.estado = EnTransito;
-        assert_eq!(c.salir_de_parada(ruta(), vec![], vec![], plan), Err(ErrorCaravana::EstadoInvalido));
+        assert_eq!(c.salir_de_parada((Punta::Destino, 0), ruta(), vec![], vec![], plan), Err(ErrorCaravana::EstadoInvalido));
     }
 
     #[test]

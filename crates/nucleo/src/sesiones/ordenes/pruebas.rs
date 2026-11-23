@@ -337,11 +337,12 @@ fn ordenes_traducidas() -> Vec<(Cuerpo, Comando)> {
                 salir_en: None,
                 en_origen: Parada { recoger: vec![LineaRecoger { recurso: Madera, cantidad: 30_000, precio_max: None }], esperar_existencias: true, ..Parada::default() },
                 en_destino: Parada { dejar: vec![LineaDejar { recurso: Madera, tope: Some(50_000), precio_min: None }], desechar_sobrante: true, ..Parada::default() },
+                mas: vec![],
             },
         ),
         (
             orden!(CambiarEncargo, OrdenCambiarEncargo, caravana_id: s("car-2"), destino_asentamiento_id: s("as-5"), salir_en_ms: Some(90_000)),
-            Comando::CambiarEncargo { caravana: 2, destino: 5, salir_en: Some(90_000), en_origen: Parada::default(), en_destino: Parada::default() },
+            Comando::CambiarEncargo { caravana: 2, destino: 5, salir_en: Some(90_000), en_origen: Parada::default(), en_destino: Parada::default(), mas: vec![] },
         ),
         (orden!(CancelarEncargo, OrdenCancelarEncargo, caravana_id: s("car-2")), Comando::CancelarEncargo { caravana: 2 }),
         (orden!(DetenerEncargo, OrdenDetenerEncargo, caravana_id: s("car-2")), Comando::DetenerEncargo { caravana: 2 }),
