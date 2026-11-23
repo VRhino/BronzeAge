@@ -8,6 +8,7 @@ use super::*;
 use asentamiento::avanzadas::Avanzada;
 use asentamiento::pueblos::{Pueblo, Sitio};
 use militar::convocatoria::Lugar;
+use crate::estado_comercio::Trazado;
 
 /// Direcciones que se prueban, en orden, para el punto de salida: del sur en sentido horario, de 22,5° en 22,5° (en milésimas del radio).
 const DIRECCIONES: [(i64, i64); 16] = [
@@ -133,5 +134,33 @@ impl Nucleo {
         let factor = self.estado.reglas.economia.militar.movimiento.factor_paso_por_plaza;
         let discos = self.estado.asentamientos.values().map(|a| (a.posicion, self.radio_de_plaza(a))).filter(|&(_, r)| r > 0).collect();
         rutas::Opciones { estorbos: Some(std::sync::Arc::new(rutas::Estorbos { discos, factor })), ..rutas::Opciones::de_columna() }
+    }
+
+    /// El trazado entre el contorno de `inicio` y el de `fin` (cada uno un disco `(centro, radio)`): se quita lo que va dentro de cada uno, con los costes en
+    /// proporción, y las paradas de peaje que quedan fuera se descartan o se corren. Lo usa el carro de acarreo, que sale del borde de su pueblo y llega al de
+    /// su plaza (bloque E, 2026-11-23).
+    pub(crate) fn trazado_entre_contornos(tz: &Trazado, inicio: (Punto, Mil), fin: (Punto, Mil)) -> Trazado {
+        let espaciado = 1;
+        let camino = rutas::Camino { puntos: tz.puntos.clone(), costes: tz.costes.clone(), nodos: Vec::new(), espaciado };
+        let hasta_fin = camino.hasta_el_contorno(fin.0, fin.1);
+        // El principio, al revés: se corta desde el final del camino invertido.
+        let mut al_reves = rutas::Camino { puntos: hasta_fin.puntos.iter().rev().copied().collect(), costes: hasta_fin.costes.iter().rev().copied().collect(), nodos: Vec::new(), espaciado };
+        al_reves = al_reves.hasta_el_contorno(inicio.0, inicio.1);
+        let (puntos, costes): (Vec<Punto>, Vec<i64>) = (al_reves.puntos.into_iter().rev().collect(), al_reves.costes.into_iter().rev().collect());
+        if puntos.len() < 2 {
+            // Los dos contornos se tocan o el camino era nada: el de siempre.
+            return tz.clone();
+        }
+        let quitado = comercio::viaje::longitud_ruta(&hasta_fin.puntos) - comercio::viaje::longitud_ruta(&puntos);
+        let largo = comercio::viaje::longitud_ruta(&puntos);
+        let paradas = tz.paradas.iter().map(|&(c, d)| (c, d - quitado)).filter(|&(_, d)| (0..=largo).contains(&d)).collect();
+        Trazado { puntos, costes, paradas }
+    }
+
+    /// Lo que dura la estancia de una caravana dentro de una plaza en la que descarga sin encargo (el carro de acarreo) o que cruza (la escala): `tiempoDescarga`
+    /// por carro con animal, nunca menos de `ENCARGO.paradaMinimaMinutos` (bloque E, 2026-11-23).
+    pub(crate) fn estancia_en_plaza(&self, carros_con_animal: usize) -> i64 {
+        let e = &self.estado.reglas.economia.comercio.encargo;
+        (e.tiempo_descarga * carros_con_animal as i64).max(e.parada_minima)
     }
 }

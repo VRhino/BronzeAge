@@ -482,8 +482,13 @@ impl Nucleo {
         // Lo que se lleva: la capacidad entera, de su recurso o, en la aldea, de lo que tenga de cada uno de los suyos (por el orden de `Pueblo::recursos`).
         let carga: Mercancia = pu.carga_del_carro(datos, acarreo::capacidad(&flota)).into_iter().collect();
         let (pos_madre, faccion) = (a.posicion, a.faccion);
+        let (r_pueblo, r_madre) = (self.radio_de_pueblo(pu), self.radio_de_plaza(a));
         let Some(pos_pueblo) = self.posicion_de_pueblo(pueblo) else { return };
         let Some(tz) = self.ruta_de_acarreo(plaza, pueblo, pos_pueblo, pos_madre, faccion, t) else { return };
+        // Sale del borde de su pueblo y llega al de su plaza, donde entra (bloque E, 2026-11-23): la ruta guardada va de centro a centro y se corta con los tamaños de hoy.
+        // La red de caminos guarda la ruta entera, de centro a centro; el carro solo recorre lo que va de contorno a contorno.
+        let puntos = tz.puntos.clone();
+        let tz = Self::trazado_entre_contornos(&tz, (pos_pueblo, r_pueblo), (pos_madre, r_madre));
         let cantidad = total(&carga);
         let local = &mut self.estado.asentamientos.get_mut(&plaza).and_then(|a| a.economia.pueblos.iter_mut().find(|p| p.id == pueblo)).expect("existe").almacen;
         for (&r, &n) in &carga {
@@ -493,7 +498,6 @@ impl Nucleo {
         let i = self.estado.comercio.posicion_caravana(carro).expect("existe");
         let plan = self.plan_de(&self.estado.comercio.flota[i], &tz.puntos, &tz.costes, t);
         let peajes = peajes_de_paradas(&tz.paradas, longitud_ruta(&tz.puntos));
-        let puntos = tz.puntos.clone();
         acarreo::salir(&mut self.estado.comercio.flota[i], id32(plaza), carga, tz.puntos, tz.costes, peajes, plan.clone()).expect("el carro está en casa");
         self.instalar_plan(carro, plan);
         // Cada salida renueva la ruta en la red de caminos (como el lanzamiento de una ruta comercial: no caduca mientras el carro la recorre).

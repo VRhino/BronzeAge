@@ -152,7 +152,7 @@ impl Nucleo {
         // Con el radio de lo que ocupa en el mapa (las plazas y las avanzadas; lo demás, un punto): los encuentros se miden desde su contorno (2026-11-23).
         let mut puestos: Vec<(u64, Plan, Mil)> = Vec::new();
         puestos.extend(self.estado.ejercitos.values().filter(|e| self.columna_en_el_mapa(e)).map(|e| (e.id, self.plan_de_columna(e, t), 0)));
-        puestos.extend(self.estado.comercio.flota.iter().filter(|k| matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?, 0))));
+        puestos.extend(self.estado.comercio.flota.iter().filter(|k| Nucleo::caravana_en_el_mapa(k, t)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?, 0))));
         // La que una batalla aparta se queda quieta (un plan de un punto) y no está en el espacio.
         let vuelven = self.estado.fundacion.caravanas.values().filter_map(|k| match &k.situacion {
             crate::estado_fundacion::Situacion::Retornando(plan) if plan.vertices.len() > 1 => Some((crate::estado_fundacion::entidad_fundacion(k.id), plan.clone(), 0)),
@@ -384,7 +384,7 @@ impl Nucleo {
     fn en_juego(&self, c: &Cosa<'_>, t: Instante) -> bool {
         match c {
             Cosa::Columna(e) => self.columna_en_el_mapa(e) && self.tiene_heroe_sano(e, t),
-            Cosa::Caravana(k) => matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando),
+            Cosa::Caravana(k) => Nucleo::caravana_en_el_mapa(k, t),
             Cosa::Fundacion(k) => matches!(k.situacion, crate::estado_fundacion::Situacion::Retornando(_)),
             Cosa::Plaza(_) => true,
             Cosa::Avanzada(v, _) => atacable(v.estado, t),

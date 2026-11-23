@@ -352,6 +352,7 @@ impl Nucleo {
             SucesoComercio::PeajeCaravana => self.peaje_de_caravana(id, t),
             SucesoComercio::PulsoReparto => self.pulso_de_reparto(id, t),
             SucesoComercio::FinPasoEncargo => self.fin_de_paso_de_encargo(id, t),
+            SucesoComercio::SalidaDeLaPlaza => self.salida_de_la_plaza(id, t),
             SucesoComercio::PulsoEncargo => self.pulso_de_encargo(id, t),
             SucesoComercio::ReponeMercenarios => self.repone_mercenarios(t),
         }

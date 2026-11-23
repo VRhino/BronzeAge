@@ -336,7 +336,9 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// BAN66: BAN65 con la distancia mínima a un nodo al fundar en las reglas del territorio (2026-11-23, «Tamaños y distancias del mapa»): un `i64` tras
 /// `exclusion_campamento`. BAN65 y anteriores ya no se leen.
-const MAGIA: &[u8; 5] = b"BAN66";
+/// BAN67: BAN66 con `Encargo::llego_en` (2026-11-23, «Tamaños y distancias del mapa», bloque E: la parada mínima), un `opt_i64` tras `detener`. BAN66 y
+/// anteriores ya no se leen.
+const MAGIA: &[u8; 5] = b"BAN67";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -932,6 +934,8 @@ pub enum SucesoComercio {
     FinPasoEncargo,
     /// Pulso de un minuto de una caravana con encargo que espera existencias en su parada (la entidad es la caravana); se repite mientras falte algo.
     PulsoEncargo,
+    /// Acaba la estancia de una caravana dentro de una plaza (la entidad es la caravana; 2026-11-23): el carro de acarreo que descargó en su madre vuelve al mapa.
+    SalidaDeLaPlaza,
 }
 
 impl SucesoComercio {
@@ -940,7 +944,7 @@ impl SucesoComercio {
     pub fn rango(self) -> u8 {
         match self {
             SucesoComercio::LlegadaCaravana | SucesoComercio::PeajeCaravana => 0,
-            SucesoComercio::FinPreparacion | SucesoComercio::FinPasoEncargo => 1,
+            SucesoComercio::FinPreparacion | SucesoComercio::FinPasoEncargo | SucesoComercio::SalidaDeLaPlaza => 1,
             SucesoComercio::CaducaTrueque | SucesoComercio::CaducaOrden => 2,
             SucesoComercio::PulsoReparto | SucesoComercio::ReponeMercenarios | SucesoComercio::PulsoEncargo => 3,
         }
@@ -956,6 +960,7 @@ impl SucesoComercio {
             SucesoComercio::ReponeMercenarios => 6,
             SucesoComercio::FinPasoEncargo => 7,
             SucesoComercio::PulsoEncargo => 8,
+            SucesoComercio::SalidaDeLaPlaza => 9,
         }
     }
     pub(crate) fn de_u8(i: u8) -> Option<Self> {
@@ -969,6 +974,7 @@ impl SucesoComercio {
             6 => Some(SucesoComercio::ReponeMercenarios),
             7 => Some(SucesoComercio::FinPasoEncargo),
             8 => Some(SucesoComercio::PulsoEncargo),
+            9 => Some(SucesoComercio::SalidaDeLaPlaza),
             _ => None,
         }
     }
@@ -1549,10 +1555,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN66`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN67`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN66): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN67): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));

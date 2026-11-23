@@ -181,8 +181,8 @@ comisiones, más oro.
 Además del reparto automático (3.13.5), un residente del origen **lanza una caravana a mano**
 (`prepararCaravana`): elige **carga** —del almacén del origen, hasta la capacidad de la caravana— y
 **destino**. La caravana pasa por un estado `'preparando'` en el origen durante
-`prepMinutos = CARAVANA_PREPARACION.kPorCarro × (nº carros − 1)` — una caravana de 1 carro sale al instante,
-las grandes tardan. La carga se **reserva del almacén ya** (se descuenta al preparar).
+`prepMinutos = max(2, CARAVANA_PREPARACION.kPorCarro × (nº carros − 1))`: nunca menos de **2 minutos**, aunque sea de
+1 carro (2026-11-23), y las grandes tardan más. La carga se **reserva del almacén ya** (se descuenta al preparar).
 
 - **Salida programada** (2026-10-02): `prepararCaravana` admite `salirEn`, una hora de mundo futura (hasta
   `CARAVANA_PREPARACION.maxProgramacionDias` = 3 días, placeholder). La caravana pasa a `'preparando'` y **espera en el
@@ -275,6 +275,7 @@ caravana y ya no le cabe sin ellos se queda en ella al aparcarla; si la caravana
 Cada pueblo extractor (4.2.2) tiene un carro propio, una caravana de tipo `acarreo` ligada a él: **1 carro básico con buey** (500 de capacidad, velocidad 24) que hace una ruta fija entre el pueblo y su plaza madre.
 
 - **Solo sale con el carro lleno.** Cada viaje es un botín grande con un ritmo previsible, que se puede vigilar y defender. Vuelca en el almacén de la madre y vuelve vacío.
+- **Entra en su plaza** (2026-11-23): sale del borde de su pueblo y, al llegar al borde de la plaza, entra y desaparece del mapa. Dentro descarga (el tiempo de descarga, nunca menos de 2 minutos) y sale otra vez al mapa de vuelta a su pueblo, donde entra y desaparece hasta el viaje siguiente. Dentro no se le puede atacar.
 - **No cuenta contra los cupos del Mercado** (caravanas y carros) ni exige Mercado.
 - **Se puede escoltar**: con escolta sin héroe de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o con escolta por ejército (5.13.3).
 - **Casi siempre lucha en B**, porque viaja dentro de la zona del dueño; si una frontera recorta la zona y la ruta sale de ella, ese tramo es A.
@@ -291,7 +292,7 @@ Las reglas:
 
 - **Quién lo da:** el Gobernador, el Tesorero o el Maestro de Caravanas de la plaza de origen, residentes y dentro; los mismos lo cambian y lo cancelan. La caravana ha de estar disponible y con algún carro con animal. Los carros, los animales y la escolta son los que ya tiene; no gasta cupo nuevo ni hay más tope de rutas que el cupo de caravanas.
 - **Qué hace en cada parada:** primero deja y luego recoge. Al dejar elige recurso y, si quiere, un tope (sin tope, deja todo lo que lleve de ese recurso); lo que no cabe en el almacén se tira o se queda a bordo, según lo elegido. Al recoger elige recurso y cantidad, sin pasar de la capacidad de la caravana, y puede esperar a que el almacén tenga todo lo pedido (sin plazo; se ve qué falta y se cancela a mano) o salir con lo que haya.
-- **Cuánto tarda:** cargar y descargar cuestan un tiempo por cada carro que mueve algo (placeholder, 2 minutos por carro). Una parada que no mueve nada no tarda. El envío programado empieza a cargar a su hora y sale al acabar la carga.
+- **Cuánto tarda:** cargar y descargar cuestan un tiempo por cada carro que mueve algo (placeholder, 2 minutos por carro). Cada parada dura **como mínimo 2 minutos** (2026-11-23), aunque no mueva nada. El envío programado empieza a cargar a su hora y sale al acabar la carga.
 - **Dentro de la plaza** (esperando su hora o las existencias, o mientras carga y descarga) la caravana no se ve en el mapa ni se ataca: la protege la plaza. Solo es vulnerable en el camino, como cualquier caravana comercial; si pierde carros sigue con los que le queden y, sin carros, desaparece y el encargo con ella.
 - **Comisión:** la ruta no cobra ninguna, porque si no ir y venir entre dos plazas propias acuñaría oro sin fin. El envío cobra la de una entrega (3.5) por lo que deja en el destino, si es otra plaza propia. En una plaza ajena no hay entrega sino comercio: paga la tasa del mercado y no se acuña nada.
 - **Peajes:** se pagan en oro, desde la capital de la Facción dueña (Doc 1.6), en cada tramo que cruza una zona ajena, a la ida y a la vuelta, sobre lo que lleve en ese momento: la vuelta cargada paga; la vacía no tiene nada que pagar.

@@ -263,6 +263,9 @@ impl Nucleo {
     /// Paso 1 · Llegada (Comercio_Caravanas §5.8.4): la caravana acaba de quedar `Esperando` en una punta, con los peajes ya cobrados.
     pub(super) fn llegada_a_parada(&mut self, t: Instante, id: u64, punta: Punta) {
         self.retirar_plan(id);
+        if let Some(e) = self.estado.comercio.posicion_caravana(id).and_then(|i| self.estado.comercio.flota[i].encargo.as_mut()) {
+            e.llego_en = Some(t);
+        }
         let Some(c) = self.estado.comercio.caravana(id) else { return };
         let Some(e) = c.encargo.as_ref() else { return };
         let cancelado = e.cancelado;
@@ -370,6 +373,12 @@ impl Nucleo {
         if !en_origen && self.destino_propio(c) == Some(false) {
             return self.comprar_en_ajena(t, id, i, plaza);
         }
+        if e.llego_en.is_none() {
+            // La primera carga en el origen, al darse el encargo o a su hora: aquí empieza la estancia.
+            self.estado.comercio.flota[i].encargo.as_mut().expect("comprobado arriba").llego_en = Some(t);
+        }
+        let c = &self.estado.comercio.flota[i];
+        let e = c.encargo.as_ref().expect("comprobado arriba");
         let parada = if en_origen { &e.en_origen } else { &e.en_destino };
         let capacidad = self.capacidad_de_caravana(c);
         let carros_con_animal = c.carros_con_traccion().count();
@@ -462,6 +471,16 @@ impl Nucleo {
     /// del origen y, sin ruta (no debería pasar: la ida existía), la caravana se pierde.
     fn salir(&mut self, t: Instante, id: u64) {
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
+        let minimo = self.estado.reglas.economia.comercio.encargo.parada_minima;
+        // Ninguna estancia en una plaza dura menos de `ENCARGO.paradaMinimaMinutos` (2026-11-23): si la descarga y la carga acabaron antes, espera ahí.
+        if let Some(e) = self.estado.comercio.flota[i].encargo.as_mut() {
+            if let Some(hasta) = e.llego_en.map(|l| l + minimo).filter(|&h| t < h) {
+                (e.fase, e.fin_paso, e.inicio_paso) = (Fase::Carga, Some(hasta), Some(e.inicio_paso.unwrap_or(t)));
+                self.tr.tocar(Clase::Caravana, id);
+                self.programar_comercio(hasta, entidad_caravana(id), SucesoComercio::FinPasoEncargo);
+                return;
+            }
+        }
         let c = &self.estado.comercio.flota[i];
         let Some(e) = c.encargo.as_ref() else { return };
         let (origen, destino, de_ida) = (u64::from(c.origen), u64::from(e.destino), e.punta == Punta::Origen);
@@ -487,6 +506,9 @@ impl Nucleo {
         let plan = self.plan_de(&self.estado.comercio.flota[i], &z.puntos, &z.costes, t);
         if self.estado.comercio.flota[i].salir_de_parada(z.puntos.clone(), z.costes, peajes, plan.clone()).is_err() {
             return;
+        }
+        if let Some(e) = self.estado.comercio.flota[i].encargo.as_mut() {
+            e.llego_en = None;
         }
         self.instalar_plan(id, plan);
         self.emitir_comercio(t, EventoComercio::CaravanaSale { caravana: id }, vec![origen, destino], &[]);

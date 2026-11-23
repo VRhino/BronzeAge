@@ -15,7 +15,7 @@
 //! posición · ruta{n u64 · n × punto} · costes{n u64 · n × i64} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
 //! progreso i64)} · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
 //! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool · encargo{bool · modo u8 ·
-//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool · inicio_paso opt_i64 · detener bool (estos dos desde BAN56)} (BAN52) · nombre texto (BAN55)`.
+//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool · inicio_paso opt_i64 · detener bool (estos dos desde BAN56) · llego_en opt_i64 (BAN67)} (BAN52) · nombre texto (BAN55)`.
 //! Una parada: `recoger{n u64 · n × (recurso u8, cantidad i64, precio_max opt_i64)} · esperar_existencias bool · dejar{n u64 · n × (recurso u8, tope opt_i64,
 //! precio_min opt_i64)} · desechar_sobrante bool`.
 
@@ -378,7 +378,7 @@ pub(crate) fn modo_de_u8(i: u8) -> Result<Modo, ErrorFormato> {
 }
 
 fn encargo_escribir(w: &mut Escritor, e: &Encargo) {
-    let Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener } = e;
+    let Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en } = e;
     w.u8(modo_a_u8(*modo));
     w.u32(*destino);
     w.opt_i64(*salir_en);
@@ -398,6 +398,7 @@ fn encargo_escribir(w: &mut Escritor, e: &Encargo) {
     w.bool(*cancelado);
     w.opt_i64(*inicio_paso);
     w.bool(*detener);
+    w.opt_i64(*llego_en);
 }
 
 pub(crate) fn parada_escribir(w: &mut Escritor, p: &Parada) {
@@ -435,8 +436,8 @@ fn encargo_leer(r: &mut Lector) -> Result<Encargo, ErrorFormato> {
         _ => return Err(ErrorFormato("fase de encargo desconocida")),
     };
     let (fin_paso, cancelado) = (r.opt_i64()?, r.bool()?);
-    let (inicio_paso, detener) = (r.opt_i64()?, r.bool()?);
-    Ok(Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener })
+    let (inicio_paso, detener, llego_en) = (r.opt_i64()?, r.bool()?, r.opt_i64()?);
+    Ok(Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en })
 }
 
 pub(crate) fn parada_leer(r: &mut Lector) -> Result<Parada, ErrorFormato> {
@@ -741,6 +742,7 @@ mod pruebas {
             cancelado: true,
             inicio_paso: Some(100_000),
             detener: true,
+            llego_en: Some(95_000),
         }
     }
 
@@ -758,7 +760,7 @@ mod pruebas {
         let (esperado, e) = (encargo_completo(), leido.flota[0].encargo.as_ref().expect("la caravana conserva el encargo"));
         assert_eq!((e.modo, e.destino, e.salir_en), (esperado.modo, esperado.destino, esperado.salir_en));
         assert_eq!((&e.en_origen, &e.en_destino), (&esperado.en_origen, &esperado.en_destino));
-        assert_eq!((e.vueltas, e.punta, e.fase, e.fin_paso, e.cancelado, e.inicio_paso, e.detener), (1, Punta::Destino, Fase::Carga, Some(123_456), true, Some(100_000), true));
+        assert_eq!((e.vueltas, e.punta, e.fase, e.fin_paso, e.cancelado, e.inicio_paso, e.detener, e.llego_en), (1, Punta::Destino, Fase::Carga, Some(123_456), true, Some(100_000), true, Some(95_000)));
         assert_eq!(leido.flota[0].nombre, "La de Tirinto");
         assert_eq!(leido.flota[0], original.flota[0]);
         assert_eq!(bytes_de(&leido), bytes, "guardarla de nuevo da los mismos bytes");

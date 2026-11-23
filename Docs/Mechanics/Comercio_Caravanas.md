@@ -471,14 +471,14 @@ cambia nada):
 5. Hay **ruta por tierra** (`trazarRutaComercial`, §7.2): sin ella se rechaza (el agua es infranqueable).
 6. Si hay `salirEn`: `salirEn > ahora` y `salirEn ≤ ahora + CARAVANA_PREPARACION.maxProgramacionDias` días.
 
-**El lanzamiento a mano conserva su preparación** (`kPorCarro`, arriba) con la llegada de los encargos (§5.8): no paga los tiempos de carga y descarga de §5.8.5, y exige la caravana `disponible`, así que una con encargo no se lanza a mano (`caravana.no_disponible`).
+**El lanzamiento a mano conserva su preparación** (`kPorCarro`, arriba), **nunca de menos de `minimoMinutos` (2 min), aunque sea de un solo carro** (decisión del autor del 2026-11-23, bloque E de Tamaños y distancias), con la llegada de los encargos (§5.8): no paga los tiempos de carga y descarga de §5.8.5, y exige la caravana `disponible`, así que una con encargo no se lanza a mano (`caravana.no_disponible`).
 
 **No se comprueba** nada del destino: puede ser el propio origen, una plaza de otra Facción, de un enemigo, o una ruina que aún no se haya limpiado. Tampoco el cargo ni la tecnología.
 
 Efecto:
 
 ```
-prepMinutos = CARAVANA_PREPARACION.kPorCarro × max(0, |carros| − 1)          ; cuenta TODOS los carros, con o sin animal
+prepMinutos = max(CARAVANA_PREPARACION.minimoMinutos, CARAVANA_PREPARACION.kPorCarro × max(0, |carros| − 1))   ; cuenta TODOS los carros, con o sin animal
 saleEn      = max( ahora + prepMinutos, salirEn si lo hay )
 estado      = saleEn > ahora ? 'preparando' : 'en_transito'
 almacén origen −= carga                 ; la carga se reserva YA
@@ -499,6 +499,7 @@ la escolta al campamento. La ruta ya registrada en la red **no se retira**.
 ```json
 {
   "kPorCarro": 2,
+  "minimoMinutos": 2,
   "maxProgramacionDias": 3
 }
 ```
@@ -614,12 +615,15 @@ Cada descarga y cada carga tarda un tiempo **por carro del paso**: `fin_paso = a
 ```json
 {
   "tiempoCargaMinutosPorCarro": 2,
-  "tiempoDescargaMinutosPorCarro": 2
+  "tiempoDescargaMinutosPorCarro": 2,
+  "paradaMinimaMinutos": 2
 }
 ```
 <!-- /parametros -->
 
 `tiempoCarga` = `tiempoCargaMinutosPorCarro` y `tiempoDescarga` = `tiempoDescargaMinutosPorCarro` (`ReglasEncargo`, `crates/comercio/src/datos.rs`).
+
+**Parada mínima** (`paradaMinimaMinutos`, 2 min; decisión del autor del 2026-11-23, bloque E de Tamaños y distancias): la caravana pasa **al menos 2 min** dentro de cada parada, cuente o no lo que mueve. El encargo apunta cuándo entró (`llego_en`: al llegar a una parada, o al empezar la primera carga en el origen) y, si la carga acaba antes, la caravana sigue dentro, en `fase carga`, hasta `llego_en + paradaMinimaMinutos`; al salir se borra. Una parada que no mueve nada, o una caravana cancelada que da la vuelta en el destino, también espera esos 2 min. La espera de `esperar_existencias` cuenta dentro de ellos. La foto guarda `llego_en` (`BAN67`).
 
 **Los carros del paso** (`carros_del_paso`): `ceil(movido × carros con animal ÷ capacidad)`, con un mínimo de 1 si se mueve algo y un máximo de los carros con animal; **0 si no se mueve nada** (o la capacidad es nula). Una parada que no mueve nada no tarda. La capacidad es la efectiva («Carga Ampliada» incluida) y lo que vale como `movido` es lo que sube o baja de la caravana en el paso. Si la caravana pierde carros por el camino, los siguientes pasos cuentan los que le queden.
 
@@ -630,11 +634,11 @@ Cada descarga y cada carga tarda un tiempo **por carro del paso**: `fin_paso = a
 | **Carga con `esperar_existencias`** | Si a alguna línea le falta lo pedido en el almacén, no toma nada: `fase espera` y un pulso cada minuto que repite la carga con la parada vigente en ese momento. `comercio.caravana_espera` (con lo que falta) sale una sola vez, al empezar a esperar. En cuanto hay todo, empieza el tiempo de carga | — | Sin plazo |
 | **Descarga y carga** en plaza ajena | Vender y comprar contra las órdenes de su mercado (§5.8.8) | Lo vendido / lo comprado | Igual |
 
-- **Si la carga no mueve nada** (nada que tomar, o nada que comprar), la caravana sale en el acto y no emite `comercio.caravana_carga`. Si la descarga no mueve nada, sigue ya a la carga (el hecho `comercio.caravana_descarga` sale igual, con 0 carros).
+- **Si la carga no mueve nada** (nada que tomar, o nada que comprar), la caravana sale en cuanto cumple la parada mínima y no emite `comercio.caravana_carga`. Si la descarga no mueve nada, sigue ya a la carga (el hecho `comercio.caravana_descarga` sale igual, con 0 carros).
 - **Primer paso:** al darse el encargo la caravana empieza por **cargar** en el origen (no hay descarga previa).
 - **Envío programado:** la carga empieza a su hora (`salir_en`) y la caravana sale al acabar la carga.
 - **Con `esperar_existencias` la espera solo mira el almacén**: si a bordo queda un sobrante que no cupo en la plaza donde descargó, la carga se topa por el hueco de la caravana y sale con menos de lo pedido.
-- **El lanzamiento a mano no cambia** (§5.6): conserva su preparación (`kPorCarro`) y no paga estos tiempos.
+- **El lanzamiento a mano** (§5.6) conserva su preparación (`kPorCarro`, con su propio mínimo de 2 min) y no paga estos tiempos.
 
 #### 5.8.6 Comisión, peajes y escolta
 
@@ -1225,6 +1229,8 @@ Cada pueblo extractor (Economia_Construccion §pueblos) tiene un carro propio: u
 - **Un carro básico con buey** (500 de capacidad, velocidad **24**) y una **ruta fija** pueblo ↔ plaza madre, calculada una vez como cualquier plan.
 - **Sin la ventaja del camino** (decisión del autor del 2026-10-29): su ruta entra en la red de caminos y la aprovechan las demás caravanas, pero el carro de acarreo va siempre a los costes del terreno (24 u/min), sin `factorCamino`, y no rehace su plan cuando una arista de su trayecto pasa a ser camino. Antes iba al doble, porque su propia ruta lo convertía en camino desde el primer viaje.
 - **Solo sale con el carro lleno**: el evento de salida se programa cuando el almacén local del pueblo alcanza la capacidad del carro (o al reponerse el carro con almacén ya lleno). Vuelca en el almacén de la madre y vuelve vacío.
+- **Entra y sale por los bordes** (decisión del autor del 2026-11-23, bloque E de Tamaños y distancias). La ruta guardada (`rutas_acarreo`) y la que entra en la red de caminos van de centro a centro, pero el carro solo recorre el tramo del contorno de su pueblo (`radio_de_pueblo`) al de su plaza (`radio_de_plaza`). No rodea la plaza: su camino solo comunica con ella.
+- **Dentro de la plaza no está en el mapa.** Al llegar vuelca y se queda dentro **`max(tiempoDescarga × carros con animal, paradaMinimaMinutos)`** (2 min con un carro). Su plan de vuelta empieza al acabar ese tiempo, se retira de la rejilla de encuentros y no sale en la vista ni se le puede salir al paso. Al acabar, el suceso `SalidaDeLaPlaza` (foto `BAN67`) lo pone otra vez en el mapa, en el borde de la plaza. Al llegar al borde de su pueblo entra y desaparece hasta el viaje siguiente.
 - **No cuenta** contra los cupos de caravanas ni de carros del Mercado, ni exige Mercado. No entra en el reparto automático ni en el trueque.
 - **Escolta**: sin héroe, de los residentes de la madre (cupo del Mercado de la madre si lo tiene, 100/200/300; **100** si no) o por ejército (Movimiento §9).
 - **No le afectan** «Carga Ampliada» ni «Rutas Rápidas» (decidido el 2026-10-18): solo mueven a las caravanas comerciales (§6.4); con ×1,5 de capacidad el carro de 750 superaba el almacén de 500 del pueblo de entonces y «sale lleno» no se habría disparado nunca (con el de 1.000, desde el 2026-11-05, cabría, pero la regla sigue).
