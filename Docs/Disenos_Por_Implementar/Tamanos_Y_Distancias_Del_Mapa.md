@@ -97,15 +97,36 @@ Medido regenerando los nodos del mundo `a98e65c7` con las reglas nuevas (orilla 
 
 Los 6 u entre tipos distintos quitan las parejas donde dos pueblos se montarían (hoy hay 4 a menos de 4,1 u) y casi no cuestan tierra. Lo que mueve la tierra fundable es el número de nodos y los 12 u de la regla: dividir entre 3 deja el 11 % de los sitios del foco sin ningún nodo, y entre 4, el 20 %.
 
-## 7. Bloque E: las rutas rodean las plazas
+## 7. Bloque E: las columnas rodean las plazas y las caravanas entran en ellas
 
-Hoy el A* solo mira el terreno, por decisión del autor del 2026-10-27: «los elementos del mapa no estorban» (`Movimiento_Ejercitos.md` §4.3, `crates/rutas`). Esto la cambia **solo para las plazas**: pueblos, aldeas, avanzadas y campamentos ocupan como mucho una celda de la rejilla de 4 u y siguen sin estorbar.
+Hoy el A* solo mira el terreno, por decisión del autor del 2026-10-27: «los elementos del mapa no estorban» (`Movimiento_Ejercitos.md` §4.3, `crates/rutas`). Esto lo cambia **solo para las plazas**, y de forma distinta según lo que se mueva (decisiones del autor del 2026-11-23, tras implementar C). Pueblos, aldeas, avanzadas y campamentos siguen sin estorbar a nadie: se cruzan, porque por ellos se unen los caminos.
 
-- La huella de la plaza es **paso muy caro, no cerrado**: la ruta la rodea y la cruza por dentro solo si no hay otro camino (decisión del autor: «como último recurso»). Una plaza de nivel 5 ocupa unas 13 celdas.
-- La ruta que sale de una plaza o acaba en ella no paga ese coste: empieza y termina en su contorno (bloque C).
+**Columnas y ejércitos: rodean todas las plazas, también las propias.**
+
+- La huella de la plaza es **paso muy caro, no cerrado**. La ruta la rodea y solo la cruza por dentro si no hay otro camino (decisión del autor: «como último recurso»). Una plaza de nivel 5 ocupa unas 13 celdas.
+- La ruta que sale de una plaza o acaba en ella no paga ese coste, porque empieza y termina en su contorno (bloque C).
+- Una caravana enganchada a una columna (`adjunta`) va con ella y sigue sus reglas.
+
+**Caravanas comerciales: atraviesan las plazas de su camino, con parada.**
+
+- **El camino no rodea las plazas.** Cada plaza cuya huella atraviese el camino de una caravana es una **escala**. Hoy el trazado ya lleva la ruta al centro de cada ciudad ajena de cuya zona cruza, para el peaje (`Comercio_Caravanas.md` §7.2).
+- **En la escala la caravana sale del mapa y entra en la ciudad.** Al llegar al contorno desaparece del mundo y de la rejilla de encuentros, como una caravana `esperando` de hoy (`Comercio_Caravanas.md` §5.8.4): ni se ve ni se ataca. Al acabar la espera sale por el contorno del otro lado y sigue su camino.
+- **En una plaza ajena paga el peaje de hoy dentro** (§7.3): el 2 % del valor de lo que lleva, en oro de la capital de su Facción hacia la de la ciudad. El autor lo llama «acuñar». Deja de ser un cobro instantáneo en el punto de paso. **En una plaza propia entra y no paga.**
+- **La escala dura** `tiempoDescargaMinutosPorCarro` × los carros con animal de la caravana, **con un mínimo de 2 min**. Si en esa plaza tiene que dejar o recoger (una parada de su encargo, o la de una ruta compuesta: entrada 80), la parada dura lo de hoy (§5.8.5), con el mismo mínimo y sin sumarle nada.
+- **Mínimo de 2 min en todas las reglas que ya existen** (decisión del autor del 2026-11-23): ninguna estancia de una caravana dentro de una plaza dura menos de 2 min. Hoy una parada que no mueve nada tarda 0 y el lanzamiento a mano de un solo carro sale en el acto (`kPorCarro × (carros − 1)`). El mínimo vale para cada parada de un encargo (descarga más carga) y para la preparación del lanzamiento a mano, también con un solo carro: ninguna caravana sale antes de 2 min (confirmado por el autor el 2026-11-23).
+
+**Carro de acarreo (pueblo o aldea → su plaza): entra, no rodea.**
+
+- Su camino va solo dentro de la zona de su plaza y solo la une con ella.
+- Mientras espera a llenarse está dentro de su pueblo o aldea y no se ve en el mapa. Al salir se ve en el mundo hasta el borde de su plaza; allí entra y desaparece, gasta el tiempo de descarga (el mismo de las caravanas, con el mínimo de 2 min) y sale al mundo de vuelta hasta su pueblo o aldea, donde vuelve a desaparecer al entrar.
+
+**Lo que cambia por dentro.**
+
+- El trazado de las columnas suma el coste de las huellas de plaza. El de las caravanas no lo suma, pero parte el plan en tramos por cada escala, con un evento de entrada y otro de salida.
 - La caché de caminos (`crates/nucleo/src/nucleo/viaje.rs`, `cache.epoca`) caduca cuando una plaza se funda, sube de nivel, levanta su muralla o cae.
+- El peaje deja de ser un evento en el punto de paso y se cobra al entrar en la escala.
 
-Sin este bloque, una columna de paso cruza la maqueta por encima, pero con el bloque C nunca se queda parada dentro. Por eso va el último.
+Sin este bloque, una columna de paso cruza la maqueta por encima, aunque con el bloque C nunca se queda parada dentro. Por eso va el último.
 
 ## 8. Orden y lo que arrastra
 
@@ -113,7 +134,7 @@ Sin este bloque, una columna de paso cruza la maqueta por encima, pero con el bl
 2. C.
 3. E.
 
-Al implementar: `Docs/Mechanics/` (`Economia_Construccion.md`, `Movimiento_Ejercitos.md`, `Campamentos_Mercenarios.md`, `Generacion_Del_Mundo.md`), el canon, `Docs/Coordinacion/07_Catalogo_de_Rechazos.md`, `Docs/Coordinacion/Pendientes_Cliente_Jugador.md` y las versiones de los crates que cambien.
+Al implementar: `Docs/Mechanics/` (`Economia_Construccion.md`, `Movimiento_Ejercitos.md`, `Campamentos_Mercenarios.md`, `Generacion_Del_Mundo.md`), el canon, `Docs/Coordinacion/07_Catalogo_de_Rechazos.md` y las versiones de los crates que cambien.
 
 Lo que toca a los demás:
 

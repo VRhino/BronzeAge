@@ -283,4 +283,8 @@ Cinco bloques, en este orden:
 - **B, colocación:** zona 24 u al fundar y techos 30 / 50 / 70 / 80 / 90; plazas a 60 u; mercenarios a 60 u; orilla de la plaza 15 u; la separación de aldea en dos datos (a plaza 15 u, a otro pueblo 7,5 u); ningún nodo a menos de 12 u de una plaza al fundar; avanzada a 15 u o más de su madre; orilla de pueblo, aldea y avanzada a su tamaño real.
 - **D, generador:** piedra, cobre e hierro de base entre 2,25 y 6 u entre nodos de distinto tipo.
 - **C, puerta:** todo el contorno, a 1 u del borde; la marcha a un asentamiento acaba en el borde y la salida nace en él.
-- **E, rutas:** rodean las plazas y solo las cruzan si no hay otro camino. Cambia, solo para las plazas, la decisión del 2026-10-27 de que los elementos del mapa no estorban.
+- **E, rutas:** las columnas y los ejércitos rodean todas las plazas y solo las cruzan si no hay otro camino; las caravanas comerciales las atraviesan con parada dentro (fuera del mapa, peaje en las ajenas, mínimo de 2 min en toda estancia en una plaza) y el carro de acarreo entra en su plaza. Cambia, solo para las plazas, la decisión del 2026-10-27 de que los elementos del mapa no estorban (rehecho con el autor el 2026-11-23).
+
+## 80. Rutas compuestas (diseño del 2026-11-23)
+
+Diseño: `Docs/Disenos_Por_Implementar/Rutas_Compuestas.md`. El encargo de transporte (`Comercio_Caravanas.md` §5.8) pasa de dos paradas a un circuito de hasta 5 que cierra el círculo (A → B → C → A). En cada parada primero deja, y solo lo recogido en otra parada, y luego recoge. Se valida el peor tramo contra la capacidad, lo que sobra sigue a bordo y las paradas ajenas comercian en su mercado. Va después del bloque E de la entrada 79, que pone las escalas.
