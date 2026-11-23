@@ -3270,7 +3270,7 @@ pub mod rechazos {
     pub const PUEBLO_YA_TIENE_CARRO: &str = "pueblo.ya_tiene_carro";
     /// Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima.
     pub const PUEBLO_FERTILIDAD_INSUFICIENTE: &str = "pueblo.fertilidad_insuficiente";
-    /// Aldea agrícola: el punto está demasiado cerca de otro pueblo.
+    /// Aldea agrícola: el punto está a menos de `separacionAPlaza` (15 u) del centro de una plaza o a menos de `separacionAPueblo` (7,5 u) de otro pueblo.
     pub const PUEBLO_DEMASIADO_CERCA: &str = "pueblo.demasiado_cerca";
     /// Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01).
     pub const PUEBLO_FUERA_DE_SU_ANILLO: &str = "pueblo.fuera_de_su_anillo";
@@ -3298,9 +3298,9 @@ pub mod rechazos {
     pub const AVANZADA_NIVEL_INSUFICIENTE: &str = "avanzada.nivel_insuficiente";
     pub const AVANZADA_SIN_CUPO: &str = "avanzada.sin_cupo";
     pub const AVANZADA_FUERA_DE_LA_ZONA: &str = "avanzada.fuera_de_la_zona";
-    /// El sitio cae sobre la ciudad de la plaza madre (su radio es una décima del de su zona).
+    /// El sitio está a menos de `AVANZADAS.distanciaALaMadre` (15 u) del centro de la plaza madre.
     pub const AVANZADA_DENTRO_DEL_ASENTAMIENTO: &str = "avanzada.dentro_del_asentamiento";
-    /// El sitio pisa otra avanzada, un pueblo o un campamento (cada elemento del mapa mide 0,2).
+    /// El sitio pisa otra avanzada, un pueblo, una aldea o un campamento (con los radios de `TAMANOS_MAPA`; la avanzada reserva el de la ciudadela).
     pub const AVANZADA_PISA_OTRO_ELEMENTO: &str = "avanzada.pisa_otro_elemento";
     /// No hay una mejora ni una reparación que cancelar.
     pub const AVANZADA_NADA_QUE_CANCELAR: &str = "avanzada.nada_que_cancelar";

@@ -187,7 +187,7 @@ pub struct Reglas {
     pub pueblos: crate::pueblos::ReglasPueblos,
     /// `AVANZADAS`: las obras de mapa de las avanzadas (Doc 5.17).
     pub avanzadas: crate::avanzadas::ReglasAvanzadas,
-    /// `TAMANOS_MAPA`: lo que mide cada elemento en el mapa del mundo (para pintar y colocar; el movimiento no los mira).
+    /// `TAMANOS_MAPA`: lo que mide cada elemento en el mapa del mundo, en radio (para pintar y colocar).
     pub tamanos: TamanosMapa,
     /// `MURALLA` (de `Murallas.md`): los recintos de muralla, su coste, su obra y su bono defensivo.
     pub muralla: crate::recintos::ReglasMuralla,
@@ -216,7 +216,8 @@ pub struct Reglas {
 }
 
 /// `ORILLA_RIO`, en milésimas: la media anchura del cauce dibujado y el radio de cada maqueta. Un sitio vale si su distancia al trazo de todo río
-/// es al menos la media anchura de ese río más el radio de lo que se levanta.
+/// es al menos la media anchura de ese río más el radio de lo que se levanta. La plaza lleva su reserva (`radio.plaza`, la de la plaza de nivel 5 y algo
+/// de holgura) y los bandidos su cifra; el pueblo, la aldea y la avanzada, su tamaño real más grande de `TAMANOS_MAPA` (decisión del autor del 2026-11-23).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OrillaRio {
     pub media_anchura: Mil,
@@ -229,27 +230,36 @@ pub struct OrillaRio {
 }
 
 impl OrillaRio {
-    pub fn de(b: &Value) -> Self {
+    pub fn de(b: &Value, tamanos: &TamanosMapa) -> Self {
         let r = &b["radio"];
         let m = |v: &Value, k: &str| mil(v[k].as_f64().unwrap_or_else(|| panic!("ORILLA_RIO.{k}")));
         OrillaRio {
             media_anchura: m(b, "mediaAnchura"),
             media_anchura_navegable: m(b, "mediaAnchuraNavegable"),
             plaza: m(r, "plaza"),
-            pueblo: m(r, "pueblo"),
-            aldea: m(r, "aldea"),
-            avanzada: m(r, "avanzada"),
+            pueblo: tamanos.pueblo,
+            aldea: tamanos.aldea_mayor(),
+            avanzada: tamanos.avanzada_mayor(),
             bandidos: m(r, "bandidos"),
         }
     }
 }
 
-/// `TAMANOS_MAPA` (Economia_Construccion §14.1, decisión del autor del 2026-10-27): el diámetro, en milésimas de unidad de mapa, del disco que ocupa cada elemento en el mapa del mundo.
-/// Sirven para pintar y para colocar; el movimiento no los mira.
+/// `TAMANOS_MAPA.radio` (Economia_Construccion §14.1; decisión del autor del 2026-10-27, tamaños reales desde el 2026-11-23): el **radio**, en milésimas
+/// de unidad de mapa, del disco que ocupa cada elemento en el mapa del mundo. El motor es su dueño y los clientes dibujan a esa medida. La plaza mide
+/// lo mismo con cualquier zona: crece solo al subir de nivel o al levantar la muralla. Los índices de las listas son el nivel menos uno (la avanzada, su etapa).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TamanosMapa {
-    pub avanzada: Mil,
+    pub plaza_sin_muralla: Vec<Mil>,
+    pub plaza_con_muralla: Vec<Mil>,
     pub pueblo: Mil,
+    /// La aldea con sus campos, por nivel.
+    pub aldea: Vec<Mil>,
+    /// Solo el caserío de la aldea de labor, por nivel; la ganadera mide lo mismo en todos.
+    pub caserio_de_aldea: Vec<Mil>,
+    pub caserio_de_aldea_ganadera: Mil,
+    /// Atalaya, fuerte y ciudadela.
+    pub avanzada: Vec<Mil>,
     pub campamento_mercenarios: Mil,
     pub campamento_bandidos: Mil,
     pub nodo: Mil,
@@ -260,12 +270,25 @@ pub struct TamanosMapa {
     pub caravana: Mil,
 }
 
+/// El valor de ese nivel (o etapa, desde 1) de una lista; fuera de la tabla, el último.
+fn del_nivel(lista: &[Mil], nivel: u32) -> Mil {
+    lista[(nivel.max(1) as usize).min(lista.len()) - 1]
+}
+
 impl TamanosMapa {
     fn de(b: &Value) -> Self {
-        let d = |k: &str| mil(num(b, k));
+        let r = &b["radio"];
+        let d = |k: &str| mil(num(r, k));
+        let lista = |v: &Value, k: &str, claves: &[&str]| -> Vec<Mil> { claves.iter().map(|c| mil(num(&v[k], c))).collect() };
+        const NIVELES: [&str; 5] = ["1", "2", "3", "4", "5"];
         TamanosMapa {
-            avanzada: d("avanzada"),
+            plaza_sin_muralla: lista(&r["plaza"], "sinMuralla", &NIVELES),
+            plaza_con_muralla: lista(&r["plaza"], "conMuralla", &NIVELES),
             pueblo: d("pueblo"),
+            aldea: lista(r, "aldea", &NIVELES[..3]),
+            caserio_de_aldea: lista(r, "caserioDeAldea", &NIVELES[..3]),
+            caserio_de_aldea_ganadera: d("caserioDeAldeaGanadera"),
+            avanzada: lista(r, "avanzada", &["atalaya", "fuerte", "ciudadela"]),
             campamento_mercenarios: d("campamentoMercenarios"),
             campamento_bandidos: d("campamentoBandidos"),
             nodo: d("nodo"),
@@ -275,6 +298,31 @@ impl TamanosMapa {
             ejercito: d("ejercito"),
             caravana: d("caravana"),
         }
+    }
+
+    /// Lo que mide una plaza de ese nivel, con o sin muralla (`tieneMuralla`).
+    pub fn plaza(&self, nivel: u32, muralla: bool) -> Mil {
+        del_nivel(if muralla { &self.plaza_con_muralla } else { &self.plaza_sin_muralla }, nivel)
+    }
+
+    /// Lo que mide una aldea de ese nivel con sus campos.
+    pub fn aldea(&self, nivel: u32) -> Mil {
+        del_nivel(&self.aldea, nivel)
+    }
+
+    /// La aldea más grande (la de su último nivel): lo que reserva al colocarla.
+    pub fn aldea_mayor(&self) -> Mil {
+        self.aldea.iter().copied().max().unwrap_or(0)
+    }
+
+    /// Lo que mide una avanzada en esa etapa (1 atalaya, 2 fuerte, 3 ciudadela).
+    pub fn avanzada(&self, etapa: u32) -> Mil {
+        del_nivel(&self.avanzada, etapa)
+    }
+
+    /// La avanzada más grande (la ciudadela): lo que reserva al colocarla, para que al mejorarse no pise nada.
+    pub fn avanzada_mayor(&self) -> Mil {
+        self.avanzada.iter().copied().max().unwrap_or(0)
     }
 }
 
@@ -341,6 +389,7 @@ impl Reglas {
             catalogo,
         };
         let tamanos = TamanosMapa::de(&b("TAMANOS_MAPA"));
+        let orilla = OrillaRio::de(&b("ORILLA_RIO"), &tamanos);
         let fundacion = b("FUNDACION");
         let materiales_iniciales = fundacion["materialesIniciales"]
             .as_object()
@@ -358,7 +407,7 @@ impl Reglas {
             densidad_bosque_maxima_fundar: mil(num(&fundacion, "densidadBosqueMaximaParaFundar")),
             pendiente_maxima_fundar: mil(num(&fundacion, "pendienteMaximaParaFundar")),
             fraccion_reconstruccion: ppm(num(&b("OCUPACION"), "fraccionCosteReconstruccion")),
-            orilla: OrillaRio::de(&b("ORILLA_RIO")),
+            orilla,
             poblacion,
             politicas,
             capacidad_inicial: mil(num(&b("ALMACEN"), "capacidadInicialPorRecurso")),

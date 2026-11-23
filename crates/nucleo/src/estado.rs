@@ -333,7 +333,10 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 ///
 /// BAN65: BAN64 con el estilo de época de cada plaza (2026-11-16, Tecnologia_Aedas §4.2): `Asentamiento::estilo`, la Era y el grado (dos `u8`) tras la forja. BAN64 y anteriores ya no se
 /// admiten.
-const MAGIA: &[u8; 5] = b"BAN65";
+///
+/// BAN66: BAN65 con la distancia mínima a un nodo al fundar en las reglas del territorio (2026-11-23, «Tamaños y distancias del mapa»): un `i64` tras
+/// `exclusion_campamento`. BAN65 y anteriores ya no se leen.
+const MAGIA: &[u8; 5] = b"BAN66";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -444,16 +447,18 @@ impl Eq for ReglasEconomia {}
 /// Mundo y territorio (Doc 1.0a, 1.2, 1.7, 1.9c). Distancias y radios en milésimas de unidad estratégica.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReglasTerritorio {
-    /// Radio con el que nace la zona de una plaza (`ZONA_INFLUENCIA.radioInicial`: 6).
+    /// Radio con el que nace la zona de una plaza (`ZONA_INFLUENCIA.radioInicial`: 24).
     pub radio_inicial: Mil,
-    /// Techo del radio por nivel del asentamiento (`ZONA_INFLUENCIA.radioMaximoPorNivel`: 10 / 15 / 20 / 25 / 30).
+    /// Techo del radio por nivel del asentamiento (`ZONA_INFLUENCIA.radioMaximoPorNivel`: 30 / 50 / 70 / 80 / 90).
     pub techos: Vec<Mil>,
-    /// Cuánto agranda la zona cada edificio completado (`crecimientoPorEdificioCompletado`: 1). La zona no crece con el tiempo.
+    /// Cuánto agranda la zona cada edificio completado (`crecimientoPorEdificioCompletado`: 2). La zona no crece con el tiempo.
     pub crecimiento_por_edificio: Mil,
-    /// Distancia mínima entre plazas, de centro a centro (`FUNDACION.separacionPlazas`: 30).
+    /// Distancia mínima entre plazas, de centro a centro (`FUNDACION.separacionPlazas`: 60).
     pub separacion_plazas: Mil,
-    /// Distancia mínima a un campamento de mercenarios para fundar (`radioExclusionFundar`: 20).
+    /// Distancia mínima a un campamento de mercenarios para fundar (`radioExclusionFundar`: 60).
     pub exclusion_campamento: Mil,
+    /// Distancia mínima del centro de una plaza nueva a cualquier nodo de recurso (`FUNDACION.distanciaMinimaANodo`: 12; desde el 2026-11-23).
+    pub distancia_nodo: Mil,
 }
 
 impl Default for ReglasTerritorio {
@@ -478,6 +483,7 @@ impl Default for ReglasTerritorio {
             crecimiento_por_edificio: u(&zona, "crecimientoPorEdificioCompletado"),
             separacion_plazas: u(&fundacion, "separacionPlazas"),
             exclusion_campamento: u(&mercenarios, "radioExclusionFundar"),
+            distancia_nodo: u(&fundacion, "distanciaMinimaANodo"),
         }
     }
 }
@@ -1345,6 +1351,7 @@ impl Estado {
         w.i64(t.crecimiento_por_edificio);
         w.i64(t.separacion_plazas);
         w.i64(t.exclusion_campamento);
+        w.i64(t.distancia_nodo);
         w.texto(r.economia.huella());
         w.u64(self.version);
         w.i64(self.ahora);
@@ -1542,10 +1549,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN65`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN66`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN65): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN66): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));
@@ -1560,8 +1567,8 @@ impl Estado {
                 for _ in 0..r.u32()? {
                     techos.push(r.i64()?);
                 }
-                let (crecimiento_por_edificio, separacion_plazas, exclusion_campamento) = (r.i64()?, r.i64()?, r.i64()?);
-                ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento }
+                let (crecimiento_por_edificio, separacion_plazas, exclusion_campamento, distancia_nodo) = (r.i64()?, r.i64()?, r.i64()?, r.i64()?);
+                ReglasTerritorio { radio_inicial, techos, crecimiento_por_edificio, separacion_plazas, exclusion_campamento, distancia_nodo }
             },
             economia: {
                 let huella = r.texto()?;

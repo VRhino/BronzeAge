@@ -207,7 +207,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.no_esta_activo` | `PUEBLO_NO_ESTA_ACTIVO` | — |
 | `pueblo.ya_tiene_carro` | `PUEBLO_YA_TIENE_CARRO` | — |
 | `pueblo.fertilidad_insuficiente` | `PUEBLO_FERTILIDAD_INSUFICIENTE` | Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima. |
-| `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está demasiado cerca de otro pueblo. |
+| `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está a menos de `separacionAPlaza` (15 u) del centro de una plaza o a menos de `separacionAPueblo` (7,5 u) de otro pueblo. |
 | `pueblo.fuera_de_su_anillo` | `PUEBLO_FUERA_DE_SU_ANILLO` | Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01). |
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
@@ -233,8 +233,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `avanzada.nivel_insuficiente` | `AVANZADA_NIVEL_INSUFICIENTE` | — |
 | `avanzada.sin_cupo` | `AVANZADA_SIN_CUPO` | — |
 | `avanzada.fuera_de_la_zona` | `AVANZADA_FUERA_DE_LA_ZONA` | — |
-| `avanzada.dentro_del_asentamiento` | `AVANZADA_DENTRO_DEL_ASENTAMIENTO` | El sitio cae sobre la ciudad de la plaza madre (su radio es una décima del de su zona). |
-| `avanzada.pisa_otro_elemento` | `AVANZADA_PISA_OTRO_ELEMENTO` | El sitio pisa otra avanzada, un pueblo o un campamento (cada elemento del mapa mide 0,2). |
+| `avanzada.dentro_del_asentamiento` | `AVANZADA_DENTRO_DEL_ASENTAMIENTO` | El sitio está a menos de `AVANZADAS.distanciaALaMadre` (15 u) del centro de la plaza madre. |
+| `avanzada.pisa_otro_elemento` | `AVANZADA_PISA_OTRO_ELEMENTO` | El sitio pisa otra avanzada, un pueblo, una aldea o un campamento (con los radios de `TAMANOS_MAPA`; la avanzada reserva el de la ciudadela). |
 | `avanzada.nada_que_cancelar` | `AVANZADA_NADA_QUE_CANCELAR` | No hay una mejora ni una reparación que cancelar. |
 | `avanzada.fuera_del_sitio` | `AVANZADA_FUERA_DEL_SITIO` | El sitio donde se pide colocarla no es tierra firme (desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea; antes: la columna del héroe no estaba en el sitio). |
 | `avanzada.sin_ruta` | `AVANZADA_SIN_RUTA` | Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04). |

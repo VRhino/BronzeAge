@@ -123,10 +123,11 @@ pub struct ReglasAvanzadas {
     pub cupo_por_nivel: u32,
     /// Cabida por recurso del almacén de cada etapa.
     pub capacidad_almacen: [Mil; 3],
-    /// Lo que mide la avanzada en el mapa (`TAMANOS_MAPA.avanzada`): el diámetro del disco que ocupa.
-    pub tamano: Mil,
-    /// Lo que mide la ciudad de la plaza madre en el mapa, como fracción del radio de su zona (ppm): «la ciudad nunca pasa de una décima de su provincia».
-    pub ciudad_de_la_zona: i64,
+    /// Lo que reserva una avanzada al colocarla: el radio de la ciudadela (`TAMANOS_MAPA.radio.avanzada`), para que al mejorarse no pise nada.
+    pub radio: Mil,
+    /// A qué distancia del centro de su madre puede ir como poco (`distanciaALaMadre`: 15 u, la misma reserva que la aldea; decisión del autor del
+    /// 2026-11-23, que sustituye a la fracción de la zona).
+    pub distancia_a_la_madre: Mil,
     /// Parte del coste de la etapa que cuesta reparar unas ruinas (ppm).
     pub fraccion_reparacion: i64,
     /// Coste y duración (ms) de cada paso: construir la atalaya, mejorarla a fuerte, mejorar el fuerte a ciudadela.
@@ -147,8 +148,8 @@ impl ReglasAvanzadas {
             nivel_madre: nivel,
             cupo_por_nivel: numero(&b["cupoPorNivelDeLaMadre"]) as u32,
             capacidad_almacen: capacidad,
-            tamano: tamanos.avanzada,
-            ciudad_de_la_zona: ppm(numero(&b["fraccionCiudadDeLaZona"])),
+            radio: tamanos.avanzada_mayor(),
+            distancia_a_la_madre: mil(numero(&b["distanciaALaMadre"])),
             fraccion_reparacion: ppm(numero(&b["fraccionReparacion"])),
             obras,
         }
@@ -164,19 +165,14 @@ impl ReglasAvanzadas {
         self.obras[etapa.indice()].1
     }
 
-    /// Lo que mide la ciudad de una plaza cuya zona tiene ese radio.
-    pub fn radio_de_ciudad(&self, radio_de_zona: Mil) -> Mil {
-        por(radio_de_zona, self.ciudad_de_la_zona)
-    }
-
-    /// Dónde cabe una avanzada nueva (Doc 5.17, 4.2.2): sin pisar la ciudad de su madre (la distancia a su centro es la de su radio más la mitad del tamaño de la
-    /// avanzada) ni ningún otro elemento del mapa (`otros` son los centros de los demás, con su diámetro: avanzadas, pueblos, campamentos; dos se pisan si sus centros distan
-    /// menos de la media de sus diámetros). Que esté en la zona y que el héroe esté en el sitio lo mira el núcleo.
-    pub fn comprobar_sitio(&self, plaza: Punto, radio_de_zona: Mil, sitio: Punto, otros: impl IntoIterator<Item = (Punto, Mil)>) -> Result<(), ErrorAvanzada> {
-        if sitio.dist(plaza) < self.radio_de_ciudad(radio_de_zona) + self.tamano / 2 {
+    /// Dónde cabe una avanzada nueva (Doc 5.17, 4.2.2): a `distanciaALaMadre` o más del centro de su madre (la reserva de la plaza de nivel 5) y sin pisar
+    /// ningún otro elemento del mapa (`otros` son los centros de los demás, con su radio: avanzadas, pueblos, aldeas, campamentos; dos se pisan si sus centros
+    /// distan menos que la suma de sus radios). Que esté en la zona y que el héroe esté en el sitio lo mira el núcleo.
+    pub fn comprobar_sitio(&self, plaza: Punto, sitio: Punto, otros: impl IntoIterator<Item = (Punto, Mil)>) -> Result<(), ErrorAvanzada> {
+        if sitio.dist(plaza) < self.distancia_a_la_madre {
             return Err(ErrorAvanzada::DentroDelAsentamiento);
         }
-        if otros.into_iter().any(|(o, d)| sitio.dist(o) < (self.tamano + d) / 2) {
+        if otros.into_iter().any(|(o, r)| sitio.dist(o) < self.radio + r) {
             return Err(ErrorAvanzada::PisaOtroElemento);
         }
         Ok(())
@@ -397,7 +393,7 @@ mod pruebas {
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().avanzadas;
         assert_eq!((r.nivel_madre, r.cupo_por_nivel, r.capacidad_almacen), ([2, 2, 3], 1, [0, 4_000_000, 20_000_000]), "almacenes al doble desde el 2026-11-05");
-        assert_eq!((r.tamano, r.ciudad_de_la_zona, r.fraccion_reparacion), (200, 50_000, 500_000), "elemento de 0,2; ciudad de una vigésima de la zona (desde el 2026-11-05); reparar cuesta la mitad");
+        assert_eq!((r.radio, r.distancia_a_la_madre, r.fraccion_reparacion), (1_440, 15_000, 500_000), "reserva la ciudadela (1,44 u de radio); a 15 u de la madre (desde el 2026-11-23); reparar cuesta la mitad");
         assert_eq!(r.costo(Etapa::Atalaya), &vec![(Madera, 200_000), (Piedra, 100_000)], "200 madera + 100 piedra, obra de 2 h");
         assert_eq!(r.duracion(Etapa::Atalaya), 120 * MIN);
         assert_eq!(r.costo(Etapa::Fuerte), &vec![(Madera, 600_000), (Oro, 50_000), (Piedra, 400_000)]);
@@ -537,25 +533,21 @@ mod pruebas {
         let r = Reglas::cargar().avanzadas;
         let plaza = Punto::new(100_000, 100_000);
         let a = |dx: i64, dy: i64| Punto::new(plaza.x + dx, plaza.y + dy);
-        // La ciudad mide una vigésima de la zona (zona 30 → 1,5; desde el 2026-11-05, con las zonas al doble) y la avanzada pide además la mitad de su tamaño (0,1): 1,6 de centro a centro.
-        assert_eq!((r.radio_de_ciudad(12_000), r.radio_de_ciudad(30_000)), (600, 1_500));
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(1_599, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(0, -1_599), []), Err(ErrorAvanzada::DentroDelAsentamiento));
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(1_600, 0), []), Ok(()), "justo fuera, sin pisarla");
-        // Con una zona mayor la ciudad es mayor: lo que valía deja de valer.
-        assert_eq!(r.comprobar_sitio(plaza, 60_000, a(2_000, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
-        assert_eq!(r.comprobar_sitio(plaza, 60_000, a(3_100, 0), []), Ok(()));
-        // Otro elemento (una avanzada, un pueblo, un campamento) a menos de la media de los dos diámetros (0,2 y 0,2) se pisa; a 0,2 justo, no.
-        let sitio = a(8_000, 0);
-        let otros = [(a(8_199, 0), 200), (a(20_000, 0), 200)];
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, otros), Err(ErrorAvanzada::PisaOtroElemento));
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(a(8_000, 200), 200), (a(7_800, 0), 200)]), Ok(()));
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(sitio, 200)]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
-        // Uno más grande pisa desde más lejos: con 1 de diámetro, la media es 0,6.
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(a(8_599, 0), 1_000)]), Err(ErrorAvanzada::PisaOtroElemento));
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, sitio, [(a(8_600, 0), 1_000)]), Ok(()));
-        // La ciudad se mira antes que los demás elementos.
-        assert_eq!(r.comprobar_sitio(plaza, 30_000, a(500, 0), [(a(500, 0), 200)]), Err(ErrorAvanzada::DentroDelAsentamiento));
+        // A 15 u o más del centro de la madre, sea cual sea su zona (desde el 2026-11-23).
+        assert_eq!(r.comprobar_sitio(plaza, a(14_999, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, a(0, -14_999), []), Err(ErrorAvanzada::DentroDelAsentamiento));
+        assert_eq!(r.comprobar_sitio(plaza, a(15_000, 0), []), Ok(()), "a 15 justos, sí");
+        // Otro elemento (una avanzada, un pueblo, una aldea, un campamento) a menos de la suma de los radios (1,44 de la ciudadela y el suyo) se pisa.
+        let sitio = a(20_000, 0);
+        let otros = [(a(21_439, 0), 0), (a(40_000, 0), 200)];
+        assert_eq!(r.comprobar_sitio(plaza, sitio, otros), Err(ErrorAvanzada::PisaOtroElemento));
+        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(21_440, 0), 0), (a(18_560, 0), 0)]), Ok(()));
+        assert_eq!(r.comprobar_sitio(plaza, sitio, [(sitio, 100)]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
+        // Uno más grande pisa desde más lejos: un pueblo (2,04) pide 3,48 entre centros.
+        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(23_479, 0), 2_040)]), Err(ErrorAvanzada::PisaOtroElemento));
+        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(23_480, 0), 2_040)]), Ok(()));
+        // La madre se mira antes que los demás elementos.
+        assert_eq!(r.comprobar_sitio(plaza, a(500, 0), [(a(500, 0), 200)]), Err(ErrorAvanzada::DentroDelAsentamiento));
     }
 
     #[test]

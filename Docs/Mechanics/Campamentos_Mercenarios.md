@@ -171,7 +171,7 @@ Con las cifras del TypeScript, un campamento típico (taberna, mercado, barracó
   "racion": {
     "cadaMinutos": 30
   },
-  "radioExclusionFundar": 20,
+  "radioExclusionFundar": 60,
   "radioProteccion": 10,
   "origenes": 3,
   "edificiosFijos": [

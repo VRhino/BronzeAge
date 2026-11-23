@@ -836,7 +836,7 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64) {
     let mapa = nucleo::economia::Mapa::de(&m.0);
     let (cobre, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
-        .find_map(|i| sitio_junto_a(&x.n, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&x.n, mapa.nodos[i].pos, 13_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     let t = x.n.ahora();
     let columna = x.n.crear_ejercito(t, "ana", 1, sitio, 500, 100_000).unwrap();
@@ -863,7 +863,7 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64) {
     assert!(x.n.pueblo(pueblo).unwrap().1.activo());
     let centro = x.n.estado().asentamientos[&a].posicion;
     let t = x.n.ahora();
-    let col = x.n.crear_ejercito(t, "ana", 1, Punto::new(centro.x + 8_000, centro.y), 500, 100_000).unwrap();
+    let col = x.n.crear_ejercito(t, "ana", 1, Punto::new(centro.x + 16_000, centro.y), 500, 100_000).unwrap();
     for (r, c) in [(Madera, 150_000), (Piedra, 150_000), (Oro, 50_000)] {
         x.ok("admin", Comando::DarSuministro { ejercito: col, recurso: r, cantidad: c });
     }
@@ -885,7 +885,7 @@ async fn los_pueblos_y_las_avanzadas_de_la_faccion_viajan_en_resumen_con_su_obra
     let heroe = ids::heroe(x.n.ejercito(col).unwrap().columna.lider);
     let gobernador = ids::heroe(x.n.estado().asentamientos[&x.a].cargos.titular(asentamiento::Cargo::Gobernador).expect("la madre tiene Gobernador"));
     let centro = x.n.estado().asentamientos[&x.a].posicion;
-    let sitio = Punto::new(centro.x + 8_000, centro.y);
+    let sitio = Punto::new(centro.x + 16_000, centro.y);
     let w = arrancar_con(x.n).await;
     let (mut ana, _, mensajes) = w.conectar(hola_con("ana", TipoCliente::ClienteUnity, &[])).await;
     let f1 = "FACCION:f-1";

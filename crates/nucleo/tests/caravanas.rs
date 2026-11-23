@@ -52,7 +52,7 @@ macro_rules! con_mundo {
 fn sin_bandidos() -> Reglas {
     let mut r = Reglas::default();
     let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
-    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo, b.por_plaza) = (0, 0, 0, 0);
     r
 }
 

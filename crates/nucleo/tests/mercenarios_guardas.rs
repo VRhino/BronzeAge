@@ -145,7 +145,7 @@ impl E {
         }
         mc::ok(&mut self.n, "admin", Comando::AlternarAutoConstruccion { asentamiento: plaza, pausada: true });
         let centro = self.n.estado().asentamientos[&plaza].posicion;
-        let sitio = Punto::new(centro.x + 8_000, centro.y);
+        let sitio = Punto::new(centro.x + 16_000, centro.y);
         let columna = self.n.crear_ejercito(self.n.ahora(), "obrero", 1, sitio, 500, 100_000).unwrap();
         let maestro = self.n.ejercito(columna).unwrap().columna.lider;
         mc::ok(&mut self.n, "admin", Comando::FijarResidencia { heroe: maestro, residencia: Some(Residencia::Asentamiento(plaza as u32)) });

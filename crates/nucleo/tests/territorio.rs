@@ -112,26 +112,26 @@ fn fundar_y_sus_rechazos() {
     assert!(n.version() > v0);
     let a = &n.estado().asentamientos[&id];
     assert_eq!((a.faccion, a.nivel(), a.posicion, a.fundado_en), (1, 1, p, MIN));
-    assert_eq!(n.radio_zona(id), Some(12_000));
+    assert_eq!(n.radio_zona(id), Some(24_000));
     assert_eq!(n.estado().fundacion.de_columna(e), None, "la caravana se gasta");
     assert_eq!(eventos(&n, "fundacion.asentamiento_fundado"), vec![(MIN, vec![id])]);
     // La columna que funda entra en la plaza (Fundacion_Y_Refundacion §5.5): ya no está para fundar otra vez.
     assert!(n.ejercito(e).is_none(), "la columna entra en la plaza");
     assert_eq!(codigo(&n.aplicar_en(MIN, Peticion::nueva("ana", "f3", Comando::Fundar { ejercito: e }))), rechazos::EJERCITO_DESCONOCIDO);
 
-    // Cerca de una plaza (a 16: fuera de su zona inicial de 12 y a menos de la separación de 20, en el primer rumbo con suelo fundable; el doble desde el 2026-11-05) y dentro de su zona (encima).
+    // Cerca de una plaza (a 40: fuera de su zona inicial de 24 y a menos de la separación de 60, en el primer rumbo con suelo fundable; desde el 2026-11-23) y dentro de su zona (encima).
     let cerca = (0..36)
         .map(|k| (k as f64 * 10.0).to_radians())
-        .map(|a| Punto::new(p.x + (16_000.0 * a.cos()) as i64, p.y + (16_000.0 * a.sin()) as i64))
+        .map(|a| Punto::new(p.x + (40_000.0 * a.cos()) as i64, p.y + (40_000.0 * a.sin()) as i64))
         .find(|&q| n.viabilidad(q, 2).and_then(|v| v.motivo) == Some(territorio::Motivo::CercaDePlaza))
-        .expect("algún rumbo con suelo a 16 de la plaza");
+        .expect("algún rumbo con suelo a 40 de la plaza");
     for (nombre, q, esperado) in [("cerca", cerca, "fundacion.cerca_de_plaza"), ("encima", p, "fundacion.dentro_de_zona")] {
         let e2 = n.crear_ejercito(MIN, "ana", 2, q, 500, 1).unwrap();
         n.aplicar_en(MIN, admin(&format!("c-{nombre}"), Comando::DarCaravanaFundacion { ejercito: e2 }));
         let r = n.aplicar_en(MIN, Peticion::nueva("ana", &format!("f-{nombre}"), Comando::Fundar { ejercito: e2 }));
         assert_eq!(codigo(&r), esperado, "{nombre}");
     }
-    // Encima de un campamento: la exclusión de 20.
+    // Encima de un campamento: la exclusión de 60.
     let c0 = campamento_en_claro(&n, &m.0);
     let e3 = n.crear_ejercito(MIN, "ana", 3, c0, 500, 1).unwrap();
     n.aplicar_en(MIN, admin("c-campa", Comando::DarCaravanaFundacion { ejercito: e3 }));
@@ -195,18 +195,18 @@ fn la_zona_solo_crece_con_edificios_hasta_el_techo_de_su_nivel() {
     // El tiempo solo no la agranda: sin edificios nuevos (la auto-construcción pausada), la plaza vive 10 minutos y el radio no se mueve.
     assert!(n.aplicar_en(0, admin("pausa", Comando::AlternarAutoConstruccion { asentamiento: id, pausada: true })).aceptada());
     n.avanzar_hasta(10 * MIN);
-    assert_eq!(n.radio_zona(id), Some(12_000));
-    // Cada edificio, 2 unidades; el nivel 1 tiene techo 20 (el doble desde el 2026-11-05: antes 6, 1 y 10, con los mismos edificios).
-    assert_eq!(edificios(&mut n, 11 * MIN, id, 10), 4, "de 12 a 20: cuatro edificios, los demás ya no agrandan");
-    assert_eq!(n.radio_zona(id), Some(20_000));
+    assert_eq!(n.radio_zona(id), Some(24_000));
+    // Cada edificio, 2 unidades; el nivel 1 tiene techo 30 (desde el 2026-11-23: zona de 24 y techos 30 / 50 / 70 / 80 / 90).
+    assert_eq!(edificios(&mut n, 11 * MIN, id, 10), 3, "de 24 a 30: tres edificios, los demás ya no agrandan");
+    assert_eq!(n.radio_zona(id), Some(30_000));
     // Subir de nivel levanta el techo sin saltos: el radio sigue donde estaba.
     let t = 12 * MIN;
     assert!(n.aplicar_en(t, admin("n2", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 2 })).aceptada());
-    assert_eq!(n.radio_zona(id), Some(20_000));
-    assert_eq!(edificios(&mut n, t, id, 9), 5, "techo 30");
+    assert_eq!(n.radio_zona(id), Some(30_000));
+    assert_eq!(edificios(&mut n, t, id, 12), 10, "techo 50");
     assert!(n.aplicar_en(t, admin("n3", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
-    assert_eq!(edificios(&mut n, t, id, 9), 5, "techo 40");
-    assert_eq!(n.radio_zona(id), Some(40_000));
+    assert_eq!(edificios(&mut n, t, id, 12), 10, "techo 70");
+    assert_eq!(n.radio_zona(id), Some(70_000));
     // El nivel no baja ni se sale de la tabla.
     assert_eq!(codigo(&n.aplicar_en(t, admin("n1", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 1 }))), rechazos::NIVEL_INVALIDO);
     assert_eq!(codigo(&n.aplicar_en(t, admin("n9", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 9 }))), rechazos::NIVEL_INVALIDO);
@@ -230,13 +230,13 @@ fn las_granjas_rinden_con_la_mejor_fertilidad_de_la_zona() {
     let id = fundar_en(&mut n, 0, "a", 1, p);
     // La mejor de la posición y sus 40 muestras, no la del centro ni un 1,0 fijo; y cambia con el radio, que lleva las muestras más lejos.
     let f = n.fertilidad_de_zona(id).unwrap();
-    assert_eq!(f, mejor_fertilidad(&m.0, p, 12_000));
+    assert_eq!(f, mejor_fertilidad(&m.0, p, 24_000));
     assert!(f >= m.0.fertilidad_en(p.x, p.y).unwrap() as i64 * 1_000_000 / 255);
     assert!((0..=1_000_000).contains(&f));
     assert!(n.aplicar_en(0, admin("n3", Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 })).aceptada());
     edificios(&mut n, MIN, id, 20);
     let r = n.radio_zona(id).unwrap();
-    assert!(r > 12_000);
+    assert!(r > 24_000);
     assert_eq!(n.fertilidad_de_zona(id).unwrap(), mejor_fertilidad(&m.0, p, r));
     assert_eq!(n.fertilidad_de_zona(id + 1_000), None, "sin plaza no hay fertilidad");
 }
@@ -277,9 +277,9 @@ fn crecer_hasta_tocarse(n: &mut Nucleo, a: u64, b: u64, t: i64) -> (i64, i64) {
 fn las_zonas_de_dos_facciones_se_tocan_justo_cuando_la_suma_de_radios_llega_a_la_distancia() {
     let m = con_mundo!();
     let mut n = nuevo(m);
-    let (a, b, pa, pb) = par(&mut n, &m.0, 64_000, (1, 2), 0);
+    let (a, b, pa, pb) = par(&mut n, &m.0, 100_000, (1, 2), 0);
     let d = pa.dist(pb);
-    // Con zonas de 12 (suma 24; de nivel 1, como mucho 40) no se tocan, por mucho tiempo que pase.
+    // Con zonas de 24 (suma 48; de nivel 1, como mucho 60) no se tocan, por mucho tiempo que pase.
     n.avanzar_hasta(30 * 24 * 60 * MIN);
     assert!(eventos(&n, "zona.frontera").is_empty());
     let (t, antes) = crecer_hasta_tocarse(&mut n, a, b, 31 * 24 * 60 * MIN);
@@ -307,12 +307,12 @@ fn las_zonas_de_la_misma_faccion_se_solapan_sin_frontera() {
     let m = con_mundo!();
     let mut n = nuevo(m);
     n.aplicar_en(0, admin("nf", Comando::FijarNivelFaccion { faccion: 1, nivel: 2 }));
-    let (a, b, ..) = par(&mut n, &m.0, 64_000, (1, 1), 0);
+    let (a, b, ..) = par(&mut n, &m.0, 100_000, (1, 1), 0);
     for (id, x) in [(a, "na"), (b, "nb")] {
         n.aplicar_en(0, admin(x, Comando::FijarNivelAsentamiento { asentamiento: id, nivel: 3 }));
-        edificios(&mut n, 0, id, 20);
+        edificios(&mut n, 0, id, 25);
     }
-    assert_eq!((n.radio_zona(a), n.radio_zona(b)), (Some(40_000), Some(40_000)), "40 + 40 > 64: se solapan");
+    assert_eq!((n.radio_zona(a), n.radio_zona(b)), (Some(70_000), Some(70_000)), "70 + 70 > 100: se solapan");
     assert!(eventos(&n, "zona.frontera").is_empty());
     assert!(n.estado().contactos.is_empty());
 }
@@ -376,7 +376,7 @@ fn el_territorio_sobrevive_a_la_foto_y_al_registro() {
     let con = |ajustes: Ajustes| Arranque { ajustes, ..arranque(m) };
     let hash = {
         let mut n = Nucleo::con_persistencia(con(ajustes.clone()), dir.path(), Default::default()).unwrap();
-        let (a, b, ..) = par(&mut n, &m.0, 32_000, (1, 2), 0);
+        let (a, b, ..) = par(&mut n, &m.0, 64_000, (1, 2), 0);
         let (t, _) = crecer_hasta_tocarse(&mut n, a, b, MIN);
         n.aplicar_en(t, admin("p", Comando::ReclamarParcela { asentamiento: a }));
         n.foto_ahora(); // a mitad: la foto lleva radios, contactos y parcelas
@@ -400,7 +400,7 @@ fn la_plaza_se_proyecta_al_contrato() {
     let a = &n.estado().asentamientos[&id];
     let e = nucleo::proyeccion::ficha_de_asentamiento(a, &n.poligono_zona(id), None);
     assert_eq!((e.id.as_str(), e.faccion_id.as_str(), e.nivel), (format!("as-{id}").as_str(), "f-1", 1));
-    assert_eq!(e.radio_potencial, 12_000);
+    assert_eq!(e.radio_potencial, 24_000);
     assert_eq!(e.zona.len(), 48, "sin vecinas, el polígono es el disco entero");
     assert!(e.protegida_hasta_ms.is_some() && e.protegida_hasta_ms == a.protegida_hasta, "la ficha de fuera dice hasta cuándo está protegida (2026-11-11)");
 }
@@ -409,8 +409,38 @@ fn la_plaza_se_proyecta_al_contrato() {
 fn las_reglas_del_territorio_salen_de_los_bloques_del_documento() {
     // 2026-11-04 (decisión del autor): nada del territorio va escrito en el código. `ZONA_INFLUENCIA` y `FUNDACION` de Economia_Construccion, `MERCENARIOS` de Campamentos_Mercenarios.
     let t = Reglas::default().territorio;
-    assert_eq!((t.radio_inicial, t.crecimiento_por_edificio), (12_000, 2_000), "el doble desde el 2026-11-05");
-    assert_eq!(t.techos, vec![20_000, 30_000, 40_000, 50_000, 60_000]);
-    assert_eq!(t.separacion_plazas, 20_000, "2026-11-05: 20 u (10 el 2026-11-04, antes 30)");
-    assert_eq!(t.exclusion_campamento, 20_000);
+    assert_eq!((t.radio_inicial, t.crecimiento_por_edificio), (24_000, 2_000), "zona de 24 desde el 2026-11-23 (12 desde el 2026-11-05)");
+    assert_eq!(t.techos, vec![30_000, 50_000, 70_000, 80_000, 90_000]);
+    assert_eq!(t.separacion_plazas, 60_000, "2026-11-23: 60 u (20 desde el 2026-11-05, 10 el 2026-11-04, antes 30)");
+    assert_eq!(t.exclusion_campamento, 60_000);
+    assert_eq!(t.distancia_nodo, 12_000, "regla nueva del 2026-11-23");
+}
+
+/// Ningún nodo de recurso a menos de 12 u del centro de una plaza nueva (decisión del autor del 2026-11-23): al crecer, la plaza lo taparía.
+#[test]
+fn no_se_funda_a_menos_de_doce_de_un_nodo() {
+    let m = con_mundo!();
+    let mut n = nuevo(m);
+    let mapa = nucleo::economia::Mapa::de(&m.0);
+    let nodos: Vec<Punto> = mapa.nodos.iter().map(|x| x.pos).collect();
+    let lejos_de_todos = |p: Punto, r: i64| nodos.iter().all(|q| q.dist(p) >= r);
+    // Un nodo con suelo fundable a 11 u y a 12 u (en el mismo rumbo, sin ningún otro nodo a menos de 12 de esos puntos).
+    let (cerca, justo) = nodos
+        .iter()
+        .flat_map(|&c| (0..36).map(move |g| (c, ((g * 10) as f64).to_radians())))
+        .map(|(c, a)| (Punto::new(c.x + (11_000.0 * a.cos()) as i64, c.y + (11_000.0 * a.sin()) as i64), Punto::new(c.x + (12_000.0 * a.cos()).ceil() as i64, c.y + (12_000.0 * a.sin()).ceil() as i64), c))
+        .find(|&(p, q, c)| {
+            nodos.iter().filter(|&&o| o != c).all(|o| o.dist(p) >= 12_000 && o.dist(q) >= 12_000) && c.dist(q) >= 12_000
+                && n.viabilidad(q, 1).is_some_and(|v| v.motivo.is_none())
+                && n.viabilidad(p, 1).is_some_and(|v| v.motivo == Some(territorio::Motivo::CercaDeNodo))
+        })
+        .map(|(p, q, _)| (p, q))
+        .expect("algún nodo con suelo fundable a 11 y a 12 u");
+    assert!(!lejos_de_todos(cerca, 12_000) && lejos_de_todos(justo, 12_000));
+    let e = n.crear_ejercito(0, "ana", 1, cerca, 500, 100_000).unwrap();
+    assert!(n.aplicar_en(0, admin("c-nodo", Comando::DarCaravanaFundacion { ejercito: e })).aceptada());
+    let rastro = n.hash_estado();
+    assert_eq!(codigo(&n.aplicar_en(0, Peticion::nueva("ana", "f-nodo", Comando::Fundar { ejercito: e }))), "fundacion.cerca_de_nodo");
+    assert_eq!(n.hash_estado(), rastro, "el rechazo no deja rastro");
+    fundar_en(&mut n, 0, "justo", 1, justo);
 }

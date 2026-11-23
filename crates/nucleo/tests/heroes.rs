@@ -1334,7 +1334,7 @@ fn las_tecnologias_de_la_administracion_abren_las_obras_que_las_piden_y_un_heroe
     let mut n = Nucleo::nuevo(arranque(m, 7));
     let (hierro, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaHierro)
-        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 13_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de hierro junto a un sitio rico");
     let a = fundar(&mut n, 0, "a", "ana", 1, sitio);
     let mut e = Escenario { n, a, cuenta: 0 };
@@ -1446,7 +1446,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN66");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

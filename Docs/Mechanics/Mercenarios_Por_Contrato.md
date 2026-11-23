@@ -173,7 +173,7 @@ caducan si la convocatoria se cancela. Hechos `mercenarios.orden_cumplida` y `me
 ### 6.4 Qué admite cada trabajo
 
 La tabla `TRABAJOS_MERCENARIOS` (§17) da a cada trabajo sus clases de objetivo, su orden inicial y las órdenes que admite después (`mercenario.orden_fuera_de_contrato` si no):
-`guardar_objetivo` es `guardar` del objetivo del contrato y `atacar_en_radio`, `atacar` de algo que esté a ≤ `radioDefensa` del objetivo del contrato. La orden inicial es la de su
+`guardar_objetivo` es `guardar` del objetivo del contrato y `atacar_en_radio`, `atacar` de algo que esté a ≤ `radioDefensa` del objetivo del contrato (si el objetivo es una plaza, **desde el borde de su zona**, decisión del autor del 2026-11-23: con la zona de 24 a 90 u, medido desde el centro no alcanzaba nunca a unos bandidos, que no se levantan dentro de una zona; de otro objetivo, desde su punto). La orden inicial es la de su
 fila sobre el objetivo del contrato, salvo en el permanente, que es `guardar` de la plaza donde reside.
 
 ### 6.5 Quién ordena qué y el rango

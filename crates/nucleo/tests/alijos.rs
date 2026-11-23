@@ -213,7 +213,7 @@ fn los_alijos_abiertos_viajan_en_la_foto() {
     e.ok("ana", Comando::AbrirAlijo { heroe: ana, alijo });
     let (reglas, hash) = (e.n.estado().reglas.clone(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN66");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!((s.militar.heroes[&ana].alijos_abiertos.iter().copied().collect::<Vec<_>>(), s.hash()), (vec![alijo], e.n.hash_estado()));
     let mut otro = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
@@ -263,7 +263,8 @@ async fn por_la_sesion_se_abre_un_alijo_y_el_heroe_lo_lleva_en_heroe_y_en_admin(
     c.cerrar().await;
     // 6G: quien es de una Facción con plazas no busca alijos: bea, con la suya, no recibe ninguno aunque esté en el mismo sitio.
     let mut n = w.parar().await;
-    fundar(&mut n, "otro", 7, en_tierra(&m.0, sitio, 60_000, 0));
+    let donde = comun::real::fundable_cerca(&n, sitio, 60_000, 0, 7);
+    fundar(&mut n, "otro", 7, donde);
     let t = n.ahora();
     n.crear_ejercito(t, "bea", 7, sitio, 500, 100_000).unwrap();
     let w = arrancar_con(n).await;

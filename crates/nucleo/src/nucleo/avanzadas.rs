@@ -122,14 +122,18 @@ impl Nucleo {
 
     // ───────────────────────────── Ayudas ─────────────────────────────
 
-    /// Los centros de lo que ya ocupa el mapa, con su diámetro de `TAMANOS_MAPA` (Doc 4.2.2): las avanzadas en cualquier estado (también unas ruinas sin dueño), los pueblos
-    /// extractores sobre su nodo y los campamentos de mercenarios y de bandidos.
+    /// Los centros de lo que ya ocupa el mapa, con el radio que reserva cada uno de `TAMANOS_MAPA` (Doc 4.2.2; el de su etapa o nivel más grande, para que
+    /// al crecer no pise nada): las avanzadas en cualquier estado (también unas ruinas sin dueño), los pueblos extractores sobre su nodo, las aldeas con sus
+    /// campos y los campamentos de mercenarios y de bandidos.
     fn elementos_de_mapa(&self) -> Vec<(Punto, Mil)> {
         let (asentamientos, combate) = (&self.estado.asentamientos, &self.estado.combate);
         let t = &self.estado.reglas.economia.datos.tamanos;
         let nodos = self.geografia.as_ref().map_or(&[][..], |g| &g.mapa.nodos[..]);
-        let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| (v.posicion, t.avanzada));
-        let pueblos = asentamientos.values().flat_map(|a| a.economia.pueblos.iter()).filter_map(|p| crate::economia::posicion_de_pueblo(nodos, p)).map(|pos| (pos, t.pueblo));
+        let avanzadas = asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).chain(combate.huerfanas.values()).map(|v| (v.posicion, t.avanzada_mayor()));
+        let pueblos = asentamientos
+            .values()
+            .flat_map(|a| a.economia.pueblos.iter())
+            .filter_map(|p| crate::economia::posicion_de_pueblo(nodos, p).map(|pos| (pos, if p.es_aldea() { t.aldea_mayor() } else { t.pueblo })));
         let mercenarios = self.geografia.iter().flat_map(|g| g.mapa.campamentos.iter().map(|&c| (c, t.campamento_mercenarios)));
         avanzadas.chain(pueblos).chain(mercenarios).chain(combate.bandidos.values().map(|b| (b.posicion, t.campamento_bandidos))).collect()
     }
@@ -289,7 +293,7 @@ impl Nucleo {
         match &p.comando {
             Comando::ColocarAvanzada { asentamiento, heroe, posicion } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                let (centro, radio) = (plaza.posicion, plaza.radio);
+                let centro = plaza.posicion;
                 self.autorizar_en_plaza(p, *asentamiento, Some(*heroe))?;
                 // Desde dentro de la madre, como la aldea (2026-11-04): el sitio, en tierra firme y con ruta por tierra hasta ella, por donde se le llevan los materiales.
                 let geo = self.geografia.as_ref().ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
@@ -302,7 +306,7 @@ impl Nucleo {
                 if !self.en_zona(*asentamiento, *posicion) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_ZONA, format!("el sitio cae fuera de la zona de as-{asentamiento}")));
                 }
-                datos.avanzadas.comprobar_sitio(centro, radio, *posicion, self.elementos_de_mapa()).map_err(de_avanzada)?;
+                datos.avanzadas.comprobar_sitio(centro, *posicion, self.elementos_de_mapa()).map_err(de_avanzada)?;
                 if self.camino_sin_red(*posicion, centro).is_none() {
                     return Err(rechazo(rechazos::AVANZADA_SIN_RUTA, format!("el sitio no tiene ruta por tierra hasta as-{asentamiento}")));
                 }
