@@ -81,6 +81,9 @@ pub struct Encargo {
     pub inicio_paso: Option<Instante>,
     /// Ruta detenida (2026-11-04, «detener ruta»): acaba la ida y vuelta en curso comerciando como siempre y, al descargar en el origen, el encargo termina.
     pub detener: bool,
+    /// Cuándo empezó la estancia en curso dentro de una plaza: la llegada a la punta, o el comienzo de la carga en el origen al darse el encargo (2026-11-23,
+    /// «Tamaños y distancias del mapa», bloque E). La caravana no sale antes de `ENCARGO.paradaMinimaMinutos` desde aquí.
+    pub llego_en: Option<Instante>,
 }
 
 /// Lo que se rechaza al dar o cambiar un encargo, en el orden en que se comprueba.
@@ -116,7 +119,7 @@ pub struct ContextoEncargo {
 impl Encargo {
     /// Un encargo recién dado: sin vueltas, esperando en el origen.
     pub fn nuevo(modo: Modo, destino: AsentamientoId, salir_en: Option<Instante>, en_origen: Parada, en_destino: Parada) -> Self {
-        Self { modo, destino, salir_en, en_origen, en_destino, vueltas: 0, punta: Punta::Origen, fase: Fase::Espera, fin_paso: None, cancelado: false, inicio_paso: None, detener: false }
+        Self { modo, destino, salir_en, en_origen, en_destino, vueltas: 0, punta: Punta::Origen, fase: Fase::Espera, fin_paso: None, cancelado: false, inicio_paso: None, detener: false, llego_en: None }
     }
 
     /// Valida el encargo (Comercio_Caravanas §5.8.2 y §5.8.3), en el orden de [`ErrorEncargo`]. El origen es siempre propio: sus líneas no llevan precio.

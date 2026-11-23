@@ -14,6 +14,9 @@ use comercio::orden_mercado::EstadoOrden;
 use comercio::precio::{comision_de_entrega, ContextoComision};
 use comercio::Carga as Mercancia;
 use comun::real::{fundar, sitio_rico, M};
+
+/// La parada mínima de un encargo (`ENCARGO.paradaMinimaMinutos`, 2 min; bloque E, 2026-11-23).
+const PARADA_MINIMA: Instante = 2 * MS_POR_MINUTO;
 use militar::catalogo::Tropa;
 use militar::escuadra::Contenedor;
 use militar::heroe::{Controlador, Residencia};
@@ -606,9 +609,11 @@ fn cancelar_en_ruta_llega_sin_dejar_ni_recoger_vuelve_y_termina_en_el_origen() {
     let (hash, r) = (e.n.hash_estado(), e.ord("admin", Comando::CancelarEncargo { caravana: car }));
     assert_eq!((r.resultado, e.n.hash_estado()), (Resultado::SinCambios, hash), "cancelar lo ya cancelado no cambia nada");
 
-    // Al llegar al destino no deja ni recoge: da la vuelta en el acto con lo que lleva.
+    // Al llegar al destino no deja ni recoge: da la vuelta con lo que lleva en cuanto pasa la parada mínima (2 min, bloque E, 2026-11-23).
     let llegada = e.fin_del_plan(car);
     e.avanzar_hasta(llegada);
+    assert_eq!(e.k(car).estado, EstadoCaravana::Esperando, "dentro de la plaza los 2 min de parada");
+    e.avanzar_hasta(llegada + PARADA_MINIMA);
     assert_eq!((e.k(car).estado, e.a_bordo(car, Cobre), cantidad(&e.n, b, Cobre), cantidad(&e.n, b, Estano)), (EstadoCaravana::Retornando, 100_000, cobre_b, estano_b));
     assert!(hechos(&e.n, "comercio.caravana_descarga").is_empty() && hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![b, a]));
     // Y al llegar al origen termina, y su carga vuelve al almacén.
@@ -876,8 +881,8 @@ fn un_envio_a_una_plaza_ajena_sin_mercado_activo_no_comercia_y_vuelve_con_lo_que
     e.admin(encargar(car, c, Modo::Envio, None, parada(&[(Cobre, 50_000)], &[Cobre]), en_c));
     e.avanzar(e.tiempo_carga());
     let llegada = e.fin_del_plan(car);
-    e.avanzar_hasta(llegada);
-    assert_eq!((e.k(car).estado, e.a_bordo(car, Cobre), cantidad(&e.n, c, Cobre)), (EstadoCaravana::Retornando, 50_000, cobre_c), "da la vuelta en el acto con lo que lleva");
+    e.avanzar_hasta(llegada + PARADA_MINIMA);
+    assert_eq!((e.k(car).estado, e.a_bordo(car, Cobre), cantidad(&e.n, c, Cobre)), (EstadoCaravana::Retornando, 50_000, cobre_c), "da la vuelta con lo que lleva al pasar la parada mínima");
     assert!(hechos(&e.n, "comercio.caravana_descarga").is_empty() && hechos(&e.n, "mercado.comercio_en_plaza").is_empty());
     // En el origen deja lo que traía y el envío queda cumplido.
     let vuelta = e.viajar_y_terminar(car);
@@ -1001,7 +1006,8 @@ fn en_una_plaza_ajena_sin_ordenes_que_casen_no_comercia_vuelve_con_lo_que_lleva_
     e.avanzar_hasta(llegada);
     let d = hechos(&e.n, "comercio.caravana_descarga").into_iter().find(|h| h.1 == vec![c, a]).expect("descarga en la plaza ajena");
     assert_eq!((d.0, dato(&d, "carros"), dato(&d, "tirado"), dato(&d, "aBordo"), e.a_bordo(car, Cobre)), (llegada, 0, 0, 100_000, 100_000));
-    assert_eq!((e.k(car).estado, e.k(car).contenido.len()), (EstadoCaravana::Retornando, 1), "sale en el acto: no compra nada y no hay carga");
+    e.avanzar_hasta(llegada + PARADA_MINIMA);
+    assert_eq!((e.k(car).estado, e.k(car).contenido.len()), (EstadoCaravana::Retornando, 1), "sale al pasar la parada mínima: no compra nada y no hay carga");
     assert!(hechos(&e.n, "comercio.caravana_carga").iter().all(|h| h.1 != vec![c, a]) && hechos(&e.n, "mercado.comercio_en_plaza").is_empty());
     e.viajar_y_terminar(car);
     assert_eq!(mundo_de(&e.n, Cobre), cobre, "no se tiró nada");

@@ -797,7 +797,8 @@ impl Sim<'_> {
             "combate.resuelto" => Delta::uno(Contador::BatallasLibradas),
             "combate.encuentro" => Delta::uno(Contador::BatallasCampoAbierto),
             "combate.caravana_interceptada" | "bandidos.caravana_interceptada" => Delta::uno(Contador::CaravanasDestruidasOCapturadas),
-            "combate.campamento_destruido" => Delta::uno(Contador::BandidosCampamentosDestruidos),
+            // También el campamento que ataca y pierde (2026-11-06): cae con el premio de haberlo destruido, y su hecho es `bandidos.campamento_vencido`.
+            "combate.campamento_destruido" | "bandidos.campamento_vencido" => Delta::uno(Contador::BandidosCampamentosDestruidos),
             // Solo el hecho del asedio, nunca su `batalla.aplicada` (D18). `conResidentes` no viaja en el hecho: se acota abajo.
             "combate.asedio_conquista" | "combate.asedio_resistido" => cont::asedio(codigo == "combate.asedio_conquista", dato("poderAtacante").is_some(), false, dato("murallaCompleta") == Some(1)),
             "comercio.caravana_animal_comprado" => Delta::uno(Contador::AnimalesComprados),

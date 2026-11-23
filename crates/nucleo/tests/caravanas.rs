@@ -48,11 +48,14 @@ macro_rules! con_mundo {
     };
 }
 
-/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos).
+/// Las reglas por defecto sin acoso ni anillo de bandidos: estos tests miden otra cosa y se calibraron sin ellos (los de `combate.rs` miden los bandidos). Tampoco
+/// tienen la preparación mínima de 2 min de un lanzamiento a mano (2026-11-23): se calibraron con la salida inmediata de una caravana de un carro, y la mide
+/// [`una_caravana_de_un_carro_lanzada_a_mano_sale_a_los_dos_minutos`].
 fn sin_bandidos() -> Reglas {
     let mut r = Reglas::default();
     let b = &mut std::sync::Arc::make_mut(&mut r.economia.combate).bandidos;
     (b.radio_ataque_caravana, b.anillo_minimo, b.anillo_maximo, b.por_plaza) = (0, 0, 0, 0);
+    std::sync::Arc::make_mut(&mut r.economia.comercio).flota.preparacion_minima = 0;
     r
 }
 
@@ -1605,4 +1608,25 @@ fn tras_la_convocatoria(n: &mut Nucleo) {
     if let Some(h) = fin {
         n.avanzar_hasta(h);
     }
+}
+
+#[test]
+fn una_caravana_de_un_carro_lanzada_a_mano_sale_a_los_dos_minutos() {
+    let m = con_mundo!();
+    // Con las reglas de verdad: ninguna caravana sale antes de `CARAVANA_PREPARACION.minimoMinutos` (2), aunque lleve un solo carro (2026-11-23).
+    let mut r = sin_bandidos();
+    std::sync::Arc::make_mut(&mut r.economia.comercio).flota.preparacion_minima = Reglas::default().economia.comercio.flota.preparacion_minima;
+    assert_eq!(r.economia.comercio.flota.preparacion_minima, 2 * MIN);
+    let mut e = montar(Nucleo::nuevo(Arranque { reglas: r, ..arranque(m, 7) }), m, true, 350_000, false);
+    let (a, b) = (e.a, e.b);
+    e.dar(a, Cobre, 100_000);
+    let car = e.caravana("ana", a, 1, true);
+    let t = e.n.ahora();
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 10_000)], salir_en: None, escolta: None });
+    assert_eq!((e.caravana_de(car).estado, e.caravana_de(car).prepara_hasta), (EstadoCaravana::Preparando, Some(t + 2 * MIN)));
+    e.avanzar(2 * MIN - 1);
+    assert_eq!(e.caravana_de(car).estado, EstadoCaravana::Preparando, "un milisegundo antes sigue dentro");
+    e.avanzar(1);
+    assert_eq!(e.caravana_de(car).estado, EstadoCaravana::EnTransito);
+    assert_eq!(hechos(&e.n, "comercio.caravana_sale").len(), 1);
 }

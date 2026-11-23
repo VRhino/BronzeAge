@@ -1047,6 +1047,7 @@ fn la_escolta_se_cede_con_la_caravana_parada_en_su_origen_y_vuelve_al_campamento
     e.ok("ana", asignar(c, &[milicia, lenadores]));
     e.avanzar(11 * MIN);
     e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: None, escolta: None });
+    e.avanzar(2 * MIN); // la preparación mínima, aunque sea de un carro (bloque E, 2026-11-23)
     assert_eq!(e.n.caravana(c).unwrap().estado, comercio::caravana::EstadoCaravana::EnTransito);
     let ida = e.n.caravana(c).unwrap().plan.as_ref().unwrap().fin().unwrap();
     e.n.avanzar_hasta(ida - 1);
@@ -1447,7 +1448,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN66");
+    assert_eq!(&bytes[..5], b"BAN67");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

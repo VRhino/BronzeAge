@@ -321,7 +321,8 @@ impl<'n> Mirada<'n> {
                 }
                 continue;
             }
-            if c.estado == EstadoCaravana::EnBatalla {
+            // En batalla, o dentro de una plaza con el plan por empezar (el carro de acarreo que descarga): no está en el mapa.
+            if c.estado == EstadoCaravana::EnBatalla || (matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) && !crate::Nucleo::caravana_en_el_mapa(c, t)) {
                 continue;
             }
             let Some(p) = n.posicion_de_caravana(c.id, t) else { continue };

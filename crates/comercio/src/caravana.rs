@@ -495,7 +495,7 @@ impl Caravana {
 
     /// `prepararCaravana`. Validaciones, en este orden (si falla una no se cambia nada): comercial, `disponible`, de este origen;
     /// capacidad > 0; carga > 0, ≤ capacidad y con stock; cupo de escolta; ruta por tierra; `salirEn` en `(ahora, ahora + máx]`. No se
-    /// comprueba nada del destino. Efecto: la carga se reserva **ya** del almacén; `saleEn = max(ahora + kPorCarro × (carros − 1), salirEn)`;
+    /// comprueba nada del destino. Efecto: la carga se reserva **ya** del almacén; `saleEn = max(ahora + max(minimoMinutos, kPorCarro × (carros − 1)), salirEn)`;
     /// con `saleEn > ahora` queda `Preparando` (el evento a `prepara_hasta` la pasa a `EnTransito` con [`Caravana::salir`]); si no,
     /// `EnTransito` y el núcleo le pone el plan con [`Caravana::poner_plan`] (sin evento `caravana_sale`).
     pub fn preparar(&mut self, r: &ReglasFlota, p: Lanzamiento, almacen: &mut Almacen, ahora: Instante) -> Result<Preparacion, ErrorCaravana> {
@@ -524,7 +524,7 @@ impl Caravana {
                 return Err(ErrorCaravana::SalidaInvalida);
             }
         }
-        let prep = r.k_preparacion_por_carro * (self.carros.len() as i64 - 1).max(0);
+        let prep = (r.k_preparacion_por_carro * (self.carros.len() as i64 - 1).max(0)).max(r.preparacion_minima);
         let sale_en = (ahora + prep).max(p.salir_en.unwrap_or(0));
         let estado = if sale_en > ahora { EstadoCaravana::Preparando } else { EstadoCaravana::EnTransito };
         // Solo unidades enteras (C3b): una línea con fracción carga su parte entera.
@@ -1320,13 +1320,18 @@ mod pruebas {
     // ---- lanzar a mano ----
 
     #[test]
-    fn lanzar_una_caravana_de_un_carro_sale_al_instante_y_reserva_la_carga() {
+    fn lanzar_una_caravana_de_un_carro_sale_a_los_dos_minutos_y_reserva_la_carga() {
         let r = r();
+        assert_eq!(r.preparacion_minima, 2 * 60_000, "CARAVANA_PREPARACION.minimoMinutos es 2");
         let mut c = buey();
         let mut alm = almacen(&[(Recurso::Madera, 300_000)]);
+        // Ninguna caravana sale antes de 2 min, aunque lleve un solo carro (2026-11-23); sin ese mínimo saldría en el acto.
         let p = c.preparar(&r, lanz(20, &[(Recurso::Madera, 200_000)]), &mut alm, 1_000).unwrap();
+        assert_eq!(p, Preparacion { estado: Preparando, sale_en: 121_000 });
+        assert_eq!((c.estado, c.destino, c.prepara_hasta), (Preparando, Some(20), Some(121_000)));
+        let mut d = buey();
+        let p = d.preparar(&ReglasFlota { preparacion_minima: 0, ..r.clone() }, lanz(20, &[(Recurso::Madera, 50_000)]), &mut almacen(&[(Recurso::Madera, 50_000)]), 1_000).unwrap();
         assert_eq!(p, Preparacion { estado: EnTransito, sale_en: 1_000 });
-        assert_eq!((c.estado, c.destino, c.prepara_hasta), (EnTransito, Some(20), None));
         assert_eq!((alm.cantidad(Recurso::Madera), c.contenido[&Recurso::Madera]), (100_000, 200_000), "la carga se reserva ya");
         assert_eq!(c.ruta.len(), 3);
         assert!(c.plan.is_none(), "el núcleo le pone el plan desde `sale_en`");
@@ -1455,7 +1460,8 @@ mod pruebas {
         let mut alm = almacen(contenido);
         let mut p = lanz(20, contenido);
         p.peajes = peajes;
-        c.preparar(r, p, &mut alm, 0).unwrap();
+        // Sin la preparación mínima, para que salga en el acto y el viaje empiece en 0.
+        c.preparar(&ReglasFlota { preparacion_minima: 0, ..r.clone() }, p, &mut alm, 0).unwrap();
         c.poner_plan(plan_uniforme(&ruta(), 0, c.velocidad(r), 1).unwrap()).unwrap();
         c
     }

@@ -511,7 +511,11 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     let llega = hechos(&e.n, "acarreo.llega");
     let (llega_en, ingresado, perdido) = (llega[0].0, dato(&llega[0], "carga"), dato(&llega[0], "perdido"));
     let sitio = e.n.posicion_de_pueblo(id).unwrap();
-    let camino = m.1.ruta(sitio, e.n.estado().asentamientos[&plaza].posicion, &rutas::Opciones::default()).unwrap();
+    let pos_plaza = e.n.estado().asentamientos[&plaza].posicion;
+    // Del borde del pueblo al de su plaza (bloque E, 2026-11-23): el camino de centro a centro sin lo que va dentro de cada uno.
+    let camino = m.1.ruta(sitio, pos_plaza, &rutas::Opciones::default()).unwrap().hasta_el_contorno(pos_plaza, e.n.radio_en(pos_plaza));
+    let al_reves = rutas::Camino { puntos: camino.puntos.iter().rev().copied().collect(), costes: camino.costes.iter().rev().copied().collect(), ..camino.clone() };
+    let camino = al_reves.hasta_el_contorno(sitio, e.n.radio_en(sitio));
     let esperado = (camino.coste_total() as i128 * m.1.espaciado() as i128 * 60 / 24_000) as i64;
     assert!(e.n.red_de_caminos().ruta(plaza as u32, id as u32).is_some(), "su ruta está en la red de caminos");
     assert!((llega_en - sale_en - esperado).abs() < 1_000, "tarda lo que su ruta a 24 u/min: {} frente a {}", llega_en - sale_en, esperado);
@@ -524,9 +528,11 @@ fn el_pueblo_extrae_contra_su_almacen_y_el_carro_sale_lleno_vuelca_en_la_madre_y
     let eco = e.n.economia(plaza).unwrap();
     assert_eq!(eco.ingresos_acarreo, vec![IngresoAcarreo { recurso: Cobre, hora: llega_en / HORA, cantidad: 500_000 }]);
     let vuelve = hechos(&e.n, "acarreo.vuelve");
-    assert_eq!((dato(&vuelve[0], "caravana"), vuelve[0].0 - llega_en), (carro as i64, llega_en - sale_en), "vuelve vacío por la misma ruta, en el mismo tiempo");
+    // Dentro de la madre descarga 2 min (un carro a `tiempoDescarga`, nunca menos de `paradaMinimaMinutos`) y vuelve vacío por la misma ruta, en el mismo tiempo.
+    assert_eq!((dato(&vuelve[0], "caravana"), vuelve[0].0 - llega_en), (carro as i64, llega_en - sale_en + 2 * MIN), "descarga 2 min y vuelve en lo que tardó");
     let c = e.n.caravana(carro).unwrap();
-    assert_eq!((c.tipo, c.estado, c.posicion), (TipoCaravana::Acarreo, EstadoCaravana::Disponible, sitio));
+    assert_eq!((c.tipo, c.estado), (TipoCaravana::Acarreo, EstadoCaravana::Disponible));
+    assert!((c.posicion.dist(sitio) - e.n.radio_en(sitio)).abs() <= 2, "vuelve al borde de su pueblo, donde entra");
     assert!(e.n.caravana(carro).unwrap().contenido.is_empty());
     // Con el carro en casa y el almacén vacío, todo vuelve a empezar; mientras tanto, el almacén de la madre guarda lo que entró.
     assert!(e.almacen(Cobre) >= 400_000 || hechos(&e.n, "acarreo.sale").len() > 1);
@@ -704,7 +710,11 @@ fn la_ruta_del_carro_se_traza_una_vez_al_levantarse_entra_en_la_red_y_se_olvida_
     assert!(aristas > 0);
     // Cada viaje va por la ruta guardada, sin trazarla otra vez, y renueva la ruta en la red.
     let carro = hasta_que_el_carro_vaya_cargado(&mut e, id);
-    assert_eq!(e.n.caravana(carro).unwrap().ruta, guardada.trazado.puntos);
+    // Va por la guardada, cortada en el borde de su pueblo y en el de su plaza (bloque E, 2026-11-23).
+    let ruta = e.n.caravana(carro).unwrap().ruta.clone();
+    let (sitio, pos_plaza) = (e.n.posicion_de_pueblo(id).unwrap(), e.n.estado().asentamientos[&plaza].posicion);
+    assert!((ruta[0].dist(sitio) - e.n.radio_en(sitio)).abs() <= 2 && (ruta.last().unwrap().dist(pos_plaza) - e.n.radio_en(pos_plaza)).abs() <= 2, "{ruta:?}");
+    assert!(ruta[1..ruta.len() - 1].iter().all(|p| guardada.trazado.puntos.contains(p)), "los puntos de en medio son los de la guardada");
     let lanzada = e.n.red_de_caminos().ruta(plaza as u32, id as u32).unwrap().ultimo_lanzamiento;
     assert_eq!(lanzada, e.n.ahora());
     assert_eq!(e.n.estado().comercio.rutas_acarreo[&id], guardada);
@@ -717,6 +727,29 @@ fn la_ruta_del_carro_se_traza_una_vez_al_levantarse_entra_en_la_red_y_se_olvida_
     assert!(e.n.estado().comercio.rutas_acarreo.is_empty());
     assert!(!e.n.rutas_vigentes().any(|r| u64::from(r.destino) == id));
     assert_eq!(e.n.red_de_caminos().aristas().count(), aristas);
+}
+
+#[test]
+fn el_carro_de_acarreo_desaparece_del_mapa_mientras_descarga_dentro_de_su_plaza_y_sale_a_los_dos_minutos() {
+    let m = con_mundo!();
+    let mut e = montar(m, 7, 2);
+    let id = e.pueblo_levantado();
+    let carro = hasta_que_el_carro_vaya_cargado(&mut e, id);
+    assert!(nucleo::Nucleo::caravana_en_el_mapa(e.n.caravana(carro).unwrap(), e.n.ahora()), "de camino se ve");
+    let limite = e.n.ahora() + 2 * HORA;
+    while hechos(&e.n, "acarreo.llega").is_empty() {
+        e.avanzar(MIN / 4);
+        assert!(e.n.ahora() < limite, "el carro debería haber llegado");
+    }
+    // Entra por el borde de la plaza (bloque E, 2026-11-23): dentro no está en el mapa, y no se le puede salir al paso.
+    let llega = hechos(&e.n, "acarreo.llega")[0].0;
+    e.n.avanzar_hasta(llega + MIN);
+    let c = e.n.caravana(carro).unwrap();
+    assert_eq!(c.estado, EstadoCaravana::Retornando);
+    assert!(!nucleo::Nucleo::caravana_en_el_mapa(c, e.n.ahora()), "descarga dentro de su plaza");
+    // A los 2 min sale de vuelta y vuelve a verse.
+    e.n.avanzar_hasta(llega + 2 * MIN);
+    assert!(nucleo::Nucleo::caravana_en_el_mapa(e.n.caravana(carro).unwrap(), e.n.ahora()), "sale de la plaza");
 }
 
 #[test]
@@ -1248,7 +1281,7 @@ fn una_foto_con_un_heroe_dentro_de_un_pueblo_se_recupera_y_la_anterior_se_rechaz
     e.ok("admin", Comando::DarSuministro { ejercito: col, recurso: Madera, cantidad: 10_000 });
     e.ok("neu", Comando::EntrarEnPueblo { pueblo, heroe: h });
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN66");
+    assert_eq!(&bytes[..5], b"BAN67");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Pueblo(pueblo));
     assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes.clone(), e.n.estado().hash()));

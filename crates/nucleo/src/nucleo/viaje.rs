@@ -91,6 +91,12 @@ impl Nucleo {
         })
     }
 
+    /// ¿Está la caravana en el mapa en `t`? Viajando y con su plan ya empezado: la que tiene el plan por empezar está dentro de una plaza (el carro de acarreo
+    /// mientras descarga, bloque E, 2026-11-23), y ni se ve ni se encuentra con nadie.
+    pub fn caravana_en_el_mapa(c: &Caravana, t: Instante) -> bool {
+        matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) && c.plan.as_ref().and_then(|p| p.vertices.first()).is_none_or(|v| v.en <= t)
+    }
+
     /// La red de caminos tal como está guardada (puede conservar rutas caducadas hasta el próximo lanzamiento; véase [`Nucleo::pesos_de_red`]).
     pub fn red_de_caminos(&self) -> &RedCaminos {
         &self.estado.comercio.red
@@ -464,6 +470,17 @@ impl Nucleo {
         }
     }
 
+    /// Acaba la estancia de una caravana dentro de una plaza (el carro de acarreo que descarga en su madre): vuelve al mapa con el plan que ya tenía, que empieza ahora.
+    pub(super) fn salida_de_la_plaza(&mut self, id: u64, t: Instante) {
+        let Some(c) = self.estado.comercio.caravana(id) else { return };
+        let empieza = c.plan.as_ref().and_then(|p| p.vertices.first()).map(|v| v.en);
+        if !matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) || empieza.is_none_or(|e| e > t) {
+            return;
+        }
+        let plan = c.plan.clone().expect("comprobado arriba");
+        self.instalar_plan(id, plan);
+    }
+
     /// El plan llegó a su último vértice (§6). Antes se cobran los peajes que aún queden (el último puede caer en el mismo instante).
     pub(super) fn llegada_de_caravana(&mut self, id: u64, t: Instante) {
         let Some(c) = self.estado.comercio.caravana(id) else { return };
@@ -502,9 +519,14 @@ impl Nucleo {
                 self.reparto_de_plaza(origen, t);
             }
             Llegada::Acarreo { destino, contenido } => {
-                if let Some(plan) = self.estado.comercio.flota[i].plan.clone() {
-                    self.instalar_plan(id, plan); // la vuelta: la misma ruta invertida, con una generación nueva
+                // Entra en su plaza y sale del mapa mientras descarga (bloque E, 2026-11-23): la vuelta, la misma ruta invertida, empieza al acabar la estancia, y hasta entonces
+                // no está en la rejilla de encuentros ni se ve (su plan aún no ha empezado).
+                let estancia = self.estancia_en_plaza(self.estado.comercio.flota[i].carros_con_traccion().count());
+                if let Some(plan) = self.estado.comercio.flota[i].plan.as_mut() {
+                    plan.vertices.iter_mut().for_each(|v| v.en += estancia);
                 }
+                self.retirar_plan(id);
+                self.programar_comercio(t + estancia, entidad_caravana(id), SucesoComercio::SalidaDeLaPlaza);
                 self.acarreo_llega(t, id, destino as u64, &contenido);
             }
             Llegada::Casa { escolta, .. } if acarreo => {
