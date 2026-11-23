@@ -140,6 +140,9 @@ pub struct ReglasMovimiento {
     pub factor_velocidad_forzada: i64,
     /// Cuánto más come una columna en marcha forzada mientras marcha (ppm; `MOVIMIENTO.factorConsumoMarchaForzada`).
     pub factor_consumo_forzada: i64,
+    /// Cuántas veces cuesta, al trazar la ruta de una columna, un tramo que se mete en una plaza (`MOVIMIENTO.factorPasoPorPlaza`, entero; Tamaños y
+    /// distancias del mapa, bloque E, 2026-11-23): las columnas rodean las plazas y solo las cruzan si no hay otro camino.
+    pub factor_paso_por_plaza: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -325,6 +328,7 @@ impl Reglas {
                 radio_inspeccion: mil(num(&mv, "radioInspeccion")),
                 factor_velocidad_forzada: ppm(num(&mv, "factorVelocidadMarchaForzada")),
                 factor_consumo_forzada: ppm(num(&mv, "factorConsumoMarchaForzada")),
+                factor_paso_por_plaza: entero(&mv, "factorPasoPorPlaza"),
             },
             formacion: ReglasFormacion { minimo: entero(&fm, "minimo") as usize, plazo: entero(&fm, "plazoMinutos") * MS_POR_MINUTO },
             vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")), avanzada: mil(num(&vs, "avanzada")), tamano_celda: mil(num(&bloque(NIEBLA, "EXPLORACION"), "tamanoCelda")) },

@@ -282,6 +282,8 @@ Cinco bloques, en este orden:
 - **C, puerta:** todo el contorno, a 1 u del borde; la marcha a un asentamiento acaba en el borde y la salida nace en él.
 - **E, rutas:** las columnas y los ejércitos rodean todas las plazas y solo las cruzan si no hay otro camino; las caravanas comerciales las atraviesan con parada dentro (fuera del mapa, peaje en las ajenas, mínimo de 2 min en toda estancia en una plaza) y el carro de acarreo entra en su plaza. Cambia, solo para las plazas, la decisión del 2026-10-27 de que los elementos del mapa no estorban (rehecho con el autor el 2026-11-23).
 
+**Estado (2026-11-23):** A, B, D y C están en main (PR #42). Del bloque E ya está hecho que las columnas rodeen las plazas (`MOVIMIENTO.factorPasoPorPlaza`, `Movimiento_Ejercitos.md` §4.3). Falta la parte de las caravanas: la escala dentro de cada plaza que cruzan, el mínimo de 2 min y el carro de acarreo.
+
 ## 80. Rutas compuestas (diseño del 2026-11-23)
 
 Diseño: `Docs/Disenos_Por_Implementar/Rutas_Compuestas.md`. El encargo de transporte (`Comercio_Caravanas.md` §5.8) pasa de dos paradas a un circuito de hasta 5 que cierra el círculo (A → B → C → A). En cada parada primero deja, y solo lo recogido en otra parada, y luego recoge. Se valida el peor tramo contra la capacidad, lo que sobra sigue a bordo y las paradas ajenas comercian en su mercado. Va después del bloque E de la entrada 79, que pone las escalas.

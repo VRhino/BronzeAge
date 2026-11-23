@@ -103,6 +103,8 @@ Hoy el A* solo mira el terreno, por decisión del autor del 2026-10-27: «los el
 
 **Columnas y ejércitos: rodean todas las plazas, también las propias.**
 
+> **Implementado en Rust (2026-11-23):** ver `Movimiento_Ejercitos.md` §4.3. Un tramo que se mete en una plaza cuesta `MOVIMIENTO.factorPasoPorPlaza` (50) veces lo suyo al trazar la ruta.
+
 - La huella de la plaza es **paso muy caro, no cerrado**. La ruta la rodea y solo la cruza por dentro si no hay otro camino (decisión del autor: «como último recurso»). Una plaza de nivel 5 ocupa unas 13 celdas.
 - La ruta que sale de una plaza o acaba en ella no paga ese coste, porque empieza y termina en su contorno (bloque C).
 - Una caravana enganchada a una columna (`adjunta`) va con ella y sigue sus reglas.

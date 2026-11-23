@@ -1305,3 +1305,41 @@ fn recuperar_desde_foto_con_una_convocatoria_ya_partida_y_una_peticion_viva_da_e
     assert_eq!(e.n.estado().serializar(), sin_parar.1, "el estado recuperado sigue igual que el que no se interrumpió");
     e.n.apagar().unwrap();
 }
+
+// ───────────────────────────── Las columnas rodean las plazas (bloque E) ─────────────────────────────
+
+/// ¿Se mete el plan en el disco de `centro` y `radio`? Muestreado cada cuarto de unidad, con una décima de holgura.
+fn se_mete(plan: &base::Plan, centro: Punto, radio: i64) -> bool {
+    plan.vertices.windows(2).any(|w| {
+        let (a, b) = (w[0].p, w[1].p);
+        let n = (a.dist(b) / 250).max(1);
+        (0..=n).any(|k| Punto::new(a.x + (b.x - a.x) * k / n, a.y + (b.y - a.y) * k / n).dist(centro) < radio - 100)
+    })
+}
+
+#[test]
+fn una_columna_que_pasa_junto_a_una_plaza_la_rodea_en_vez_de_cruzarla() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 5 });
+    let (plaza, radio) = (e.plaza(), e.n.radio_en(e.plaza()));
+    assert!(radio > 5_000, "la plaza de nivel 5 mide más de 5 u de radio: {radio}");
+    // Dos puntos a lados opuestos de la plaza, a 6 u de su borde, entre los que la ruta sin estorbos la cruza.
+    let lejos = radio + 6_000;
+    let par = (0..16).map(|k| {
+        let ang = k as f64 * std::f64::consts::PI / 8.0;
+        let (dx, dy) = ((ang.cos() * lejos as f64) as i64, (ang.sin() * lejos as f64) as i64);
+        (Punto::new(plaza.x - dx, plaza.y - dy), Punto::new(plaza.x + dx, plaza.y + dy))
+    }).find(|&(o, d)| {
+        let recta = e.n.rutas().ruta(o, d, &rutas::Opciones::de_columna());
+        recta.is_some_and(|c| se_mete(&c.a_plan(0, 1_000, 0), plaza, radio))
+    });
+    let Some((origen, destino)) = par else { panic!("no hay dos puntos opuestos con una ruta que cruce la plaza") };
+    let col = e.n.crear_ejercito(e.n.ahora(), "ana", 1, origen, 5_000, 100_000).unwrap();
+    e.ok("ana", Comando::MarcharA { ejercito: col, destino });
+    let plan = e.ejercito(col).plan.clone();
+    assert!(!se_mete(&plan, plaza, radio), "la columna rodea la plaza: {:?}", plan.vertices.iter().map(|v| v.p).collect::<Vec<_>>());
+    e.n.avanzar_hasta(plan.fin().unwrap());
+    assert!(e.ejercito(col).posicion.dist(destino) <= 1, "y llega a donde iba");
+}
