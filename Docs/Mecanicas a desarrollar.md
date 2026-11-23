@@ -29,7 +29,7 @@ mecánica se está diseñando, sus acuerdos provisionales pueden vivir aquí com
 | 69 | POLÍTICA / MAPA | Marcas de Facción en el mapa (pedidas por el autor el 2026-10-29; acotadas en la sección «69»; rescatadas el 2026-11-11 de una rama que no llegó a `main`, donde eran la 63) | nada: el cliente de jugador no tiene dónde guardarlas |
 | 75 | MILITAR / HÉROE | Estandartes y aspecto de las escuadras (D20, 2026-11-12): un tipo de objeto `estandarte`, su sitio en la escuadra y una orden para elegirlo, cuando haya estandartes en el catálogo y arte. Sección «75» | `SquadSnapshot.estandarte` y `aspecto` viajan vacíos |
 | 76 | BOTS / ADMIN | Lo que piden la clase y los objetos del héroe a BotsBrain y al AdminClient (D21, 2026-11-12). Sección «76» | el motor rechaza un héroe sin clase |
-| 78 | BATALLA / MUNDO | Campo de batalla del lugar (diseño del 2026-11-22; `Docs/Disenos_Por_Implementar/Campo_De_Batalla_Del_Lugar.md`): el mapa interior de la batalla sale del punto del mundo (relieve, río y vado, costa, bosque, caminos), con escala interna de 8 u por 600 m. El vado es el único paso y el único efecto nuevo. Sección «78» | el ticket trae `mapa_referencia{mapa_id, centro}`, pero Conquest lo ignora y carga siempre el mismo campo plano |
+| 78 | BATALLA / MUNDO | Campo de batalla del lugar (diseño de Conquest del 2026-11-22, en `Docs/Design/Campo_De_Batalla_Del_Lugar.md` de Conquest; aquí solo lo que toca al motor): el mapa interior de la batalla sale del punto del mundo (relieve, río y vado, costa, bosque, caminos), con escala interna de 8 u por 600 m. El vado es el único paso y el único efecto nuevo. Sección «78» | el ticket trae `mapa_referencia{mapa_id, centro}`, pero Conquest lo ignora y carga siempre el mismo campo plano |
 | — | PARIDAD | Recortes temporales del motor Rust frente al TypeScript (sección «Paridad con TypeScript») | el motor no está migrado hasta cerrarlos |
 | — | DUDAS | Ninguna sin decisión desde el 2026-10-27 (sección «Dudas abiertas»: las `// DUDA:` que quedan en el código) | — |
 | — | FASE 7 | Todo lo que se dejó para los bots reales y la fase 7 (sección «Para la fase 7») | — |
@@ -265,7 +265,7 @@ Desde el 2026-11-12 `crear_heroe` rechaza un héroe sin clase o con una que no e
 
 ## 78. Campo de batalla del lugar (diseño del 2026-11-22)
 
-Diseño: `Docs/Disenos_Por_Implementar/Campo_De_Batalla_Del_Lugar.md`. Casi todo es de Conquest, que lee el lugar del artefacto y del relieve que ya tiene.
+Diseño: `Docs/Design/Campo_De_Batalla_Del_Lugar.md` del repositorio de Conquest. Casi todo es de Conquest, que lee el lugar del artefacto y del relieve que ya tiene.
 
 Lo que toca al motor:
 
