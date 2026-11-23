@@ -125,4 +125,13 @@ impl Nucleo {
     pub fn al_borde(&self, centro: Punto) -> Punto {
         self.salida_en(centro, self.radio_en(centro))
     }
+
+    /// Las opciones de la ruta de una columna (marchar, perseguir): suavizada y rodeando las plazas (Tamaños y distancias del mapa, bloque E,
+    /// 2026-11-23). Cada plaza es un disco de su radio de hoy; un tramo que se mete en uno cuesta `MOVIMIENTO.factorPasoPorPlaza` veces lo suyo, así
+    /// que la ruta solo la cruza si no hay otro camino. Pueblos, aldeas, avanzadas y campamentos no estorban.
+    pub(crate) fn opciones_de_columna(&self) -> rutas::Opciones {
+        let factor = self.estado.reglas.economia.militar.movimiento.factor_paso_por_plaza;
+        let discos = self.estado.asentamientos.values().map(|a| (a.posicion, self.radio_de_plaza(a))).filter(|&(_, r)| r > 0).collect();
+        rutas::Opciones { estorbos: Some(std::sync::Arc::new(rutas::Estorbos { discos, factor })), ..rutas::Opciones::de_columna() }
+    }
 }

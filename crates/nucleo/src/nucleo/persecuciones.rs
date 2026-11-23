@@ -220,7 +220,8 @@ impl Nucleo {
             return Seguimiento::Quieto;
         }
         self.metricas.rutas_calculadas += 1;
-        match self.rutas.ruta_con(&mut self.escritorio, origen, destino, &Opciones::de_columna()) {
+        let opciones = self.opciones_de_columna();
+        match self.rutas.ruta_con(&mut self.escritorio, origen, destino, &opciones) {
             Some(c) if c.puntos.len() >= 2 => Seguimiento::Ruta(c),
             Some(_) => Seguimiento::Quieto,
             None => Seguimiento::Fin(Fin::Perdida),

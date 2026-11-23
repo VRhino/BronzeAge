@@ -868,11 +868,12 @@ impl Nucleo {
         self.procesar_hasta(t);
         let mut vistos = std::collections::HashSet::new();
         let mut candidatas: Vec<(usize, PeticionRuta)> = Vec::new();
+        let de_columna = self.opciones_de_columna();
         for (i, p) in peticiones.iter().enumerate() {
             if let Comando::MarcharA { ejercito, destino } = &p.comando {
                 if let (Some(e), true) = (self.estado.ejercitos.get(ejercito), vistos.insert(*ejercito)) {
                     if self.estado.visto(&p.actor, &p.peticion_id).is_none() {
-                        candidatas.push((i, PeticionRuta { origen: e.posicion_en(t), destino: self.destino_de_marcha(*destino), opciones: Opciones::de_columna() }));
+                        candidatas.push((i, PeticionRuta { origen: e.posicion_en(t), destino: self.destino_de_marcha(*destino), opciones: de_columna.clone() }));
                     }
                 }
             }
@@ -976,8 +977,8 @@ impl Nucleo {
                 // dentro de lo que ocupa, al punto del contorno más cercano (2026-11-23): la columna espera fuera.
                 let camino = precalculado.unwrap_or_else(|| {
                     self.metricas.rutas_calculadas += 1;
-                    let hasta = self.destino_de_marcha(*destino);
-                    self.rutas.ruta_con(&mut self.escritorio, origen, hasta, &Opciones::de_columna())
+                    let (hasta, opciones) = (self.destino_de_marcha(*destino), self.opciones_de_columna());
+                    self.rutas.ruta_con(&mut self.escritorio, origen, hasta, &opciones)
                 });
                 let camino = camino.map(|c| self.cortar_en_el_contorno(c, *destino));
                 let Some(camino) = camino else {

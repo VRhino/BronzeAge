@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "militar"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "nucleo"
-version = "0.55.0"
+version = "0.56.0"
 dependencies = [
  "asentamiento",
  "base",
@@ -923,7 +923,7 @@ dependencies = [
 
 [[package]]
 name = "rutas"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base",
  "contrato",

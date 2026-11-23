@@ -111,7 +111,7 @@ para cada tramo:   enCamino = el tramo es una arista de la red de caminos
 - **El vado es un punto** (decisión del autor del 2026-11-18; contrato 06 §2): el cauce va cerrado entero y cada vado es un nodo del grafo **en su punto**, enlazado con hasta 3 nodos de cada orilla. Toda ruta que cruza el río pasa exactamente por ese punto, también la suavizada (no se salta ninguna arista de vado), así que una columna parada en el vado está en el camino de quien cruce y se encuentran (radio de encuentro, Combate §2). Se puede parar en el vado: se pisa a `mundo::RADIO_VADO` (0,75 u) de su punto, aunque su celda sea cauce. No es un bloqueo: el vado no cierra el paso a nadie, solo concentra el cruce en un punto. Hasta entonces cada vado abría todas las celdas en unas 8 u a la redonda y se cruzaba por cualquier sitio de una franja de 16 u, donde quien esperaba podía no ver pasar a nadie.
 - Si origen y destino están a menos de un espaciado del grafo, tramo directo si es válido; si no, se «engancha» a los nodos de alrededor y corre A\* con 8 vecinos y heurística admisible.
 - El cálculo es caro y corre **fuera del núcleo** (en paralelo); su resultado entra como un evento más y se escribe en el registro (Reloj_Y_Eventos §8).
-- **Los elementos del mapa no estorban** (decisión del autor del 2026-10-27): plazas, pueblos, avanzadas, campamentos, columnas, caravanas y héroes no ocupan sitio para la ruta; solo el terreno decide. Sus tamaños (`TAMANOS_MAPA`, `Economia_Construccion.md`) son para pintar, para colocar y, desde el 2026-11-23, para la puerta (§11.1: la marcha a un lugar acaba en su contorno).
+- **Las columnas rodean las plazas** (Tamaños y distancias del mapa, bloque E; decisión del autor del 2026-11-23, que cambia solo para las plazas la del 2026-10-27 de que «los elementos del mapa no estorban»). La ruta de una columna (`marcharA`, también la de un ejército, y la persecución) ve cada plaza como un disco de su radio de hoy (`TAMANOS_MAPA`, por nivel y con o sin muralla). Un tramo que se mete en uno cuesta en la búsqueda `MOVIMIENTO.factorPasoPorPlaza` (50) veces lo suyo. Es un paso **muy caro, no cerrado**: la ruta la rodea y solo la cruza por dentro si no hay otro camino, «como último recurso». Vale para las aristas, los enganches, la recta directa y el suavizado; no cambia los tiempos del plan, solo desvía la ruta. Rodean **todas** las plazas, también las propias. Una plaza que tiene dentro el origen o el destino no estorba: la marcha a una plaza entra por donde llega y la corta su contorno (§11.1). Pueblos, aldeas, avanzadas, campamentos, columnas, caravanas y héroes siguen sin estorbar: solo el terreno y las plazas deciden. Las caravanas comerciales no rodean las plazas: van por la red de caminos (`Comercio_Caravanas.md` §7.2). *Implementado en Rust (2026-11-23): `rutas::Estorbos` en `Opciones`, y `Nucleo::opciones_de_columna` (`nucleo/puerta.rs`) con todas las plazas.*
 - **Grafo calibrado:** espaciado **4** desde el 2026-10-30 (decisión del autor con la mesa de escalas 3D; antes 8, con ~333 nodos por lado), un nodo por celda transitable del raster (~200.000 en la semilla 42) más uno por vado, un vado cada 100 (antes 300). Medido con 1.000 rutas entre campamentos: 15 ms por ruta (4 ms en lote, en paralelo); suavizada, 17 ms y diez veces menos vértices.
 - **Suavizado por coste** (2026-10-30, `crates/rutas`; diseño en `Consideraciones/Escalas_Mundo_3D_Definicion.md` §6). La ruta del A\* zigzaguea por la retícula de 8 direcciones. Con la capa `coste` del artefacto (06 §2), las rutas de las **columnas** (`marcharA`, también la de un ejército, y la persecución) se estiran desde el origen. Desde cada vértice saltan al más lejano, hasta `MAX_SALTO` (64), siempre que se cumplan las tres condiciones:
   - la recta es transitable, muestreada cada media celda como los enganches;
@@ -305,6 +305,7 @@ Cada uno lo emite el comando que lo nombra, en la misma transición. «Plaza» e
 | Velocidades de tropa (`TROPAS_RECLUTABLES`, [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md)) | 28 / 20 / 16 / 12 | **84 / 30 / 24 / 18** (la caballería, 42 hasta el 2026-10-27; los carros de guerra siguen a 30) |
 | `MOVIMIENTO.radioPuerta` | 10 | **1**, desde el borde del lugar (2 desde el centro hasta el 2026-11-23) |
 | `MOVIMIENTO.radioInspeccion` | 40 | **8** |
+| `MOVIMIENTO.factorPasoPorPlaza` | — | **50** (nuevo el 2026-11-23: lo que cuesta a una columna meterse en una plaza al trazar su ruta, §4.3) |
 | `LOGISTICA.radioEncuentro` | 15 | **1** (3 hasta el 2026-10-31) |
 | `LOGISTICA.radioReabastecimiento` | 60 | **retirado** (§8) |
 | `VISION.ejercito` | 150 | **30** |
@@ -369,7 +370,8 @@ El bloque `LIDERAZGO` vive solo en [`Heroe_Y_Tropa.md`](Heroe_Y_Tropa.md) §12 (
   "radioInspeccion": 8,
   "fraccionRobada": 0.5,
   "factorVelocidadMarchaForzada": 1.5,
-  "factorConsumoMarchaForzada": 2
+  "factorConsumoMarchaForzada": 2,
+  "factorPasoPorPlaza": 50
 }
 ```
 <!-- /parametros -->
