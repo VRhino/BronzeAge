@@ -265,10 +265,9 @@ Desde el 2026-11-12 `crear_heroe` rechaza un héroe sin clase o con una que no e
 
 ## 78. Campo de batalla del lugar (diseño del 2026-11-22)
 
-Diseño: `Docs/Design/Campo_De_Batalla_Del_Lugar.md` del repositorio de Conquest. Casi todo es de Conquest, que lee el lugar del artefacto y del relieve que ya tiene.
+Diseño: `Docs/Design/Campo_De_Batalla_Del_Lugar.md` del repositorio de Conquest. Casi todo es de Conquest. El ticket lleva solo lo que la batalla necesita (decisión del autor, 2026-11-23): nadie descarga el artefacto para la batalla.
 
 Lo que toca al motor:
 
-- `BattleMapReference` gana `relieve_id`, los `caminos` que cruzan el campo y la `procedencia` de cada bando.
-- El lanzador pasa al proceso de batalla la URL del motor, para que descargue el artefacto y el relieve por hash.
-- Para más adelante: `centro` en `SettlementBattleSnapshot`, cuando los asedios entren.
+- `BattleMapReference` gana un `RecorteDelLugar` de unas 13 u de lado alrededor de `centro`: alturas del relieve cada 0,5 u con su bit de agua, las celdas de terreno, bosque y humedad, los trozos de río con sus vados, los tramos de camino con su escalón y la `procedencia` de cada bando.
+- Para más adelante: `centro` y el mismo recorte en `SettlementBattleSnapshot`, cuando los asedios entren.
