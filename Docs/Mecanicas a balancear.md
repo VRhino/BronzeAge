@@ -12,7 +12,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 > ejercitaba la guerra: lo sustituye `batch militar`, fila «Batch militar (4G)» de Paridad), §43-§47 (la calibración del
 > sistema 4 y de `batch comercio`: `Consideraciones/Calibracion_Sistema4_Decisiones.md`), §48 (la escala de la distancia a
 > la capital, decidida en P1: `Consideraciones/Politica_Tecnologia_Decisiones.md`, `crates/batch/decisiones/politica.json`
-> y `Docs/Arquitectura/Sistema5_Contraste_y_Plan.md`, «Calibración del batch político») y §49 (el batch político, P1-P10,
+> y `Sistema5_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git), «Calibración del batch político») y §49 (el batch político, P1-P10,
 > en los mismos sitios). La EE-7, que también se numeraba §48, pasó a §32 (reputación). Las que esperan a los bots llevan
 > la línea **Fase 7** y su fila en «Para la fase 7» de `Docs/Mecanicas a desarrollar.md`.
 
@@ -44,7 +44,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 logro**: cada umbral, en lo que marque su contador en su semana objetivo (Doc 6.3). Las X se portaron tal cual del
 TypeScript (las de las Eras II y III eran placeholder) y no se vuelven a medir hasta tener bots reales. Punto de partida:
 `batch tecnologia` (6H, 2026-10-26) deja el día de cada logro y de cada Era con esas X (la Era II llega por plazo el
-día 35; tabla en `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`, «Avance de 6H»). Lo mismo para la velocidad y la
+día 35; tabla en `Sistema6_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git), «Avance de 6H»). Lo mismo para la velocidad y la
 estancia de los Aedas (§42). Bitácora del TypeScript: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
 ## 34. La economía no llena los víveres de un ejército
@@ -69,7 +69,7 @@ en los del TypeScript, como lista para los nuevos:
 - **Calibrar con batch** el ritmo (cada 5 ticks), las prudencias heredadas de la gobernanza y el margen sobre la
   defensa inspeccionada antes de una campaña.
 
-Plan: `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md`.
+Plan: `12_NPC_Fuera_Del_Motor.md` (retirado el 2026-11-23; sigue en git).
 
 ## 40. Campamentos de mercenarios: cifras
 

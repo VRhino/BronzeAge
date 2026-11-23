@@ -1,6 +1,6 @@
 //! Política y Facciones (fase 6, sistema 5). Ver `Docs/Game/0_*`, `Docs/Game/2_*` y `Docs/Mechanics/Diplomacia_Facciones.md`.
 //!
-//! **Tanda 5A: reglas puras**, sin mundo ni núcleo (plan en `Docs/Arquitectura/Sistema5_Contraste_y_Plan.md`). Cada módulo trabaja sobre estructuras
+//! **Tanda 5A: reglas puras**, sin mundo ni núcleo (plan en `Sistema5_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git)). Cada módulo trabaja sobre estructuras
 //! que el núcleo guardará y aplicará (5B-5F): los instantes son `base::Instante`, la experiencia va en milésimas, las cantidades de recursos en
 //! **unidades enteras** con resto oculto (decisión C3b, `Consideraciones/Calibracion_Sistema4_Decisiones.md`) y no hay coma flotante en ninguna
 //! decisión. La política no consume ninguna tirada del generador aleatorio. La reputación vive en `comercio::reputacion`: aquí solo se devuelven
