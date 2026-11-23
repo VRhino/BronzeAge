@@ -7,3 +7,4 @@ Diseños **cerrados con el autor pero sin implementar**. Aquí viven mientras no
 | Documento | Diseño | Entrada |
 |---|---|---|
 | [`Informes_De_Taberna.md`](Informes_De_Taberna.md) | 2026-10-31 | `Mecanicas a desarrollar.md` 65 |
+| [`Tamanos_Y_Distancias_Del_Mapa.md`](Tamanos_Y_Distancias_Del_Mapa.md) | 2026-11-23 | `Mecanicas a desarrollar.md` 79 |
