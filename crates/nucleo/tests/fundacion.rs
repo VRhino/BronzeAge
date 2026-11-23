@@ -632,7 +632,8 @@ fn enemigo(e: &mut Esc, p: Punto) -> (u64, u64) {
     (col, zed)
 }
 
-/// Lanza la caravana de ana, la engancha a un ejército de beto en el que va ana, lo lleva a `dx` de la plaza y ana se separa: la caravana vuelve sola desde ahí.
+/// Lanza la caravana de ana, la engancha a un ejército de beto en el que va ana, lo lleva a `dx` del borde de la plaza (desde el 2026-11-23, que es donde está su puerta) y ana se
+/// separa: la caravana vuelve sola desde ahí.
 fn volviendo_desde(m: &M, dx: i64) -> (Esc, u64, u64, u64) {
     let ConPlaza { mut e, a, ana } = con_plaza(m);
     let k = e.ok("ana", Comando::LanzarCaravanaFundacion { heroe: ana, asentamiento: a }).creadas[0];
@@ -642,7 +643,8 @@ fn volviendo_desde(m: &M, dx: i64) -> (Esc, u64, u64, u64) {
     e.ok("ana", Comando::UnirseAEjercito { asentamiento: a, heroe: ana, ejercito: ej, escuadras: vec![suya], carga: vec![] });
     e.ok("beto", Comando::AdjuntarCaravana { caravana: k, ejercito: ej });
     let pos = e.n.estado().asentamientos[&a].posicion;
-    e.llevar("beto", ej, en_tierra(&m.0, pos, dx, 0));
+    let borde = e.n.radio_en(pos) * dx.signum();
+    e.llevar("beto", ej, en_tierra(&m.0, pos, dx + borde, 0));
     e.ok("ana", Comando::SepararseDelEjercito { heroe: ana });
     assert!(matches!(e.caravana(k).unwrap().situacion, SituacionFundacion::Retornando(_)));
     (e, a, ana, k)

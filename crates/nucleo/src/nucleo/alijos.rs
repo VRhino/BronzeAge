@@ -106,7 +106,7 @@ impl Nucleo {
         let columna = self.sitio_de_la_columna(heroe, t);
         let hueco = columna.and_then(|(c, _)| Some(self.capacidad_de_carga(c)? - militar::total(&self.estado.ejercitos[&c].columna.carga))).unwrap_or(0);
         let mut abiertos = self.heroe(heroe).expect("autorizado").alijos_abiertos.clone();
-        let apertura = match reglas::abrir(alijo, sitio, &mut abiertos, columna.map(|(_, p)| p), self.radio_puerta(), self.puede_buscar_alijos(heroe), hueco) {
+        let apertura = match reglas::abrir(alijo, sitio, &mut abiertos, columna.map(|(_, p)| p), self.radio_puerta() + self.estado.reglas.economia.datos.tamanos.alijo, self.puede_buscar_alijos(heroe), hueco) {
             Ok(x) => x,
             Err(ErrorAlijo::NoPuedesBuscar) => return Err(rechazo(rechazos::ALIJO_NO_PUEDES_BUSCAR, "los alijos solo los abre quien no tiene Facción o es de una sin plazas")),
             Err(ErrorAlijo::YaAbierto) => return Err(rechazo(rechazos::ALIJO_YA_ABIERTO, "ese alijo ya lo abriste")),

@@ -578,7 +578,8 @@ impl Sim<'_> {
         }
         let destino = self.n.estado().asentamientos[&capital].posicion;
         let cuenta = self.n.heroe(rey).map(|h| h.cuenta.clone()).unwrap_or_default();
-        let radio = self.n.estado().reglas.economia.militar.movimiento.radio_puerta;
+        // A la puerta es a `radioPuerta` del contorno de la plaza (2026-11-23).
+        let radio = self.n.estado().reglas.economia.militar.movimiento.radio_puerta + self.n.radio_de_plaza(&self.n.estado().asentamientos[&capital]);
         if e.posicion_en(t).dist(destino) > radio {
             if self.orden(t, &cuenta, "ReyMarchaALaCapital", Comando::MarcharA { ejercito: c, destino }).aceptada() {
                 let llega = self.n.ejercito(c).and_then(|e| e.plan.fin()).unwrap_or(t).max(t + 1);

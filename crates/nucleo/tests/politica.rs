@@ -356,7 +356,7 @@ fn quien_deja_su_casa_dentro_sigue_de_visita_si_la_puerta_le_admite_y_si_no_sale
     let Ubicacion::Columna(c) = h.heroe.presencia.ubicacion else { panic!("sale al mapa: {:?}", h.heroe.presencia.ubicacion) };
     assert_eq!((h.heroe.residencia, suya(&e, bea, escuadras[1])), (Some(Residencia::Campamento(cercano)), Some(militar::escuadra::Contenedor::Campamento)));
     let col = &e.n.ejercito(c).unwrap().columna;
-    assert_eq!((col.escuadras.len(), col.faccion, e.n.ejercito(c).unwrap().posicion), (0, None, p));
+    assert_eq!((col.escuadras.len(), col.faccion, e.n.ejercito(c).unwrap().posicion), (0, None, e.n.al_borde(p)));
     let echada = e.hechos("heroe.expulsado").into_iter().find(|x| dato(x, "heroe") == bea as i64).expect("bea sale expulsada");
     assert_eq!((dato(&echada, "ejercito"), dato(&echada, "motivo")), (c as i64, 0));
     let abandonada = e.hechos("faccion.abandonada").into_iter().find(|x| dato(x, "heroe") == bea as i64).unwrap();

@@ -568,7 +568,7 @@ impl<'n> Mirada<'n> {
     fn propia_a_la_puerta(&self, viewer: Option<u64>, a: &'n crate::estado::Asentamiento) -> Option<Vec<Visible<'_>>> {
         let (n, e) = (self.n, self.n.estado());
         let columna = e.ejercitos.get(&e.ejercito_de_heroe(viewer?)?)?;
-        if !crate::nucleo::cerca(columna.posicion_en(self.t), a.posicion, e.reglas.economia.militar.movimiento.radio_puerta) {
+        if !n.en_la_puerta_de_plaza(a, columna.posicion_en(self.t)) {
             return None;
         }
         let interior = n.version_interior(a.id)?;

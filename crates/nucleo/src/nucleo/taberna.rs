@@ -99,7 +99,7 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let h = self.heroe(heroe).expect("autorizado");
         let faccion = h.faccion.ok_or_else(|| rechazo(rechazos::INTEL_SIN_FACCION, "la intel se compra para una Facción: hay que pertenecer a una".into()))?;
-        let a_la_puerta = |puerta: Punto| self.estado.ejercito_de_heroe(heroe).and_then(|c| self.estado.ejercitos.get(&c)).is_some_and(|e| e.posicion_en(t).dist(puerta) <= self.radio_puerta());
+        let a_la_puerta = |a: &Asentamiento| self.estado.ejercito_de_heroe(heroe).and_then(|c| self.estado.ejercitos.get(&c)).is_some_and(|e| self.en_la_puerta_de_plaza(a, e.posicion_en(t)));
         match origen {
             OrigenIntel::Plaza(x) => {
                 let a = self.plaza_o_rechazo(x)?;
@@ -107,7 +107,7 @@ impl Nucleo {
                     return Err(rechazo(rechazos::INTEL_PLAZA_AJENA, "la taberna es de una plaza de otra Facción".into()));
                 }
                 self.autorizar_en_plaza(p, x, Some(heroe))?;
-                if h.heroe.presencia.ubicacion != Ubicacion::Asentamiento(x as u32) && !a_la_puerta(a.posicion) {
+                if h.heroe.presencia.ubicacion != Ubicacion::Asentamiento(x as u32) && !a_la_puerta(a) {
                     return Err(rechazo(rechazos::INTEL_NO_PRESENTE, "hay que estar en la plaza para comprar en su taberna".into()));
                 }
                 let catalogo = &self.estado.reglas.economia.datos.catalogo;

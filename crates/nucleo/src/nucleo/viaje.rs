@@ -767,7 +767,7 @@ impl Nucleo {
         if self.estado.asentamientos.get(&(c.origen as u64)).map(|o| o.faccion) != e.columna.faccion {
             return Err(rechazo(rechazos::CARAVANA_FACCION_AJENA, "la caravana es de otra Facción".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(sitio.posicion) > self.radio_puerta() {
+        if !p.admin && !self.en_la_puerta_de_plaza(sitio, e.posicion_en(t)) {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza donde está la caravana".into()));
         }
         let antes = self.velocidad_de_columna(e);

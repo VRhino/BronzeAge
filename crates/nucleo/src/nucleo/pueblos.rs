@@ -263,7 +263,7 @@ impl Nucleo {
                     return Err(rechazo(rechazos::PUEBLO_FACCION_AJENA, "solo entregan los ciudadanos de la Facción de la obra".into()));
                 }
                 let sitio = self.posicion_de_pueblo(pu.id).expect("un pueblo está sobre un nodo del mapa");
-                if e.posicion_en(t).dist(sitio) > self.radio_puerta() {
+                if !self.a_la_puerta(sitio, self.radio_de_pueblo(pu), e.posicion_en(t)) {
                     return Err(rechazo(rechazos::PUEBLO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la obra".into()));
                 }
                 let disponible: Costo = self.material_de_columna(*ejercito).into_iter().collect();

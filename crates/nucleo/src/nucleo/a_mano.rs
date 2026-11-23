@@ -74,7 +74,7 @@ impl Nucleo {
             if e.columna.lider != heroe {
                 return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder de la columna mueve lo de su carro".into()));
             }
-            if !p.admin && self.puerta_de(lugar).is_none_or(|puerta| e.posicion_en(t).dist(puerta) > self.radio_puerta()) {
+            if !p.admin && !self.a_la_puerta_de(lugar, e.posicion_en(t)) {
                 return Err(rechazo(rechazos::ALMACEN_PERSONAL_FUERA_DE_TU_RESIDENCIA, "el almacén personal está en tu residencia: dentro, o con tu columna a su puerta".into()));
             }
             (Some(c), self.capacidad_de_carga(c).unwrap_or(0))
@@ -294,7 +294,7 @@ impl Nucleo {
         }
         let (aqui, faccion) = (e.posicion_en(t), e.columna.faccion);
         let a = self.plaza_o_rechazo(plaza)?;
-        if !p.admin && aqui.dist(a.posicion) > self.radio_puerta() {
+        if !p.admin && !self.en_la_puerta_de_plaza(a, aqui) {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
         }
         // «Donde pueda repostar» (duda 3 de 5G-a, cerrada en 5D): la plaza propia, o la de una aliada o vasalla que abre su almacén a los aliados (`permiteReabastecerAliados`), como `repostar`.

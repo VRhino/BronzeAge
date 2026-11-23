@@ -212,9 +212,11 @@ impl Nucleo {
         self.anotar_sucesos(plaza, t, &sucesos.unwrap_or_default());
     }
 
-    /// Quien estaba dentro y no trajo columna sale a la calle con todo lo suyo (Combate §9, Entrar con todo): nace una columna personal quieta en `posicion`, con el
+    /// Quien estaba dentro y no trajo columna sale a la calle con todo lo suyo (Combate §9, Entrar con todo): nace una columna personal quieta en el borde de lo que hay en `posicion`, con el
     /// carro que llevaba (el de su residencia), los víveres del héroe y las escuadras con que defendió y sobrevivieron. Devuelve su id.
     pub(super) fn columna_de_salida(&mut self, t: Instante, heroe: u64, posicion: Punto, faccion: Option<u32>, escuadras: &[u64]) -> u64 {
+        // En el contorno de lo que hay en `posicion` (2026-11-23), no en su centro.
+        let posicion = self.al_borde(posicion);
         let mr = self.militar_de(faccion);
         let id = self.nuevo_id();
         let hn = self.heroe_mut(heroe);

@@ -1173,7 +1173,8 @@ fn una_personal_no_lleva_caravanas_el_ejercito_que_guarnece_entra_con_ellas_y_sa
     e.ok("ana", adjuntar(ej));
     // Un ejército cuyo último héroe sale del mundo se disuelve y sus caravanas vuelven a su origen por su cuenta.
     e.ok("ana", Comando::Desconectarse { heroe: h });
-    e.avanzar(150_000);
+    // Desde el contorno de su plaza, donde espera la columna (2026-11-23): unos minutos.
+    e.avanzar(600_000);
     assert!(e.n.ejercito(ej).is_none());
     assert_eq!(e.caravana_de(c).estado, EstadoCaravana::Disponible, "volvió sola: la puerta de su plaza está a un paso");
     assert_eq!(hechos(&e.n, "ejercito.disuelto").len(), 1);

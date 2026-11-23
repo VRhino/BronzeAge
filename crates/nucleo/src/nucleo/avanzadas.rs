@@ -155,7 +155,8 @@ impl Nucleo {
     /// Una avanzada terminada es una cosa fija del espacio: ahí la encuentran las columnas (el hecho `avanzada.encuentro` solo salta si además se puede atacar).
     pub(super) fn situar_avanzada(&mut self, id: u64, posicion: Punto) {
         let entidad = entidad_avanzada(id);
-        self.espacio.rejilla.apuntar(entidad, self.estado.generaciones.actual(entidad), &plan_quieto(posicion, self.estado.ahora, 0));
+        let huella = self.avanzada(id).map_or(0, |(_, v)| self.radio_de_avanzada(v));
+        self.espacio.rejilla.apuntar_con_huella(entidad, self.estado.generaciones.actual(entidad), &plan_quieto(posicion, self.estado.ahora, 0), huella);
     }
 
     /// Las escuadras de jugadores dejan la avanzada y vuelven al campamento de su héroe, con 0 soldados si la causa es una derrota (Doc 5.15.2b). Devuelve cuántas.
@@ -329,7 +330,7 @@ impl Nucleo {
                 if !self.entrega_un_ciudadano(p, e, faccion) {
                     return Err(rechazo(rechazos::AVANZADA_FACCION_AJENA, "solo entregan los ciudadanos de la Facción de la obra".into()));
                 }
-                if e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
+                if !self.a_la_puerta(av.posicion, self.radio_de_avanzada(av), e.posicion_en(t)) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la obra".into()));
                 }
                 let disponible: asentamiento::Costo = self.material_de_columna(*ejercito).into_iter().collect();
@@ -442,7 +443,7 @@ impl Nucleo {
                 }
                 // A la puerta, o dentro: algún participante de la columna, de la cuenta, está dentro de la avanzada con ella (2026-11-07).
                 let dentro = e.columna.participantes.iter().any(|x| self.cuenta_de(x.heroe) == Some(p.actor.as_str()) && self.esta_dentro_con(x.heroe, *avanzada, *ejercito));
-                if !dentro && e.posicion_en(t).dist(av.posicion) > self.radio_puerta() {
+                if !dentro && !self.a_la_puerta(av.posicion, self.radio_de_avanzada(av), e.posicion_en(t)) {
                     return Err(rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la avanzada ni dentro".into()));
                 }
                 if *cantidad <= 0 {
@@ -540,7 +541,7 @@ impl Nucleo {
             return Ok((cid, &self.estado.ejercitos[&cid]));
         }
         let (cid, e) = self.columna_a_bordo(heroe)?;
-        if !p.admin && e.posicion_en(t).dist(puerta) > self.radio_puerta() {
+        if !p.admin && !self.a_la_puerta(puerta, self.radio_en(puerta), e.posicion_en(t)) {
             return Err(Respuesta::rechazo(rechazos::AVANZADA_FUERA_DE_LA_PUERTA, "la columna del héroe no está a la puerta de la avanzada ni él dentro", v));
         }
         Ok((cid, e))
@@ -716,7 +717,7 @@ impl Nucleo {
             EstadoAvanzada::EnRuinas { invulnerable_hasta: Some(h) } if t < h => return Err(rechazo(rechazos::COMBATE_AVANZADA_INVULNERABLE, "unas ruinas de fuerte son invulnerables un día")),
             _ => {}
         }
-        let guerra = self.comprobar_agresion(e, t, posicion, Some(faccion_madre), declara_guerra)?;
+        let guerra = self.comprobar_agresion(e, t, posicion, self.estado.reglas.economia.datos.tamanos.avanzada(etapa.indice() as u32 + 1), Some(faccion_madre), declara_guerra)?;
         if self.bloqueos().avanzadas.contains(&x) {
             return Err(rechazo(rechazos::BATALLA_BLOQUEADO, "esa avanzada ya está en una batalla"));
         }

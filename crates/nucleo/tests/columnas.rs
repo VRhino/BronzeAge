@@ -238,7 +238,7 @@ fn salir_al_mundo_valida_en_orden_carga_el_carro_llena_los_viveres_y_un_rechazo_
     let c = &e.ejercito(col).columna;
     assert_eq!((c.tipo, c.lider, c.politica, c.estado, c.faccion), (TipoColumna::Personal, h, Politica::Rechazar, Marcha::Estacionada, Some(1)));
     assert_eq!((c.participantes.len(), c.escuadras.clone(), c.carga[&Madera]), (1, vec![milicia], 30_000));
-    assert_eq!(e.ejercito(col).posicion, e.plaza());
+    assert_eq!(e.ejercito(col).posicion, e.n.al_borde(e.plaza()), "nace en el contorno de la plaza");
     assert!(!e.ejercito(col).marchando());
     assert_eq!(madera0 - e.almacen(Madera), 30_000, "la carga sale del almacén");
     let llenado = trigo0 - e.almacen(Trigo);
@@ -359,7 +359,7 @@ fn movilizar_exige_una_escuadra_y_el_ejercito_nace_quieto_con_su_politica() {
     let col = e.ok("ana", movilizar(&[milicia], Politica::Preguntar)).creadas[0];
     let c = &e.ejercito(col).columna;
     assert_eq!((c.tipo, c.politica, c.estado, c.lider), (TipoColumna::Ejercito, Politica::Preguntar, Marcha::Estacionada, h));
-    assert_eq!(e.ejercito(col).posicion, e.plaza(), "sale quieto en la puerta: su Líder lo dirige con marcharA");
+    assert_eq!(e.ejercito(col).posicion, e.n.al_borde(e.plaza()), "sale quieto en la puerta, en su contorno: su Líder lo dirige con marcharA");
     assert_eq!(hechos(&e.n, "ejercito.movilizado").len(), 1);
 }
 
@@ -438,7 +438,8 @@ fn marchar_come_un_cuarto_de_racion_la_velocidad_es_la_de_la_tropa_mas_lenta_y_a
     let fin = e.ejercito(col).plan.fin().unwrap();
     e.n.avanzar_hasta(fin);
     assert!(!e.ejercito(col).marchando());
-    assert_eq!(e.ejercito(col).posicion, destino);
+    // A una plaza se llega a su contorno, por donde entra la ruta (2026-11-23).
+    assert!((e.ejercito(col).posicion.dist(destino) - e.n.radio_en(destino)).abs() <= 1, "acampa en el contorno de la plaza");
     assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna(&mr(), 60, 1, Marcha::Estacionada)), "al llegar acampa y come una décima parte");
     // Estacionar a mitad de camino es del Líder y deja la columna donde está.
     e.ok("ana", Comando::MarcharA { ejercito: col, destino: campamento(&m.0, 0) });
@@ -583,7 +584,7 @@ fn salir_del_campamento_da_la_racion_gratis_cada_media_hora_y_entrar_en_el_deja_
     // Con política distinta de rechazar sale como ejército; el almacén personal pierde lo cargado.
     assert_eq!((e.ejercito(col).columna.tipo, e.ejercito(col).columna.politica), (TipoColumna::Ejercito, Politica::Aceptar));
     assert_eq!(e.n.heroe(h).unwrap().almacen_personal[&Oro], 30_000);
-    assert_eq!((e.viveres(col), e.ejercito(col).posicion), (350_000, campamento(&m.0, 0)));
+    assert_eq!((e.viveres(col), e.ejercito(col).posicion), (350_000, e.n.al_borde(campamento(&m.0, 0))));
     assert_eq!(hechos(&e.n, "jugador.sale_de_campamento").len(), 1);
 
     // Entrar de nuevo en su campamento: la tropa vuelve a él y los víveres siguen con el héroe, pero el carro NO se vuelca en el almacén personal: se queda con él

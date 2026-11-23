@@ -1490,11 +1490,11 @@ fn si_la_madre_cae_en_ruinas_la_atalaya_y_el_fuerte_desaparecen_y_la_ciudadela_q
     assert_eq!(e.rechazada("ana", Comando::MejorarAvanzada { heroe, avanzada: ciudadela }), rechazos::AVANZADA_DESCONOCIDA);
     assert_eq!(e.rechazada("ana", Comando::GuarnecerAvanzada { heroe, avanzada: ciudadela, escuadras: vec![escuadra] }), rechazos::AVANZADA_DESCONOCIDA);
     let pos = e.n.posicion_de_avanzada(ciudadela).unwrap();
-    let (col_beto, beto) = e.atacante(Punto::new(pos.x + 1_000, pos.y), &[Tropa::EspadachinesBronce]);
+    let (col_beto, beto) = e.atacante(Punto::new(pos.x + 2_000, pos.y), &[Tropa::EspadachinesBronce]);
     e.guerra();
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Avanzada(ciudadela), declara_guerra: false }), rechazos::COMBATE_AVANZADA_SIN_DUENO);
     // Pero se recuerdan como se vieron (Niebla_De_Guerra §4.1, decisión del autor del 2026-10-24): F2 pasa junto a ellas y su ficha dice ciudadela, de nadie, en ruinas.
-    e.ok("beto", Comando::MarcharA { ejercito: col_beto, destino: Punto::new(pos.x + 500, pos.y) });
+    e.ok("beto", Comando::MarcharA { ejercito: col_beto, destino: Punto::new(pos.x + 3_000, pos.y) });
     let ficha = e.n.estado().memoria.fichas[&2][&nucleo::memoria::Sitio::Avanzada(ciudadela)].clone();
     assert_eq!((ficha.datos.faccion, ficha.datos.nivel, ficha.datos.estado), (0, 3, nucleo::memoria::EstadoSitio::EnRuinas));
     // Quien tenga después esa zona la repara: una plaza nueva de Ana en el sitio de la antigua, de nivel 3, la adopta con su cupo.

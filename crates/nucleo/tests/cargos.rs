@@ -271,7 +271,8 @@ fn el_mercado_y_la_flota_se_mandan_tambien_con_la_columna_a_la_puerta_y_las_obra
     let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
     let puerta = e.n.estado().asentamientos[&plaza].posicion;
     let t = e.n.ahora();
-    let lejos = e.n.crear_ejercito(t, "fay", 1, base::Punto { x: puerta.x + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
+    let borde = e.n.radio_en(puerta);
+    let lejos = e.n.crear_ejercito(t, "fay", 1, base::Punto { x: puerta.x + borde + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
     let fay = e.n.ejercito(lejos).unwrap().columna.lider;
     e.ok("admin", Comando::FijarResidencia { heroe: fay, residencia: Some(Residencia::Asentamiento(plaza as u32)) });
     let r = e.ord("fay", Comando::CrearCaravana { asentamiento: plaza });

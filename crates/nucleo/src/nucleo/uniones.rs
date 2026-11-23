@@ -158,7 +158,7 @@ impl Nucleo {
         match &p.comando {
             Comando::UnirseAEjercito { asentamiento, heroe, ejercito, escuadras, carga } => {
                 let plaza = self.plaza_o_rechazo(*asentamiento)?;
-                let (faccion, posicion) = (plaza.faccion, plaza.posicion);
+                let (faccion, posicion, radio) = (plaza.faccion, plaza.posicion, self.radio_de_plaza(plaza));
                 self.autorizar_heroe(p, *heroe, false)?;
                 self.sin_convocatoria(*heroe)?;
                 let e = self.estado.ejercitos.get(ejercito).ok_or_else(|| rechazo(rechazos::EJERCITO_DESCONOCIDO, ids::ejercito(*ejercito)))?;
@@ -168,7 +168,7 @@ impl Nucleo {
                 if e.columna.faccion != Some(faccion) {
                     return Err(de_columna(ErrorColumna::OtraFaccion));
                 }
-                if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
+                if !p.admin && !self.a_la_puerta(posicion, radio, e.posicion_en(t)) {
                     return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "el ejército no está a la puerta de la plaza".into()));
                 }
                 if !Self::es_ejercito(e) {
@@ -287,13 +287,13 @@ impl Nucleo {
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let mr = self.estado.reglas.economia.militar.clone();
         let plaza = self.plaza_o_rechazo(asentamiento)?;
-        let (faccion, posicion) = (plaza.faccion, plaza.posicion);
+        let (faccion, posicion, radio) = (plaza.faccion, plaza.posicion, self.radio_de_plaza(plaza));
         self.autorizar_heroe(p, heroe, false)?;
         let (id, e) = self.columna_a_bordo(heroe)?;
         if e.columna.lider != heroe {
             return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder reposta".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
+        if !p.admin && !self.a_la_puerta(posicion, radio, e.posicion_en(t)) {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
         }
         if e.columna.faccion != Some(faccion) && !self.abre_su_almacen_a(asentamiento, e.columna.faccion) {
@@ -374,8 +374,9 @@ impl Nucleo {
             return Some(dentro);
         }
         let aqui = self.columna_del_heroe(heroe)?.posicion_en(self.estado.ahora);
-        let plazas = self.estado.asentamientos.values().map(|a| (aqui.dist(a.posicion), 0, a.id, Ubicacion::Asentamiento(a.id as u32)));
-        let avanzadas = self.estado.asentamientos.values().flat_map(|a| &a.economia.avanzadas).filter(|v| v.operativa()).map(|v| (aqui.dist(v.posicion), 1, v.id, Ubicacion::Avanzada(v.id)));
+        // Desde el borde de cada una (2026-11-23).
+        let plazas = self.estado.asentamientos.values().map(|a| (Self::desde_el_borde(a.posicion, self.radio_de_plaza(a), aqui), 0, a.id, Ubicacion::Asentamiento(a.id as u32)));
+        let avanzadas = self.estado.asentamientos.values().flat_map(|a| &a.economia.avanzadas).filter(|v| v.operativa()).map(|v| (Self::desde_el_borde(v.posicion, self.radio_de_avanzada(v), aqui), 1, v.id, Ubicacion::Avanzada(v.id)));
         plazas.chain(avanzadas).filter(|&(d, ..)| d <= self.radio_puerta()).min_by_key(|&(d, rango, id, _)| (d, rango, id)).map(|(.., lugar)| lugar)
     }
 }

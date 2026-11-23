@@ -1304,8 +1304,10 @@ fn el_pueblo_ajeno_se_recuerda_como_una_ciudad_y_se_olvida_cuando_se_vuelve_a_mi
     let mut e = montar(m, 7, 2);
     let pueblo = e.pueblo_levantado();
     let sitio = e.n.posicion_de_pueblo(pueblo).unwrap();
-    // Una columna de F2 (un héroe solo: ve 15) espera a 10 u del pueblo y se va lejos.
-    let tierra = |r: i64| (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(sitio.x + (r as f64 * a.cos()) as i64, sitio.y + (r as f64 * a.sin()) as i64)).find(|q| m.0.transitable_en(q.x, q.y)).expect("tierra");
+    // Una columna de F2 (un héroe solo: ve 15) espera a 10 u del pueblo, fuera de lo que ocupa cualquier plaza (allí se quedaría en su contorno), y se va lejos.
+    let plazas: Vec<(Punto, i64)> = e.n.estado().asentamientos.values().map(|a| (a.posicion, e.n.radio_de_plaza(a))).collect();
+    let libre = |q: &Punto| plazas.iter().all(|&(c, r)| q.dist(c) > r + 1_000);
+    let tierra = |r: i64| (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(sitio.x + (r as f64 * a.cos()) as i64, sitio.y + (r as f64 * a.sin()) as i64)).find(|q| m.0.transitable_en(q.x, q.y) && libre(q)).expect("tierra");
     let (junto, lejos) = (tierra(10_000), tierra(60_000));
     let col = e.columna("beto", 2, junto);
     e.avanzar(MIN);
@@ -1794,7 +1796,8 @@ fn a_la_puerta_con_su_columna_tambien_se_deja_y_se_recoge_la_guarnicion_del_pueb
     let (_, neutral) = e.visita("neu", 3, pueblo);
     let de_neutral = e.milicia(neutral);
     let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
-    let lejos = e.columna("leo", 1, Punto { x: sitio.x + 3 * radio, y: sitio.y });
+    let borde = e.n.radio_en(sitio);
+    let lejos = e.columna("leo", 1, Punto { x: sitio.x + borde + 3 * radio, y: sitio.y });
     let leo = e.n.ejercito(lejos).unwrap().columna.lider;
     let de_leo = e.milicia(leo);
 

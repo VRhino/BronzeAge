@@ -835,7 +835,7 @@ fn un_asedio_que_gana_conquista_la_plaza_la_deja_protegida_y_ocupada_y_desaloja_
     assert_eq!(h.heroe.residencia, Some(Residencia::Campamento(campamento_mas_cercano(&m.0, s.e.pos(b)))));
     let Ubicacion::Columna(salida) = h.heroe.presencia.ubicacion else { panic!("sale a la calle: {:?}", h.heroe.presencia.ubicacion) };
     let col = s.e.n.ejercito(salida).unwrap();
-    assert_eq!((col.columna.faccion, col.columna.participantes.len(), col.posicion), (Some(2), 1, s.e.pos(b)));
+    assert_eq!((col.columna.faccion, col.columna.participantes.len(), col.posicion), (Some(2), 1, s.e.n.al_borde(s.e.pos(b))));
     assert_eq!(col.columna.escuadras.len(), 1);
     assert!(s.e.n.soldados_de_columna(salida).unwrap() > 0 && col.columna.carga.is_empty());
     assert_eq!(hechos(&s.e.n, "heroe.desalojado").len(), 2, "beto y el fundador, que reside en ella desde la fundación (5B)");
@@ -2041,4 +2041,20 @@ fn tras_la_convocatoria(n: &mut Nucleo) {
     if let Some(h) = fin {
         n.avanzar_hasta(h);
     }
+}
+
+#[test]
+fn a_una_plaza_se_la_ataca_desde_su_borde() {
+    // Tamaños y distancias del mapa, bloque C (2026-11-23): `radioEncuentro` se mide desde el contorno de la plaza, no desde su centro.
+    let m = con_mundo!();
+    let mut s = asedio(m, 7, &[], &[Tropa::EspadachinesBronce]);
+    let b = s.e.b;
+    let (centro, radio) = (s.e.pos(b), s.e.n.radio_en(s.e.pos(b)));
+    let alcance = s.e.n.estado().reglas.economia.militar.logistica.radio_encuentro;
+    assert!(radio > 0);
+    // El ayudante pone la columna 1 u al este del punto que se le da.
+    let junto = s.e.ejercito("cai", 1, Punto::new(centro.x + radio + alcance - 1_000, centro.y), &[Tropa::EspadachinesBronce]);
+    let lejos = s.e.ejercito("dan", 1, Punto::new(centro.x + radio + alcance - 1_000 + 10, centro.y), &[Tropa::EspadachinesBronce]);
+    assert_eq!(codigo(&s.e.atacar("cai", junto.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::GUERRA_CONFIRMAR, "a su alcance del borde: solo falta la guerra");
+    assert_eq!(codigo(&s.e.atacar("dan", lejos.1, ObjetivoAtaque::Asentamiento(b), false)), rechazos::COMBATE_LEJOS, "un poco más allá, lejos");
 }

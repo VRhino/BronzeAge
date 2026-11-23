@@ -1200,7 +1200,8 @@ fn de_la_puerta_de_una_plaza_de_su_faccion_se_guarnece_y_se_recoge_con_la_column
     let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
     let puerta = e.n.estado().asentamientos[&a].posicion;
     let t = e.n.ahora();
-    let lejos = e.n.crear_ejercito(t, "leo", 1, Punto { x: puerta.x + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
+    let borde = e.n.radio_en(puerta);
+    let lejos = e.n.crear_ejercito(t, "leo", 1, Punto { x: puerta.x + borde + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
     let leo = e.n.ejercito(lejos).unwrap().columna.lider;
     let de_leo = e.ok("admin", Comando::DarEscuadra { heroe: leo, tropa: Tropa::Lenadores, cantidad: 10 }).creadas[0];
     assert_eq!(contenedor(&e, de_leo).contenedor, Contenedor::Ejercito(lejos));

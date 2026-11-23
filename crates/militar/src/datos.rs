@@ -458,7 +458,7 @@ mod pruebas {
         assert_eq!((r.logistica.umbral_narrar_reposte, r.logistica.factor_repostaje_en_zona), (500_000, 1_250_000));
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
         assert_eq!(r.logistica.bonus_viveres, BonusViveres { tecnologia: "logistica_campana".into(), factor: 1_500_000 });
-        assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (66_000, 500, 2_000));
+        assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (66_000, 500, 1_000));
         assert_eq!((r.movimiento.vida_peticion_union, r.movimiento.radio_inspeccion, r.inspeccion.informe), (10_000, 8_000, 10 * MS_POR_MINUTO));
         assert_eq!((r.formacion.minimo, r.formacion.plazo), (3, 10 * MS_POR_MINUTO));
         assert_eq!((r.vision.ejercito, r.vision.jugador_solo), (30_000, 15_000));

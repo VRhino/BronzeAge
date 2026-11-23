@@ -6,6 +6,13 @@ Los cambios del motor que el cliente jugador (BronzeAgeClient) tiene que recoger
 
 ## Pendiente
 
+### Tamaños y distancias del mapa, tanda 2: la puerta es el contorno (2026-11-23; nucleo 0.55.0, rutas 0.3.0, encuentros 0.2.0, sin cambio de contrato ni de foto; va con la partida nueva de la tanda 1)
+
+1. **A la puerta** es estar a `MOVIMIENTO.radioPuerta` (ahora **1**, antes 2) o menos del **borde** de la plaza, el pueblo, la aldea, la avanzada o el campamento, por cualquier lado: a `radio + radioPuerta` del centro, con el radio de `TAMANOS_MAPA` (plaza por nivel y muralla, aldea por nivel, avanzada por etapa). Si el cliente decide por su cuenta si una columna está a la puerta (botones de entrar, repostar, entregar, comerciar, recoger tropa, el mostrador, la taberna, la Armería), tiene que medirlo así. La plaza tiene muralla si tiene algún recinto.
+2. **La marcha a un lugar acaba en su contorno**, en el punto por donde llega la ruta, y la marcha a un punto dentro de lo que ocupa un lugar, en el punto del contorno más cercano. El plan que llega ya acaba ahí: el cliente que pinte la ruta o la marca de destino solo tiene que no dibujarlas hasta el centro por su cuenta. `jugador.marcha_fijada` sigue trayendo el objetivo pedido (`objetivoX`, `objetivoY`).
+3. **La columna que sale** de una plaza o un campamento nace en su borde (el primer punto transitable del contorno empezando por el sur, en sentido horario), no en el centro.
+4. **Atacar** una plaza, un pueblo, una avanzada o un campamento de bandidos, y unirse a una batalla, se miden desde el borde del objetivo (`radioEncuentro`, 1). Si el cliente ofrece «Atacar» solo al alcance, que reste el radio.
+
 ### Tamaños y distancias del mapa, tanda 1 (2026-11-23; nucleo 0.54.0, asentamiento 0.26.0, territorio 0.5.0, batch 0.11.1, foto `BAN66`, sin cambio de contrato; mundo nuevo y partida nueva)
 
 Lo pidió Víctor desde la escena «Distancias de plaza» de Conquest (diseño `Docs/Disenos_Por_Implementar/Tamanos_Y_Distancias_Del_Mapa.md`, bloques A, B y D). Todo viaja en los bloques de `GET /v1/datos`: el cliente que lea las cifras de ahí solo tiene que cambiar los nombres que se van.

@@ -1085,7 +1085,8 @@ impl Nucleo {
         if donde != Donde::Dentro {
             let Some(c) = columna else { return Err(rechazo(rechazos::BATALLA_SIN_COLUMNA, "hay que llegar con tu columna")) };
             let radio = self.estado.reglas.economia.militar.logistica.radio_encuentro;
-            if self.estado.ejercitos[&c].posicion_en(t).dist(b.punto) > radio {
+            // Desde el borde de lo que hay en el punto de la batalla (la plaza asediada, el pueblo, la avanzada), 2026-11-23.
+            if Self::desde_el_borde(b.punto, self.radio_en(b.punto), self.estado.ejercitos[&c].posicion_en(t)) > radio {
                 return Err(rechazo(rechazos::BATALLA_LEJOS, &format!("hay que estar a {radio} o menos de la batalla")));
             }
         }
