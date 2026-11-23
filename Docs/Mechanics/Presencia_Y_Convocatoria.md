@@ -101,7 +101,7 @@ Está envuelto en `sinConvocatoria` (§9): quien está en un ejército en prepar
 Exige tener columna (`jugador.sin_columna`). Cuatro condiciones, en este orden (`MovilizacionInvalidaError`):
 
 1. **La columna es personal**: «Vas en un ejército: hay que separarse antes de entrar en una plaza». (Un ejército entra por `guarnecer`, §4.3.)
-2. **En la puerta**: `distancia(columna, plaza) ≤ MOVIMIENTO.radioPuerta` (**2** calibrado; 10 en el bloque TypeScript). Entrar es un acto, no un roce.
+2. **En la puerta**: `distancia(columna, plaza) ≤ radio de la plaza + MOVIMIENTO.radioPuerta`, es decir, a `radioPuerta` (**1**) o menos de su **borde**, por cualquier lado del contorno, con el radio de `TAMANOS_MAPA` (por nivel y muralla). Desde el 2026-11-23 (Tamaños y distancias del mapa, bloque C, [`Movimiento_Ejercitos.md`](Movimiento_Ejercitos.md) §11.1); antes se medía desde el centro, con 2 (10 en el bloque TypeScript). Entrar es un acto, no un roce.
 3. **Con permiso**: `puedeEntrarEn(plaza, héroe, columna.faccionId, relaciones)`: un residente entra siempre; la propia Facción nunca se bloquea; el resto, según lo que el dueño haya fijado para su relación (aliados y vasallos, neutrales, enemigos; por defecto todos menos los enemigos, `fijarAcceso`); el veto individual y los grupos (`fijarPuerta`) son del sistema político. Detalle en [`Diplomacia_Facciones.md`](Diplomacia_Facciones.md) (`PUERTA.cerradaAPorDefecto`).
 4. **Residencia o no**:
    - **Su residencia**: la columna **se deshace** (`absorberColumna`): las escuadras vuelven al campamento (`contenedor: campamento`), los víveres al héroe y el **carro se queda con él** (decidido el 2026-10-22: antes se volcaba entero en el almacén de la plaza, y lo que no cabía se perdía); la columna desaparece salvo que lleve caravanas adjuntas.
@@ -127,7 +127,7 @@ Sale de una plaza **ajena** con todo lo que entró (su columna vuelve al mapa), 
 
 Exige columna. Si la columna es **personal con un solo participante**, entra él solo (`entrarEnCampamento` del motor); si no —un ejército, o una personal con compañía— entra el ejército entero, ordenado por su Líder:
 
-- **Solo (motor)**: error si no es el Líder de una columna de un participante; error si no está a `≤ radioPuerta` (2) del campamento. `ubicacion = mercenarios`.
+- **Solo (motor)**: error si no es el Líder de una columna de un participante; error si no está a `≤ radioPuerta` (1) del borde del campamento. `ubicacion = mercenarios`.
   - **No residente** (visitante): entra **con todo**; su columna queda dentro, fuera del mapa, intacta, sin tocar nada.
   - **Residente**: las escuadras vuelven al campamento (`alCampamento`) y el **carro se queda con él**: ya no se vuelca solo en el almacén personal (decidido el 2026-10-22; lo hace `vaciarCarro`, hasta `ALMACEN_PERSONAL.capacidad`, y lo que no cabe se queda en el carro).
 - **Ejército**: debe estar a la puerta; `desarmarAlEntrar` (como `guarnecer`: solo el Líder, cada héroe en su columna personal, con **todas** las caravanas, que se quedan con la columna del Líder) y cada héroe entra como lo haría solo. Evento `ejercito.entra_en_campamento`.

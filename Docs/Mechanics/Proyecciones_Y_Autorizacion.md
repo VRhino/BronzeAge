@@ -714,7 +714,7 @@ La regla fina de cada cosa del mundo (qué se ve, redactado a qué, con memoria 
 | `relaciones`, `titulos` | mapa | **todas**: la diplomacia y el ranking son públicos | colección |
 | `asentamientosAvistados` | mapa | las plazas que se **ven ahora**, redactadas a ficha (`AsentamientoAvistado`); incluye las propias y la que pisa (que `componerProyeccion` quita para el que está dentro) | colección |
 | `asentamientosConocidos` | mapa | la última foto de las vistas alguna vez (`FichaConocida` + `conocidoEn`), menos las que se ven ahora | colección |
-| `ejercitosAvistados`, `caravanasAvistadas`, `aedasAvistados` | mapa | lo ajeno que se ve ahora (una caravana `esperando` está dentro de su plaza y no se ve), redactado (en Rust, 6G, los Aedas como `AedaItinerante` en `VISTA`, con el tramo visible de su plan) | colección (móviles) |
+| `ejercitosAvistados`, `caravanasAvistadas`, `aedasAvistados` | mapa | lo ajeno que se ve ahora (una caravana `esperando` está dentro de su plaza y no se ve; tampoco la que hace escala en una plaza de su camino, desde el 2026-11-23, Comercio_Caravanas §7.5), redactado (en Rust, 6G, los Aedas como `AedaItinerante` en `VISTA`, con el tramo visible de su plan) | colección (móviles) |
 | `heroesVisibles` | mapa (+ héroe) | solo la parte pública (`HeroePublico`) de quienes van en una columna propia o avistada | colección |
 | `batallas` | mapa (+ héroe) | las que se ven; el bando propio (`ladoPropio`) lo añade la capa de héroe | colección |
 | `campamentosBandidos` | mapa | los que se ven **ahora**, sin memoria | colección |
