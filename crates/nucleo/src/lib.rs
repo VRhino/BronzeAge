@@ -51,7 +51,7 @@
 //!   proyección derivada de sus recintos (no los persiste). El cupo de guarnición, el requisito del nivel 4 y el mantenimiento ya los leen de ahí. Foto `BAN20`.
 //!   Tercera tanda: el asedio a una plaza con números multiplica al defensor con su recinto de referencia (`Nucleo::multiplicador_de_plaza`; la columna, el pueblo, la caravana y
 //!   la avanzada siguen con 1), la conquista daña el 30 % de cada recinto completo y sin mejora (por números y por Unity) y la plaza repara sola, `Nucleo::recintos_en_pie` da a
-//!   Unity la geometría en pie y `VistaCiudad.murallas` la dibuja. El ticket del asedio y el informe de inspección con los recintos son de 4H (`Docs/Arquitectura/Murallas_Contraste_y_Plan.md`).
+//!   Unity la geometría en pie y `VistaCiudad.murallas` la dibuja. El ticket del asedio y el informe de inspección con los recintos son de 4H (`Murallas_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git)).
 //! - Alijos (sistema 6, 6F): `AbrirAlijo` (174) carga el oro de un alijo del artefacto en el carro de la columna (lo que no cabe se pierde); cada héroe guarda los que abrió
 //!   (`HeroeNucleo::alijos_abiertos`, foto `BAN36`). Reglas puras en `tecnologia::alijos` (6A), el núcleo en `nucleo/alijos.rs`; sin tick.
 //! - Tecnología (sistema 6, 6B y 6C): el estado de tecnología del mundo con sus contadores en origen, logros y Eras (`nucleo/logros.rs`, foto `BAN37`) y, desde 6C, la aparición por

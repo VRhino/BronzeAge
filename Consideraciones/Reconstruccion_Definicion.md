@@ -153,7 +153,7 @@ intermedio. Unity se conecta directamente al contrato 05 cuando exista el núcle
    → economía y comercio → militar y combate → política → tecnología y Aedas.
    **Hecha el 2026-10-26** (último commit de código `68d14d04`, foto `BAN40`, 1.582 pruebas en verde): los seis sistemas con
    sus batches, el contrato 05 con sus proyecciones y la crónica entera. Estado, reglas de trabajo y entrada a la fase 7 en
-   `Docs/Arquitectura/Handoff_Fase6.md`; decisiones en `Calibracion_Sistema4_Decisiones.md`, `Dudas_Del_Codigo_Decisiones.md`
+   `Handoff_Fase6.md` (retirado el 2026-11-23; sigue en git); decisiones en `Calibracion_Sistema4_Decisiones.md`, `Dudas_Del_Codigo_Decisiones.md`
    y `Politica_Tecnologia_Decisiones.md`; lo pendiente y lo dejado para la fase 7, en `Docs/Mecanicas a desarrollar.md`.
 7. **Bots en Rust** y **admin web**, cada uno en su repo, sobre el contrato 05. **Siguiente; no se empieza sin una orden
    directa del autor.**
