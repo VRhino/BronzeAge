@@ -48,7 +48,7 @@ diseño).
 - **Las tecnologías de asedio de las Eras IV y V** (BA-006 EIV-3, EIV-4 y EV-4: Maestría de asedio, Maestros de obras militares y la catapulta de torsión) esperan a que el motor tenga equipo de asedio (decisión del autor del 2026-11-11): hoy la Carpintería solo fabrica el carro de guerra, ninguna de las tres haría nada y el logro de Maestros de obras («piezas de equipo de asedio fabricadas») no se podría cumplir.
 - **Otras vías** (conquista y comercio, Doc 6.1): descartadas el 2026-10-11 (van a `Docs/Ideas a diseñar.md`). El equipo de asedio (`carpinteria_militar`, `trabajos_asedio`) se adopta pero no tiene efecto en el combate con números (decidido el 2026-10-19); en Unity, si llega, lo decide la partida.
 - **Los umbrales de las Eras IV y V son provisionales** (autor, 2026-11-11): puestos al ritmo de las Eras II y III, se miden con bots en la fase 7, como los demás (Q3 de «Para la fase 7»). Las épicas de 6 y 7 capítulos y sus nombres los cerró el autor el 2026-11-12 (D10).
-- **Clientes**: en BronzeAgeClient, el panel de tecnología con las cinco Eras (`Docs/Coordinacion/Pendientes_Cliente_Jugador.md`); en Conquest, las definiciones de escuadra de las tropas nuevas y los modelos de los edificios nuevos (CQ-006; `Docs/Coordinacion/Trabajo_En_Conquest.md` §2 y §6).
+- **Clientes**: en BronzeAgeClient, el panel de tecnología con las cinco Eras; en Conquest, las definiciones de escuadra de las tropas nuevas y los modelos de los edificios nuevos (CQ-006; `Docs/Coordinacion/Trabajo_En_Conquest.md` §2 y §6).
 
 ## 39. Elección del Rey por voto
 
