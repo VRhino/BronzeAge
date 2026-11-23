@@ -13,7 +13,7 @@
 //! precio i64 · creado_en i64 · expira_en i64 · estado u8`. Una carga: `n u64 · n × (recurso u8, cantidad i64)`. Una caravana: `id u64 ·
 //! tipo u8 · origen u32 · destino opt_u64 · contenido{carga} · carros{n u64 · n × (tipo u8, animal u8: 255 ninguno)} · estado u8 ·
 //! posición · ruta{n u64 · n × punto} · costes{n u64 · n × i64} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
-//! progreso i64)} · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
+//! progreso i64)} · escalas{n u64 · n × (plaza u32, entra i64, sale i64)} (BAN68) · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
 //! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool · encargo{bool · modo u8 ·
 //! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool · inicio_paso opt_i64 · detener bool (estos dos desde BAN56) · llego_en opt_i64 (BAN67)} (BAN52) · nombre texto (BAN55)`.
 //! Una parada: `recoger{n u64 · n × (recurso u8, cantidad i64, precio_max opt_i64)} · esperar_existencias bool · dejar{n u64 · n × (recurso u8, tope opt_i64,
@@ -30,7 +30,7 @@ use comercio::orden_mercado::{EstadoOrden, LibroOrdenes, OrdenMercado, TipoOrden
 use comercio::red_caminos::{Arista, RedCaminos, RutaComercial};
 use comercio::reputacion::Reputacion;
 use comercio::trueque::{AcuerdoTrueque, EstadoTrueque, Linea};
-use comercio::viaje::Peaje;
+use comercio::viaje::{Escala, Peaje};
 use comercio::{Carga, Lado, Reglas};
 
 const NINGUNO: u8 = 255;
@@ -288,6 +288,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
         costes,
         plan,
         peajes,
+        escalas,
         origen_acuerdo,
         prepara_hasta,
         escolta,
@@ -331,6 +332,12 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
     for Peaje { ciudad, progreso } in peajes {
         w.u32(*ciudad);
         w.i64(*progreso);
+    }
+    w.u64(escalas.len() as u64);
+    for Escala { plaza, entra, sale } in escalas {
+        w.u32(*plaza);
+        w.i64(*entra);
+        w.i64(*sale);
     }
     match origen_acuerdo {
         Some((a, lado)) => {
@@ -494,6 +501,10 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         peajes.push(Peaje { ciudad: r.u32()?, progreso: r.i64()? });
     }
+    let mut escalas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        escalas.push(Escala { plaza: r.u32()?, entra: r.i64()?, sale: r.i64()? });
+    }
     let origen_acuerdo = if r.bool()? { Some((r.u64()?, lado_de_u8(r.u8()?)?)) } else { None };
     let prepara_hasta = r.opt_i64()?;
     let mut escolta = Vec::new();
@@ -522,6 +533,7 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
         costes,
         plan,
         peajes,
+        escalas,
         origen_acuerdo,
         prepara_hasta,
         escolta,

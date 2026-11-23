@@ -459,13 +459,15 @@ fn una_ciudad_ajena_en_el_camino_cobra_el_peaje_a_la_ida_y_no_al_regreso() {
     let t = e.n.ahora();
     e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
     let lanzada = e.caravana_de(car).clone();
-    // El trazado pasa por la ciudad ajena: un peaje fijado al lanzar, en el avance en que el plan llega a su centro.
+    // El trazado pasa por la ciudad ajena: un peaje fijado al lanzar, que se paga al entrar en ella de escala (bloque E, 2026-11-23).
     assert_eq!(lanzada.peajes.len(), 1);
     assert_eq!(lanzada.peajes[0].ciudad, c as u32);
     assert!(lanzada.ruta.contains(&pos(&e.n, c)), "la ruta pasa por el centro de la ciudad ajena");
     let plan = lanzada.plan.as_ref().unwrap();
-    let cruce = comercio::viaje::instante_de_progreso(plan, lanzada.peajes[0].progreso).unwrap();
+    let escala = *lanzada.escalas.iter().find(|x| x.plaza == c as u32).expect("hace escala en la ciudad ajena");
+    let cruce = escala.entra;
     assert!(cruce > t && cruce < plan.fin().unwrap());
+    assert!(comercio::viaje::instante_de_progreso(plan, lanzada.peajes[0].progreso).unwrap() > cruce, "entra antes de llegar al centro");
     // El contrato lleva el peaje pendiente con el instante del cruce (paridad P7), y deja de llevarlo una vez cobrado.
     let peajes = |e: &Escenario| nucleo::proyeccion::propios::caravana(&e.n, e.caravana_de(car)).peajes.iter().map(|p| (p.asentamiento_id.clone(), p.en_ms)).collect::<Vec<_>>();
     assert_eq!(peajes(&e), vec![(format!("as-{c}"), cruce)]);
@@ -495,6 +497,50 @@ fn una_ciudad_ajena_en_el_camino_cobra_el_peaje_a_la_ida_y_no_al_regreso() {
     assert_eq!(e.caravana_de(car).estado, EstadoCaravana::Disponible);
 }
 
+#[test]
+fn una_caravana_hace_escala_en_la_plaza_propia_que_cruza_sin_pagar_y_no_esta_en_el_mapa_mientras_esta_dentro() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let (a, b) = (e.a, e.b);
+    let c = plaza_en_el_camino(&mut e, m, 1);
+    e.dar(a, Cobre, 200_000);
+    let car = e.caravana("ana", a, 1, true);
+    e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
+    let k = e.caravana_de(car).clone();
+    assert!(k.peajes.is_empty(), "una plaza propia no cobra peaje");
+    // Atraviesa la plaza propia (no la rodea) y hace en ella una escala de 2 min: la descarga de su único carro, con el mínimo de 2 min (bloque E, 2026-11-23).
+    let escala = *k.escalas.iter().find(|x| x.plaza == c as u32).expect("hace escala en la plaza propia que cruza");
+    assert_eq!(escala.sale - escala.entra, 2 * MIN);
+    let (centro, radio) = (pos(&e.n, c), e.n.radio_en(pos(&e.n, c)));
+    let plan = k.plan.as_ref().unwrap();
+    let en_contorno = |t: Instante| plan.vertices.iter().find(|v| v.en == t).is_some_and(|v| (v.p.dist(centro) - radio).abs() <= 4);
+    assert!(en_contorno(escala.entra) && en_contorno(escala.sale), "entra y sale por el contorno");
+    // Hasta el contorno se ve; dentro, no (ni se ve ni se le sale al paso); al salir, otra vez.
+    e.avanzar_hasta(escala.entra - 1);
+    assert!(Nucleo::caravana_en_el_mapa(e.caravana_de(car), e.n.ahora()));
+    e.avanzar_hasta(escala.entra + MIN);
+    assert!(!Nucleo::caravana_en_el_mapa(e.caravana_de(car), e.n.ahora()), "dentro de la plaza");
+    let entra = hechos(&e.n, "comercio.caravana_entra_en_plaza");
+    assert_eq!((entra.len(), entra[0].0, dato(&entra[0], "plaza"), dato(&entra[0], "sale")), (1, escala.entra, c as i64, escala.sale));
+    e.avanzar_hasta(escala.sale);
+    assert!(Nucleo::caravana_en_el_mapa(e.caravana_de(car), e.n.ahora()), "sale por el otro lado");
+    let sale = hechos(&e.n, "comercio.caravana_sale_de_plaza");
+    assert_eq!((sale.len(), sale[0].0, dato(&sale[0], "plaza")), (1, escala.sale, c as i64));
+    assert!(e.caravana_de(car).escalas.iter().all(|x| x.plaza != c as u32 || x.entra > escala.sale), "la escala hecha se olvida");
+    // No paga nada y llega al destino con la carga entera.
+    let cobre_b0 = cantidad(&e.n, b, Cobre);
+    e.avanzar_hasta(fin_del_plan(&e, car));
+    assert!(hechos(&e.n, "comercio.peaje_paso").is_empty());
+    assert_eq!((e.caravana_de(car).estado, cantidad(&e.n, b, Cobre) - cobre_b0), (EstadoCaravana::Retornando, 100_000));
+    // La vuelta, por el mismo camino, también entra en ella.
+    assert!(e.caravana_de(car).escalas.iter().any(|x| x.plaza == c as u32), "la vuelta también hace escala");
+}
+
+/// Cuándo entra la caravana de escala en la plaza `plaza` (donde paga el peaje si es ajena; bloque E, 2026-11-23).
+fn entrada_en(e: &Escenario, car: u64, plaza: u64) -> i64 {
+    e.caravana_de(car).escalas.iter().find(|x| x.plaza == plaza as u32).expect("hace escala en la plaza").entra
+}
+
 /// El peaje en oro de una carga con los precios vigentes: el 2 % de su valor, en unidades enteras hacia arriba (`PEAJE_PASO`).
 fn peaje_en_oro(n: &Nucleo, carga: &[(Recurso, i64)]) -> i64 {
     let c: Mercancia = carga.iter().copied().collect();
@@ -520,8 +566,8 @@ fn el_peaje_se_cobra_en_la_capital_de_la_faccion_de_la_ciudad_cruzada_y_no_en_la
     e.dar(a, Cobre, 100_000);
     let car = e.caravana("ana", a, 1, true);
     e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: vec![(Cobre, 100_000)], salir_en: None, escolta: None });
-    let p = e.caravana_de(car).peajes.iter().position(|p| p.ciudad == c as u32).expect("la ruta cruza C");
-    let cruce = comercio::viaje::instante_de_progreso(e.caravana_de(car).plan.as_ref().unwrap(), e.caravana_de(car).peajes[p].progreso).unwrap();
+    assert!(e.caravana_de(car).peajes.iter().any(|p| p.ciudad == c as u32), "la ruta cruza C");
+    let cruce = entrada_en(&e, car, c);
     e.avanzar_hasta(cruce - 1);
     let (debido, oro_a, oro_c0, oro_c) = (peaje_en_oro(&e.n, &[(Cobre, 100_000)]), cantidad(&e.n, a, Oro), cantidad(&e.n, c0, Oro), cantidad(&e.n, c, Oro));
     e.avanzar_hasta(cruce);
@@ -543,7 +589,7 @@ fn si_el_oro_de_la_capital_no_alcanza_lo_que_falta_se_paga_en_especie_a_la_ciuda
     let car = e.caravana("ana", a, 1, true);
     let carga = [(ArmaBronce, 500_000)];
     e.ok("ana", Comando::PrepararCaravana { caravana: car, destino: b, carga: carga.to_vec(), salir_en: None, escolta: None });
-    let cruce = comercio::viaje::instante_de_progreso(e.caravana_de(car).plan.as_ref().unwrap(), e.caravana_de(car).peajes[0].progreso).unwrap();
+    let cruce = entrada_en(&e, car, c);
     e.avanzar_hasta(cruce - 1);
     let (debido, oro_a, armas_c0) = (peaje_en_oro(&e.n, &carga), cantidad(&e.n, a, Oro), cantidad(&e.n, c, ArmaBronce));
     assert!(oro_a > 0 && oro_a < debido, "la capital tiene {oro_a} y el peaje son {debido}");
