@@ -473,18 +473,18 @@ fn colocar_respeta_la_ciudad_de_la_madre_y_no_pisa_otro_elemento_del_mapa() {
     let primera = Punto::new(centro.x + 15_000, centro.y);
     let (_, h1) = e.colocador(primera);
     e.ok("ana", colocar(h1, primera));
-    // Dos avanzadas reservan cada una lo que mide la ciudadela (1,44 u de radio): a menos de 2,88 de la primera se pisa (también con ella aún pendiente
-    // de materiales); a 2,88 justos, no.
-    let pisa = Punto::new(primera.x + 2_879, primera.y);
+    // Dos avanzadas reservan cada una lo que mide la ciudadela (2,28 u de radio desde el 2026-11-25): a menos de 4,56 de la primera se pisa (también con ella aún pendiente
+    // de materiales); a 4,56 justos, no.
+    let pisa = Punto::new(primera.x + 4_559, primera.y);
     let (_, h2) = e.colocador(pisa);
     assert_eq!(e.rechazada("ana", colocar(h2, pisa)), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
-    let cabe = Punto::new(primera.x + 2_880, primera.y);
+    let cabe = Punto::new(primera.x + 4_560, primera.y);
     let (_, h3) = e.colocador(cabe);
     e.ok("ana", colocar(h3, cabe));
     assert_eq!(e.n.avanzadas_de(plaza).len(), 2);
 
-    // Un pueblo extractor también es un elemento del mapa: mide 2,04 u y la avanzada reserva 1,44, así que a menos de 3,48 de su nodo no se coloca;
-    // a 3,48, por fuera (más lejos de la madre), sí.
+    // Un pueblo extractor también es un elemento del mapa: mide 1,27 u y la avanzada reserva 2,28, así que a menos de 3,55 de su nodo no se coloca;
+    // a 3,55, por fuera (más lejos de la madre), sí.
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     let cobre = e.n.candidatos_de_pueblo(plaza).into_iter().find(|&(_, t)| t == Tipo::MinaCobre).expect("la plaza se fundó junto a una mina de cobre").0;
@@ -496,10 +496,10 @@ fn colocar_respeta_la_ciudad_de_la_madre_y_no_pisa_otro_elemento_del_mapa() {
         let l = (dx * dx + dy * dy).sqrt();
         Punto::new(nodo.x + (d * dx / l).round() as i64, nodo.y + (d * dy / l).round() as i64)
     };
-    let encima = hacia_fuera(3_470.0);
+    let encima = hacia_fuera(3_540.0);
     let (_, h) = e.colocador(encima);
     assert_eq!(e.rechazada("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: encima }), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
-    let al_lado = hacia_fuera(3_490.0);
+    let al_lado = hacia_fuera(3_560.0);
     let (_, h) = e.colocador(al_lado);
     e.ok("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: al_lado });
 }

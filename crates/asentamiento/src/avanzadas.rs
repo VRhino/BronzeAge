@@ -393,7 +393,7 @@ mod pruebas {
     fn las_cifras_salen_del_documento() {
         let r = Reglas::cargar().avanzadas;
         assert_eq!((r.nivel_madre, r.cupo_por_nivel, r.capacidad_almacen), ([2, 2, 3], 1, [0, 4_000_000, 20_000_000]), "almacenes al doble desde el 2026-11-05");
-        assert_eq!((r.radio, r.distancia_a_la_madre, r.fraccion_reparacion), (1_440, 15_000, 500_000), "reserva la ciudadela (1,44 u de radio); a 15 u de la madre (desde el 2026-11-23); reparar cuesta la mitad");
+        assert_eq!((r.radio, r.distancia_a_la_madre, r.fraccion_reparacion), (2_280, 15_000, 500_000), "reserva la ciudadela (2,28 u de radio, la de obra o ruina; 1,44 hasta el 2026-11-25); a 15 u de la madre (desde el 2026-11-23); reparar cuesta la mitad");
         assert_eq!(r.costo(Etapa::Atalaya), &vec![(Madera, 200_000), (Piedra, 100_000)], "200 madera + 100 piedra, obra de 2 h");
         assert_eq!(r.duracion(Etapa::Atalaya), 120 * MIN);
         assert_eq!(r.costo(Etapa::Fuerte), &vec![(Madera, 600_000), (Oro, 50_000), (Piedra, 400_000)]);
@@ -537,15 +537,15 @@ mod pruebas {
         assert_eq!(r.comprobar_sitio(plaza, a(14_999, 0), []), Err(ErrorAvanzada::DentroDelAsentamiento));
         assert_eq!(r.comprobar_sitio(plaza, a(0, -14_999), []), Err(ErrorAvanzada::DentroDelAsentamiento));
         assert_eq!(r.comprobar_sitio(plaza, a(15_000, 0), []), Ok(()), "a 15 justos, sí");
-        // Otro elemento (una avanzada, un pueblo, una aldea, un campamento) a menos de la suma de los radios (1,44 de la ciudadela y el suyo) se pisa.
+        // Otro elemento (una avanzada, un pueblo, una aldea, un campamento) a menos de la suma de los radios (2,28 de la ciudadela y el suyo) se pisa.
         let sitio = a(20_000, 0);
-        let otros = [(a(21_439, 0), 0), (a(40_000, 0), 200)];
+        let otros = [(a(22_279, 0), 0), (a(40_000, 0), 200)];
         assert_eq!(r.comprobar_sitio(plaza, sitio, otros), Err(ErrorAvanzada::PisaOtroElemento));
-        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(21_440, 0), 0), (a(18_560, 0), 0)]), Ok(()));
+        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(22_280, 0), 0), (a(17_720, 0), 0)]), Ok(()));
         assert_eq!(r.comprobar_sitio(plaza, sitio, [(sitio, 100)]), Err(ErrorAvanzada::PisaOtroElemento), "ni encima");
-        // Uno más grande pisa desde más lejos: un pueblo (2,04) pide 3,48 entre centros.
-        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(23_479, 0), 2_040)]), Err(ErrorAvanzada::PisaOtroElemento));
-        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(23_480, 0), 2_040)]), Ok(()));
+        // Uno más grande pisa desde más lejos: un campamento de mercenarios (2,2) pide 4,48 entre centros.
+        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(24_479, 0), 2_200)]), Err(ErrorAvanzada::PisaOtroElemento));
+        assert_eq!(r.comprobar_sitio(plaza, sitio, [(a(24_480, 0), 2_200)]), Ok(()));
         // La madre se mira antes que los demás elementos.
         assert_eq!(r.comprobar_sitio(plaza, a(500, 0), [(a(500, 0), 200)]), Err(ErrorAvanzada::DentroDelAsentamiento));
     }

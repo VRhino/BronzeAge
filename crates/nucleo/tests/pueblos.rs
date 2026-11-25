@@ -1589,16 +1589,27 @@ fn la_fertilidad_de_la_aldea_es_la_de_la_capa_de_su_cultivo() {
     // Con vid y con tierra buena para el trigo y mala para la vid en el anillo de las aldeas (unos cuantos puntos: los hay junto al río).
     let vid = con_vid_y_oliva(&m.0);
     let vale = |c: Punto| vid(c) && puntos_con_capas(&m.0, c, |trigo, vid| trigo >= 77 && vid <= 76).len() >= 8;
-    let mut e = montar_donde(Nucleo::nuevo(arranque(m, 7)), m, 3, vale);
-    let plaza = e.plaza;
-    let centro = e.n.estado().asentamientos[&plaza].posicion;
     // El mínimo se mira en la capa del cultivo: donde el trigo llega (≥ 77 de 255, el 30 %) y la vid no (≤ 76), la aldea de vid se rechaza y la de trigo se acepta.
-    let sin_vid = puntos_con_capas(&m.0, centro, |trigo, vid| trigo >= 77 && vid <= 76);
-    let rechazado = sin_vid.into_iter().find(|&punto| {
-        let r = e.ord("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Vid });
-        matches!(r.resultado, Resultado::Rechazada { codigo, .. } if codigo == rechazos::PUEBLO_FERTILIDAD_INSUFICIENTE)
-    });
-    let punto = rechazado.expect("hay un punto fértil para el trigo y pobre para la vid");
+    // Esos puntos suelen estar junto al río: con la orilla de la plaza a 8 u (2026-11-25) la plaza puede quedar tan cerca del cauce que todos ellos caen en él,
+    // así que se prueba cada sitio de plaza que vale hasta dar con uno que tenga alguno fuera del cauce.
+    let mapa = Mapa::de(&m.0);
+    let sitios = (0..mapa.nodos.len())
+        .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre)
+        .filter_map(|i| sitio_junto_a(&Nucleo::nuevo(arranque(m, 7)), &m.0, mapa.nodos[i].pos, 13_000).filter(|&p| vale(p)).map(|p| (i as u32, p)));
+    let (mut e, punto) = sitios
+        .take(20)
+        .find_map(|(cobre, sitio)| {
+            let mut e = montar_en(Nucleo::nuevo(arranque(m, 7)), mapa.clone(), 3, cobre, sitio);
+            let plaza = e.plaza;
+            let centro = e.n.estado().asentamientos[&plaza].posicion;
+            let punto = puntos_con_capas(&m.0, centro, |trigo, vid| trigo >= 77 && vid <= 76).into_iter().find(|&punto| {
+                let r = e.ord("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Vid });
+                matches!(r.resultado, Resultado::Rechazada { codigo, .. } if codigo == rechazos::PUEBLO_FERTILIDAD_INSUFICIENTE)
+            })?;
+            Some((e, punto))
+        })
+        .expect("hay un punto fértil para el trigo y pobre para la vid");
+    let plaza = e.plaza;
     let id = e.ok("ana", Comando::MarcarAldea { asentamiento: plaza, punto, cultivo: Cultivo::Trigo }).creadas[0];
     let (trigo, vid) = (m.0.fertilidad_en(punto.x, punto.y).unwrap() as i64, m.0.fertilidad_vid_en(punto.x, punto.y).unwrap() as i64);
     assert!(trigo > vid);
