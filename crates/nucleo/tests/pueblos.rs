@@ -1697,6 +1697,9 @@ fn la_aldea_se_marca_en_tierra_fertil_la_ganadera_nace_con_su_rebano_y_sus_carro
     assert!(p.activo() && p.cultivo() == Some(Cultivo::Ganado));
     assert_eq!(p.rebano.as_ref().map(|r| (r.especie.as_str(), r.cabezas / 1_000)), Some(("vacuno", 20)), "nace con el pie de cría de su corral");
     assert!(e.n.economia(plaza).unwrap().aldeas_activas() == 2);
+    // El rebaño se ve también desde fuera, sin el almacén ni el nivel (decisión del autor del 2026-11-25).
+    let Some(contrato::v1::entidad::Cuerpo::Pueblo(fuera)) = nucleo::proyeccion::vista::pueblo_desde_dentro(&e.n, plaza, id, false) else { panic!("la aldea se ve desde dentro") };
+    assert_eq!((fuera.rebano_especie.as_deref(), fuera.rebano_cabezas, fuera.nivel_aldea, fuera.almacen_por_recurso.is_empty()), (Some("vacuno"), p.rebano.as_ref().map(|r| r.cabezas), None, true));
 
     // El carro de la de trigo sale con trigo y el de la ganadera con la leche del rebaño y, cuando este pasa del pie de cría, también con ganado y
     // carne; los cuatro entran en el almacén de la madre.

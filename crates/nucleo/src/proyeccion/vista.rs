@@ -701,7 +701,10 @@ impl<'n> Mirada<'n> {
         if p.activo() {
             let tipo = p.nombre_de_tipo().to_owned();
             let nodo = p.nodo().map(ids::nodo).unwrap_or_default();
-            return vec![visible(pb::TipoEntidad::Pueblo, ids::pueblo(pid), Sello(version, 0), move || {
+            let rebano = p.rebano.as_ref().map(|r| (r.especie.clone(), r.cabezas));
+            // La cría sube las cabezas sin cambiar la versión del pueblo: las cabezas enteras van en el sello, así que el rebaño vuelve a viajar cuando cambia.
+            let sello = Sello(version, rebano.as_ref().map_or(0, |r| r.1 / 1_000));
+            return vec![visible(pb::TipoEntidad::Pueblo, ids::pueblo(pid), sello, move || {
                 Some(Cuerpo::Pueblo(pb::Pueblo {
                     id: ids::pueblo(pid),
                     version,
@@ -710,6 +713,9 @@ impl<'n> Mirada<'n> {
                     tipo_extractor: tipo.clone(),
                     posicion: Some(punto(pos)),
                     batalla_id: propios::batalla_sobre(n, Ubicacion::Pueblo(pid)),
+                    // El rebaño de una aldea ganadera se ve también desde fuera (decisión del autor del 2026-11-25): Conquest pinta sus vacas.
+                    rebano_especie: rebano.as_ref().map(|r| r.0.clone()),
+                    rebano_cabezas: rebano.as_ref().map(|r| r.1),
                     ..Default::default()
                 }))
             })];
@@ -831,6 +837,8 @@ pub fn pueblo_desde_dentro(n: &Nucleo, madre: u64, pid: u64, de_su_faccion: bool
             tipo_extractor: p.nombre_de_tipo().to_owned(),
             posicion: n.posicion_de_pueblo(pid).map(punto),
             batalla_id: propios::batalla_sobre(n, Ubicacion::Pueblo(pid)),
+            rebano_especie: p.rebano.as_ref().map(|r| r.especie.clone()),
+            rebano_cabezas: p.rebano.as_ref().map(|r| r.cabezas),
             ..Default::default()
         }
     };
