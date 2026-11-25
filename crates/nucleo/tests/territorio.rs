@@ -413,30 +413,30 @@ fn las_reglas_del_territorio_salen_de_los_bloques_del_documento() {
     assert_eq!(t.techos, vec![30_000, 50_000, 70_000, 80_000, 90_000]);
     assert_eq!(t.separacion_plazas, 60_000, "2026-11-23: 60 u (20 desde el 2026-11-05, 10 el 2026-11-04, antes 30)");
     assert_eq!(t.exclusion_campamento, 60_000);
-    assert_eq!(t.distancia_nodo, 12_000, "regla nueva del 2026-11-23");
+    assert_eq!(t.distancia_nodo, 10_000, "regla nueva del 2026-11-23 (12 hasta el 2026-11-25)");
 }
 
-/// Ningún nodo de recurso a menos de 12 u del centro de una plaza nueva (decisión del autor del 2026-11-23): al crecer, la plaza lo taparía.
+/// Ningún nodo de recurso a menos de 10 u del centro de una plaza nueva (decisión del autor del 2026-11-23, 12 hasta el 2026-11-25): al crecer, la plaza lo taparía.
 #[test]
-fn no_se_funda_a_menos_de_doce_de_un_nodo() {
+fn no_se_funda_a_menos_de_diez_de_un_nodo() {
     let m = con_mundo!();
     let mut n = nuevo(m);
     let mapa = nucleo::economia::Mapa::de(&m.0);
     let nodos: Vec<Punto> = mapa.nodos.iter().map(|x| x.pos).collect();
     let lejos_de_todos = |p: Punto, r: i64| nodos.iter().all(|q| q.dist(p) >= r);
-    // Un nodo con suelo fundable a 11 u y a 12 u (en el mismo rumbo, sin ningún otro nodo a menos de 12 de esos puntos).
+    // Un nodo con suelo fundable a 9 u y a 10 u (en el mismo rumbo, sin ningún otro nodo a menos de 10 de esos puntos).
     let (cerca, justo) = nodos
         .iter()
         .flat_map(|&c| (0..36).map(move |g| (c, ((g * 10) as f64).to_radians())))
-        .map(|(c, a)| (Punto::new(c.x + (11_000.0 * a.cos()) as i64, c.y + (11_000.0 * a.sin()) as i64), Punto::new(c.x + (12_000.0 * a.cos()).ceil() as i64, c.y + (12_000.0 * a.sin()).ceil() as i64), c))
+        .map(|(c, a)| (Punto::new(c.x + (9_000.0 * a.cos()) as i64, c.y + (9_000.0 * a.sin()) as i64), Punto::new(c.x + (10_000.0 * a.cos()).ceil() as i64, c.y + (10_000.0 * a.sin()).ceil() as i64), c))
         .find(|&(p, q, c)| {
-            nodos.iter().filter(|&&o| o != c).all(|o| o.dist(p) >= 12_000 && o.dist(q) >= 12_000) && c.dist(q) >= 12_000
+            nodos.iter().filter(|&&o| o != c).all(|o| o.dist(p) >= 10_000 && o.dist(q) >= 10_000) && c.dist(q) >= 10_000
                 && n.viabilidad(q, 1).is_some_and(|v| v.motivo.is_none())
                 && n.viabilidad(p, 1).is_some_and(|v| v.motivo == Some(territorio::Motivo::CercaDeNodo))
         })
         .map(|(p, q, _)| (p, q))
-        .expect("algún nodo con suelo fundable a 11 y a 12 u");
-    assert!(!lejos_de_todos(cerca, 12_000) && lejos_de_todos(justo, 12_000));
+        .expect("algún nodo con suelo fundable a 9 y a 10 u");
+    assert!(!lejos_de_todos(cerca, 10_000) && lejos_de_todos(justo, 10_000));
     let e = n.crear_ejercito(0, "ana", 1, cerca, 500, 100_000).unwrap();
     assert!(n.aplicar_en(0, admin("c-nodo", Comando::DarCaravanaFundacion { ejercito: e })).aceptada());
     let rastro = n.hash_estado();
