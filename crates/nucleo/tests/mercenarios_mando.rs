@@ -448,12 +448,12 @@ fn el_trabajo_del_contrato_limita_las_ordenes_y_atacar_en_radio_mide_la_distanci
     assert_eq!(e.codigo(rey, &[defensor], TipoOrden::Guardar, Objetivo::Plaza(otra)), fuera, "guardar otra plaza");
     assert_eq!(e.codigo(rey, &[defensor], TipoOrden::Unirse, Objetivo::Ejercito(ejercito)), fuera, "unirse");
     assert_eq!(e.codigo(rey, &[defensor], TipoOrden::Atacar, Objetivo::Plaza(ajena)), fuera, "atacar lo que está lejos de su plaza");
-    // Bandidos justo fuera de la zona de la plaza, a menos de `radioDefensa`; y otros lejos, junto al campamento 0.
-    let (sitio, radio_defensa) = (e.n.estado().asentamientos[&plaza].posicion, e.n.estado().reglas.economia.contratos.radio_defensa);
+    // Bandidos justo fuera de la zona de la plaza, a menos de `radioDefensa` de su borde (desde el 2026-11-23); y otros lejos, junto al campamento 0.
+    let (sitio, zona, radio_defensa) = (e.n.estado().asentamientos[&plaza].posicion, e.n.estado().asentamientos[&plaza].radio, e.n.estado().reglas.economia.contratos.radio_defensa);
     let (cerca, lejos) = (bandidos(&mut e, m, sitio, 1), bandidos(&mut e, m, campamento(&m.0, 0), 1));
     let donde = |e: &E, b: u64| e.n.campamento_de_bandidos(b).unwrap().posicion;
-    assert!(donde(&e, cerca).dist(sitio) <= radio_defensa, "unos bandidos junto a la plaza");
-    assert!(donde(&e, lejos).dist(sitio) > radio_defensa, "y otros lejos de ella");
+    assert!(donde(&e, cerca).dist(sitio) - zona <= radio_defensa, "unos bandidos junto a la plaza");
+    assert!(donde(&e, lejos).dist(sitio) - zona > radio_defensa, "y otros lejos de ella");
     assert_eq!(e.codigo(rey, &[defensor], TipoOrden::Atacar, Objetivo::Bandidos(lejos)), fuera, "bandidos fuera de su radio");
     e.ordena(rey, &[defensor], TipoOrden::Atacar, Objetivo::Bandidos(cerca));
     assert_eq!(e.que_hace(defensor), Some((TipoOrden::Atacar, Objetivo::Bandidos(cerca))));

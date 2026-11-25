@@ -12,7 +12,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 > ejercitaba la guerra: lo sustituye `batch militar`, fila «Batch militar (4G)» de Paridad), §43-§47 (la calibración del
 > sistema 4 y de `batch comercio`: `Consideraciones/Calibracion_Sistema4_Decisiones.md`), §48 (la escala de la distancia a
 > la capital, decidida en P1: `Consideraciones/Politica_Tecnologia_Decisiones.md`, `crates/batch/decisiones/politica.json`
-> y `Docs/Arquitectura/Sistema5_Contraste_y_Plan.md`, «Calibración del batch político») y §49 (el batch político, P1-P10,
+> y `Sistema5_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git), «Calibración del batch político») y §49 (el batch político, P1-P10,
 > en los mismos sitios). La EE-7, que también se numeraba §48, pasó a §32 (reputación). Las que esperan a los bots llevan
 > la línea **Fase 7** y su fila en «Para la fase 7» de `Docs/Mecanicas a desarrollar.md`.
 
@@ -44,7 +44,7 @@ referencias antiguas (§34, §39…) sigan valiendo.
 logro**: cada umbral, en lo que marque su contador en su semana objetivo (Doc 6.3). Las X se portaron tal cual del
 TypeScript (las de las Eras II y III eran placeholder) y no se vuelven a medir hasta tener bots reales. Punto de partida:
 `batch tecnologia` (6H, 2026-10-26) deja el día de cada logro y de cada Era con esas X (la Era II llega por plazo el
-día 35; tabla en `Docs/Arquitectura/Sistema6_Contraste_y_Plan.md`, «Avance de 6H»). Lo mismo para la velocidad y la
+día 35; tabla en `Sistema6_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git), «Avance de 6H»). Lo mismo para la velocidad y la
 estancia de los Aedas (§42). Bitácora del TypeScript: `typescript-final:Consideraciones/Tecnologia_Eras_I-III_Definicion.md`.
 
 ## 34. La economía no llena los víveres de un ejército
@@ -69,7 +69,7 @@ en los del TypeScript, como lista para los nuevos:
 - **Calibrar con batch** el ritmo (cada 5 ticks), las prudencias heredadas de la gobernanza y el margen sobre la
   defensa inspeccionada antes de una campaña.
 
-Plan: `Docs/Arquitectura/12_NPC_Fuera_Del_Motor.md`.
+Plan: `12_NPC_Fuera_Del_Motor.md` (retirado el 2026-11-23; sigue en git).
 
 ## 40. Campamentos de mercenarios: cifras
 
@@ -183,3 +183,12 @@ Sistema 1 de la fase 6 (mundo y territorio) implementado; el informe de batch es
 - **Separación de metales aislados (`PARAMETROS_METALES.espacioAislado`):** bajada de 120 a 100 u porque con 64 de estaño (16 en frontera) la semilla 42 no admitía 16 nodos a 110. No está en el canon; si se cambia la semilla o el reparto por anillos, revisarla.
 - **Cobertura de metales por la población sintética (Fase 7):** estaño 67 / 38 / 0 % (foco / frontera / lejana) y oro 100 / 33 / 0 %: el batch nunca se aleja más de 120 u del campamento; el gradiente 5 / 25 / 70 se mide de verdad con los bots de la fase 7.
 - **Facciones sin plaza (26 %, Fase 7):** 400 Facciones sobre 9 campamentos saturan el foco (105 %); un jugador real buscaría más lejos. Vigilar con los bots.
+
+## Mapa: menos piedra y metal y plazas a 60 (2026-11-23)
+
+«Tamaños y distancias del mapa», tanda 1 (bloques A, B y D). Para vigilar en la partida nueva, sin batch todavía:
+
+- **Menos piedra, cobre y hierro:** los totales de partida entre 2,25 (semilla 42, `7160008d…`: 1.240 de piedra, 377 de cobre y 562 de hierro; antes 2.790, 843 y 1.265). La zona inicial de 24 u abarca cuatro veces más terreno que la de 12, así que una plaza nueva debería ver más o menos lo mismo, pero el reparto entre plazas y el ritmo de la piedra en la construcción no se han medido.
+- **Cuatro veces más tierra al nacer:** con la zona inicial de 24 u la plaza nueva tiene unas cuatro veces más parcelas de bosque y tierra fértil que antes. El crecimiento por edificio sigue en 2: del inicial al techo del nivel 1 bastan 3 edificios.
+- **Plazas a 60 y campamentos a 60:** menos sitio para fundar junto a cada campamento; con 400 Facciones sobre 9 campamentos (Fase 7) ya había un 26 % sin plaza. Vigilar con los bots.
+- **Nada a menos de 12 u de un nodo:** cuánta tierra fundable queda con los nodos nuevos no está medido.

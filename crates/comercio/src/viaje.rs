@@ -15,6 +15,16 @@ pub struct Peaje {
     pub progreso: i64,
 }
 
+/// Una escala (Tamaños y distancias del mapa, bloque E, 2026-11-23): una plaza que el camino atraviesa sin ser donde empieza ni donde acaba. La caravana entra
+/// por su contorno en `entra`, sale del mapa (ni se ve ni se encuentra con nadie) y vuelve a él en `sale`, por el contorno del otro lado. En una plaza ajena
+/// paga el peaje al entrar; en una propia no paga nada.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Escala {
+    pub plaza: AsentamientoId,
+    pub entra: Instante,
+    pub sale: Instante,
+}
+
 /// Lo que se cobró en un peaje: el oro que paga la capital del dueño y, de lo que no llegó, la especie de la carga.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CobroPeaje {

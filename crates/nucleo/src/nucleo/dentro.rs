@@ -118,7 +118,7 @@ impl Nucleo {
         if !solo && e.columna.lider != heroe {
             return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder hace entrar al ejército".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(sitio.puerta) > self.radio_puerta() {
+        if !p.admin && !self.a_la_puerta(sitio.puerta, self.radio_en(sitio.puerta), e.posicion_en(t)) {
             let codigo = if sitio.es_pueblo() { rechazos::PUEBLO_FUERA_DE_LA_PUERTA } else { rechazos::AVANZADA_FUERA_DE_LA_PUERTA };
             return Err(rechazo(codigo, "la columna no está a la puerta".into()));
         }

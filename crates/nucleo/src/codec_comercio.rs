@@ -13,9 +13,9 @@
 //! precio i64 · creado_en i64 · expira_en i64 · estado u8`. Una carga: `n u64 · n × (recurso u8, cantidad i64)`. Una caravana: `id u64 ·
 //! tipo u8 · origen u32 · destino opt_u64 · contenido{carga} · carros{n u64 · n × (tipo u8, animal u8: 255 ninguno)} · estado u8 ·
 //! posición · ruta{n u64 · n × punto} · costes{n u64 · n × i64} · plan{bool · generación u32 · n u32 · n × (punto, instante i64)} · peajes{n u64 · n × (ciudad u32,
-//! progreso i64)} · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
+//! progreso i64)} · escalas{n u64 · n × (plaza u32, entra i64, sale i64)} (BAN68) · origen_acuerdo{bool · id u64 · lado u8} · prepara_hasta opt_i64 · escolta{n u64 · n × (id u64, héroe u64, liderazgo
 //! i64)} · reservada_manual bool · anfitriona opt_u64 · antes_de_batalla u8 (255 ninguno) · pausada_desde opt_i64 · de_campamento bool · encargo{bool · modo u8 ·
-//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool · inicio_paso opt_i64 · detener bool (estos dos desde BAN56)} (BAN52) · nombre texto (BAN55)`.
+//! destino u32 · salir_en opt_i64 · parada del origen · parada del destino · vueltas u32 · punta u8 · fase u8 · fin_paso opt_i64 · cancelado bool · inicio_paso opt_i64 · detener bool (estos dos desde BAN56) · llego_en opt_i64 (BAN67) · mas{n u64 · n × (plaza u32, parada)} · tramo u8 (BAN69)} (BAN52) · nombre texto (BAN55)`.
 //! Una parada: `recoger{n u64 · n × (recurso u8, cantidad i64, precio_max opt_i64)} · esperar_existencias bool · dejar{n u64 · n × (recurso u8, tope opt_i64,
 //! precio_min opt_i64)} · desechar_sobrante bool`.
 
@@ -24,13 +24,13 @@ use crate::codec_economia::{recurso_a_u8, recurso_de_u8};
 use crate::estado_comercio::{EstadoComercio, EstadoMercenarios, RutaAcarreo, Trazado};
 use base::{Plan, Vertice};
 use comercio::caravana::{Animal, Caravana, Carro, Escuadra, EstadoCaravana, TipoCaravana, TipoCarro};
-use comercio::encargo::{Encargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, Punta};
+use comercio::encargo::{Encargo, Fase, LineaDejar, LineaRecoger, Modo, Parada, ParadaEn, Punta};
 use comercio::mercenarios::{MercadoMercenario, StockCampamento};
 use comercio::orden_mercado::{EstadoOrden, LibroOrdenes, OrdenMercado, TipoOrden};
 use comercio::red_caminos::{Arista, RedCaminos, RutaComercial};
 use comercio::reputacion::Reputacion;
 use comercio::trueque::{AcuerdoTrueque, EstadoTrueque, Linea};
-use comercio::viaje::Peaje;
+use comercio::viaje::{Escala, Peaje};
 use comercio::{Carga, Lado, Reglas};
 
 const NINGUNO: u8 = 255;
@@ -288,6 +288,7 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
         costes,
         plan,
         peajes,
+        escalas,
         origen_acuerdo,
         prepara_hasta,
         escolta,
@@ -331,6 +332,12 @@ fn caravana_escribir(w: &mut Escritor, c: &Caravana) {
     for Peaje { ciudad, progreso } in peajes {
         w.u32(*ciudad);
         w.i64(*progreso);
+    }
+    w.u64(escalas.len() as u64);
+    for Escala { plaza, entra, sale } in escalas {
+        w.u32(*plaza);
+        w.i64(*entra);
+        w.i64(*sale);
     }
     match origen_acuerdo {
         Some((a, lado)) => {
@@ -378,7 +385,7 @@ pub(crate) fn modo_de_u8(i: u8) -> Result<Modo, ErrorFormato> {
 }
 
 fn encargo_escribir(w: &mut Escritor, e: &Encargo) {
-    let Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener } = e;
+    let Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en, mas, tramo } = e;
     w.u8(modo_a_u8(*modo));
     w.u32(*destino);
     w.opt_i64(*salir_en);
@@ -398,6 +405,13 @@ fn encargo_escribir(w: &mut Escritor, e: &Encargo) {
     w.bool(*cancelado);
     w.opt_i64(*inicio_paso);
     w.bool(*detener);
+    w.opt_i64(*llego_en);
+    w.u64(mas.len() as u64);
+    for ParadaEn { plaza, parada } in mas {
+        w.u32(*plaza);
+        parada_escribir(w, parada);
+    }
+    w.u8(*tramo);
 }
 
 pub(crate) fn parada_escribir(w: &mut Escritor, p: &Parada) {
@@ -435,8 +449,30 @@ fn encargo_leer(r: &mut Lector) -> Result<Encargo, ErrorFormato> {
         _ => return Err(ErrorFormato("fase de encargo desconocida")),
     };
     let (fin_paso, cancelado) = (r.opt_i64()?, r.bool()?);
-    let (inicio_paso, detener) = (r.opt_i64()?, r.bool()?);
-    Ok(Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener })
+    let (inicio_paso, detener, llego_en) = (r.opt_i64()?, r.bool()?, r.opt_i64()?);
+    let mut mas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        mas.push(ParadaEn { plaza: r.u32()?, parada: parada_leer(r)? });
+    }
+    let tramo = r.u8()?;
+    Ok(Encargo { modo, destino, salir_en, en_origen, en_destino, vueltas, punta, fase, fin_paso, cancelado, inicio_paso, detener, llego_en, mas, tramo })
+}
+
+/// Las paradas de después del destino de una orden de encargo: `n u64 · n × (plaza u64, parada)`.
+pub(crate) fn mas_escribir(w: &mut Escritor, mas: &[(u64, Parada)]) {
+    w.u64(mas.len() as u64);
+    for (plaza, parada) in mas {
+        w.u64(*plaza);
+        parada_escribir(w, parada);
+    }
+}
+
+pub(crate) fn mas_leer(r: &mut Lector) -> Result<Vec<(u64, Parada)>, ErrorFormato> {
+    let mut mas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        mas.push((r.u64()?, parada_leer(r)?));
+    }
+    Ok(mas)
 }
 
 pub(crate) fn parada_leer(r: &mut Lector) -> Result<Parada, ErrorFormato> {
@@ -493,6 +529,10 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
     for _ in 0..r.cuenta()? {
         peajes.push(Peaje { ciudad: r.u32()?, progreso: r.i64()? });
     }
+    let mut escalas = Vec::new();
+    for _ in 0..r.cuenta()? {
+        escalas.push(Escala { plaza: r.u32()?, entra: r.i64()?, sale: r.i64()? });
+    }
     let origen_acuerdo = if r.bool()? { Some((r.u64()?, lado_de_u8(r.u8()?)?)) } else { None };
     let prepara_hasta = r.opt_i64()?;
     let mut escolta = Vec::new();
@@ -521,6 +561,7 @@ fn caravana_leer(r: &mut Lector) -> Result<Caravana, ErrorFormato> {
         costes,
         plan,
         peajes,
+        escalas,
         origen_acuerdo,
         prepara_hasta,
         escolta,
@@ -741,6 +782,9 @@ mod pruebas {
             cancelado: true,
             inicio_paso: Some(100_000),
             detener: true,
+            llego_en: Some(95_000),
+            mas: vec![ParadaEn { plaza: 9, parada: Parada { recoger: vec![linea_recoger(Recurso::Madera, 7_000, None)], ..Parada::default() } }],
+            tramo: 1,
         }
     }
 
@@ -758,7 +802,7 @@ mod pruebas {
         let (esperado, e) = (encargo_completo(), leido.flota[0].encargo.as_ref().expect("la caravana conserva el encargo"));
         assert_eq!((e.modo, e.destino, e.salir_en), (esperado.modo, esperado.destino, esperado.salir_en));
         assert_eq!((&e.en_origen, &e.en_destino), (&esperado.en_origen, &esperado.en_destino));
-        assert_eq!((e.vueltas, e.punta, e.fase, e.fin_paso, e.cancelado, e.inicio_paso, e.detener), (1, Punta::Destino, Fase::Carga, Some(123_456), true, Some(100_000), true));
+        assert_eq!((e.vueltas, e.punta, e.fase, e.fin_paso, e.cancelado, e.inicio_paso, e.detener, e.llego_en), (1, Punta::Destino, Fase::Carga, Some(123_456), true, Some(100_000), true, Some(95_000)));
         assert_eq!(leido.flota[0].nombre, "La de Tirinto");
         assert_eq!(leido.flota[0], original.flota[0]);
         assert_eq!(bytes_de(&leido), bytes, "guardarla de nuevo da los mismos bytes");

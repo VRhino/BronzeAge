@@ -5,7 +5,7 @@
 > `BronzeAgeFase0`. Problemas, decisiones y orden: [`Consideraciones/Reconstruccion_Definicion.md`](../../Consideraciones/Reconstruccion_Definicion.md).
 > Qué cambia para los clientes: [`typescript-final:Docs/Coordinacion/04_Migracion_Mundo_Reactivo.md`](../Coordinacion/04_Migracion_Mundo_Reactivo.md).
 >
-> **Estado (2026-10-26):** el núcleo (fase 5) y las reglas de los seis sistemas (fase 6) están hechos sobre este diseño, en la rama `claude/lucid-curran-6d6ffa`; ver [`Handoff_Fase6.md`](Handoff_Fase6.md), la entrada a la fase 7.
+> **Estado (2026-10-26):** el núcleo (fase 5) y las reglas de los seis sistemas (fase 6) están hechos sobre este diseño, en la rama `claude/lucid-curran-6d6ffa`; ver `Handoff_Fase6.md` (retirado el 2026-11-23; sigue en git), la entrada a la fase 7.
 >
 > Origen: conversación con el usuario (sesión «Cliente jugador», 2026-10-11) tras medir el movimiento del mapa con
 > el contrato 03. Con un tick de 500 ms (valor de prueba) basta interpolar un tick por detrás; con el tick real de
@@ -149,7 +149,7 @@ clientes ─┤ WS/HTTP · auth · parseo y validación sin estado       │
    (hoy, desde la del inicio del tick). Cambia sutilmente el resultado de algunas jugadas; decisión de diseño.
 3. **Combate de Unity:** su ciclo (`BA-001`) ya es por eventos; encaja, pero el contrato de inicio/fin de batalla se
    revisa al migrar.
-4. **Bots** (`12_NPC_Fuera_Del_Motor.md`): siguen siendo clientes externos, sin privilegios, pero se reescriben en Rust
+4. **Bots** (`12_NPC_Fuera_Del_Motor.md` (retirado el 2026-11-23; sigue en git)): siguen siendo clientes externos, sin privilegios, pero se reescriben en Rust
    como servicio aparte que usa el contrato 05 igual que un jugador.
 5. **Herramientas de batch y balance** (`scripts/run-batch-sim.ts`, mediciones): necesitan un modo «acelerado» del
    reloj de mundo (procesar la cola sin esperar al reloj de pared).

@@ -89,7 +89,7 @@ impl Nucleo {
         self.autorizar_heroe(p, heroe, false)?;
         let puerta = self.posicion_de_pueblo(pueblo).ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado".into()))?;
         let (columna, e) = self.columna_a_bordo(heroe)?;
-        if e.posicion_en(t).dist(puerta) > self.radio_puerta() {
+        if !self.a_la_puerta(puerta, self.radio_de_pueblo(pu), e.posicion_en(t)) {
             return Err(rechazo(rechazos::HEROE_NO_ESTA_EN_EL_PUEBLO, format!("el héroe no está dentro de {} ni con su columna a su puerta", ids::pueblo(pueblo))));
         }
         if self.heroe(heroe).expect("existe").faccion != Some(self.estado.asentamientos[&madre].faccion) {

@@ -39,7 +39,7 @@ use comercio::encargo::Punta;
 use comercio::evento::Evento as EventoComercio;
 use comercio::red_caminos::{Arista, RedCaminos};
 use comercio::reparto::{asignar_origen, lados_pendientes, EntornoReparto, LadoPendiente};
-use comercio::viaje::{longitud_ruta, peajes_de_paradas, CobroPeaje};
+use comercio::viaje::{longitud_ruta, peajes_de_paradas, CobroPeaje, Escala};
 use comercio::{total, Lado};
 use militar::presencia::Ubicacion;
 use militar::{sumar, Carga as Mercancia};
@@ -89,6 +89,13 @@ impl Nucleo {
             EstadoCaravana::EnBatalla => c.posicion,
             _ => c.posicion_en(t),
         })
+    }
+
+    /// ¿Está la caravana en el mapa en `t`? Viajando, con su plan ya empezado y fuera de toda escala. La que tiene el plan por empezar está dentro de una plaza
+    /// (el carro de acarreo mientras descarga), y la que está en una escala, dentro de la plaza que atraviesa (bloque E, 2026-11-23): ni se ve ni se encuentra
+    /// con nadie.
+    pub fn caravana_en_el_mapa(c: &Caravana, t: Instante) -> bool {
+        matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) && c.plan.as_ref().and_then(|p| p.vertices.first()).is_none_or(|v| v.en <= t) && c.en_escala(t).is_none()
     }
 
     /// La red de caminos tal como está guardada (puede conservar rutas caducadas hasta el próximo lanzamiento; véase [`Nucleo::pesos_de_red`]).
@@ -332,35 +339,104 @@ impl Nucleo {
 
     // ───────────────────────────── El plan de una caravana ─────────────────────────────
 
-    /// Pone `plan` a la caravana: sube su generación (descarta lo programado con el plan anterior), lo guarda con esa generación, programa su
-    /// llegada y su próximo peaje y avisa a los generadores (la rejilla de encuentros).
-    pub(super) fn instalar_plan(&mut self, id: u64, mut plan: Plan) {
+    /// Pone `plan` a la caravana: sube su generación (descarta lo programado con el plan anterior), le pone sus escalas ([`Nucleo::con_escalas`]), lo guarda con
+    /// esa generación, programa su llegada, su próximo peaje y su próxima escala y avisa a los generadores (la rejilla de encuentros). Si está dentro de una
+    /// escala, solo programa la salida y la rejilla no la ve.
+    pub(super) fn instalar_plan(&mut self, id: u64, plan: Plan) {
         let entidad = entidad_caravana(id);
         let g = self.estado.generaciones.subir(entidad);
-        plan.generacion = g;
         let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
+        let ahora = self.estado.ahora;
+        let (mut plan, escalas) = self.con_escalas(&self.estado.comercio.flota[i], plan, ahora);
+        plan.generacion = g;
         let c = &mut self.estado.comercio.flota[i];
         if let Some(v) = plan.vertices.first() {
             c.posicion = v.p;
         }
         c.plan = Some(plan.clone());
+        c.escalas = escalas;
+        let dentro = c.en_escala(ahora).is_some();
         self.tr.tocar(Clase::Caravana, id);
         self.programar_viaje(id);
-        self.avisar_plan_entidad(entidad, Some(plan));
+        self.avisar_plan_entidad(entidad, (!dentro).then_some(plan));
     }
 
-    /// Programa la llegada y el próximo peaje de la caravana con su generación vigente.
+    /// Programa con la generación vigente lo que le toca a la caravana: dentro de una escala, la salida; fuera, la llegada, el próximo peaje y la próxima escala.
     fn programar_viaje(&mut self, id: u64) {
         let Some(c) = self.estado.comercio.caravana(id) else { return };
-        let (fin, peaje) = (c.llegada_en(), c.proximo_peaje());
         let ahora = self.estado.ahora;
         let entidad = entidad_caravana(id);
+        if let Some(e) = c.en_escala(ahora) {
+            let sale = e.sale;
+            self.programar_comercio(sale, entidad, SucesoComercio::SalidaDeLaPlaza);
+            return;
+        }
+        let (fin, peaje, escala) = (c.llegada_en(), c.proximo_peaje(), c.proxima_escala(ahora).map(|e| e.entra));
         if let Some(fin) = fin {
             self.programar_comercio(fin.max(ahora), entidad, SucesoComercio::LlegadaCaravana);
         }
         if let Some(p) = peaje {
             self.programar_comercio(p.max(ahora), entidad, SucesoComercio::PeajeCaravana);
         }
+        if let Some(e) = escala {
+            self.programar_comercio(e, entidad, SucesoComercio::EntradaEnPlaza);
+        }
+    }
+
+    /// Las escalas de una caravana comercial en `plan` (bloque E, 2026-11-23): cada plaza en cuyo disco (`radio_de_plaza`) se mete el camino sin ser donde
+    /// empieza ni donde acaba. Pone un vértice en el contorno por donde entra y otro por donde sale, y lo que va dentro dura la estancia
+    /// ([`Nucleo::estancia_en_plaza`]: la descarga de sus carros con animal, nunca menos de 2 min) en vez de lo que tardaba en cruzarla; lo que viene después se
+    /// corre lo mismo. Las que ya dejó atrás en `t` ni se tocan ni se devuelven. Sobre un plan que ya las tiene no añade vértices ni corre nada: se puede volver
+    /// a llamar al rehacer el plan. El carro de acarreo no hace escalas (su camino solo une su pueblo con su plaza).
+    pub(super) fn con_escalas(&self, c: &Caravana, mut plan: Plan, t: Instante) -> (Plan, Vec<Escala>) {
+        let (Some(ini), Some(fin)) = (plan.vertices.first().map(|v| v.p), plan.vertices.last().map(|v| v.p)) else { return (plan, Vec::new()) };
+        if c.tipo != TipoCaravana::Comercial || plan.vertices.len() < 2 {
+            return (plan, Vec::new());
+        }
+        let (mut x0, mut y0, mut x1, mut y1) = (ini.x, ini.y, ini.x, ini.y);
+        for v in &plan.vertices {
+            (x0, y0, x1, y1) = (x0.min(v.p.x), y0.min(v.p.y), x1.max(v.p.x), y1.max(v.p.y));
+        }
+        let fuera = |p: Punto, c: Punto, r: Mil| p.dist2(c) > ((r + HOLGURA_CONTORNO) as i128).pow(2);
+        let discos: Vec<(u32, Punto, Mil)> = self
+            .estado
+            .asentamientos
+            .iter()
+            .map(|(&id, a)| (id32(id), a.posicion, self.radio_de_plaza(a)))
+            .filter(|&(_, p, r)| p.x + r >= x0 && p.x - r <= x1 && p.y + r >= y0 && p.y - r <= y1 && fuera(ini, p, r) && fuera(fin, p, r))
+            .collect();
+        if discos.is_empty() {
+            return (plan, Vec::new());
+        }
+        // Primero los vértices de los contornos de todas, y después los tiempos por el orden del camino (insertar uno mueve los índices de los demás).
+        for &(_, centro, r) in &discos {
+            contornos_de_escala(&mut plan.vertices, centro, r);
+        }
+        let mut orden: Vec<(usize, usize, u32)> = discos.iter().filter_map(|&(plaza, centro, r)| contornos_de_escala(&mut plan.vertices, centro, r).map(|(i, j)| (i, j, plaza))).collect();
+        orden.sort_unstable();
+        let estancia = self.estancia_en_plaza(c.carros_con_traccion().count());
+        let vs = &mut plan.vertices;
+        let mut escalas = Vec::new();
+        for (i, j, plaza) in orden {
+            let (entra, antes) = (vs[i].en, vs[j].en);
+            let sale = entra + estancia;
+            if antes <= t && sale <= t {
+                continue; // ya la dejó atrás
+            }
+            let largo: i128 = vs[i..=j].windows(2).map(|w| w[0].p.dist(w[1].p) as i128).sum::<i128>().max(1);
+            let mut acum: i128 = 0;
+            for k in i + 1..=j {
+                acum += vs[k - 1].p.dist(vs[k].p) as i128;
+                vs[k].en = entra + (estancia as i128 * acum.min(largo) / largo) as Instante;
+            }
+            vs[j].en = sale;
+            let corre = sale - antes;
+            for v in vs.iter_mut().skip(j + 1) {
+                v.en += corre;
+            }
+            escalas.push(Escala { plaza, entra, sale });
+        }
+        (plan, escalas)
     }
 
     /// Cuenta al espacio y a los generadores que la entidad tiene plan nuevo (`Some`) o ya no se mueve (`None`).
@@ -432,6 +508,28 @@ impl Nucleo {
         let cobros = self.estado.comercio.flota[i].cobrar_peajes(t, tasa, &precios, &mut oro);
         // Los peajes alcanzados se descartan se cobre o no: la caravana cambia aunque no pague nada (con unidades enteras, C3b, una carga pequeña no paga).
         self.tr.tocar(Clase::Caravana, id);
+        self.aplicar_peajes(i, id, pagadora, cobros, t);
+    }
+
+    /// El peaje de la plaza ajena `ciudad` en la que la caravana entra de escala (bloque E, 2026-11-23): el mismo cobro que [`Nucleo::cobrar_peajes`], pero de esa
+    /// ciudad y en el contorno, no en el centro. En una plaza propia, o en una vuelta que no paga, no cobra nada.
+    fn cobrar_peaje_al_entrar(&mut self, id: u64, ciudad: u32, t: Instante) {
+        let tasa = self.estado.reglas.economia.comercio.peaje;
+        let Some(i) = self.estado.comercio.posicion_caravana(id) else { return };
+        if !self.estado.comercio.flota[i].peajes.iter().any(|p| p.ciudad == ciudad) {
+            return;
+        }
+        let pagadora = self.plaza_de_oro(self.estado.comercio.flota[i].origen as u64);
+        let mut oro = self.estado.asentamientos.get(&pagadora).map_or(0, |p| p.economia.almacen.cantidad(Recurso::Oro));
+        let precios = self.tabla_de_precios().into_owned();
+        let cobros: Vec<CobroPeaje> = self.estado.comercio.flota[i].cobrar_peaje_de(ciudad, tasa, &precios, &mut oro).into_iter().collect();
+        self.tr.tocar(Clase::Caravana, id);
+        self.aplicar_peajes(i, id, pagadora, cobros, t);
+    }
+
+    /// Lleva lo cobrado en peajes a los almacenes: el oro de la capital que paga `pagadora` a la de la ciudad y la especie a la ciudad. Una ciudad que ya no existe
+    /// no cobra: la caravana se queda con lo suyo.
+    fn aplicar_peajes(&mut self, i: usize, id: u64, pagadora: u64, cobros: Vec<CobroPeaje>, t: Instante) {
         for CobroPeaje { ciudad, oro, cobrado } in cobros {
             let ciudad_id = ciudad as u64;
             if !self.estado.asentamientos.contains_key(&ciudad_id) {
@@ -461,6 +559,42 @@ impl Nucleo {
         if let Some(p) = c.proximo_peaje() {
             // Defensa: un peaje que no se pudo cobrar en su instante (redondeo del avance) se reintenta en el siguiente milisegundo.
             self.programar_comercio(p.max(t + 1), entidad_caravana(id), SucesoComercio::PeajeCaravana);
+        }
+    }
+
+    /// La caravana llega al contorno de una plaza de paso y entra (bloque E, 2026-11-23): si es ajena paga ahí el peaje, sale del mapa (la rejilla la olvida y lo
+    /// programado con el plan se descarta) y se programa su salida por el otro lado.
+    pub(super) fn entrada_en_plaza(&mut self, id: u64, t: Instante) {
+        let Some(c) = self.estado.comercio.caravana(id) else { return };
+        let Some(escala) = c.en_escala(t).copied() else { return };
+        if !matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) {
+            return;
+        }
+        let origen = c.origen as u64;
+        self.cobrar_peaje_al_entrar(id, escala.plaza, t);
+        let entidad = entidad_caravana(id);
+        self.estado.generaciones.subir(entidad);
+        self.avisar_plan_entidad(entidad, None);
+        self.programar_viaje(id);
+        self.tr.tocar(Clase::Caravana, id);
+        let plaza = escala.plaza as u64;
+        self.emitir_propio(t, "comercio.caravana_entra_en_plaza", vec![origen, plaza], vec![("caravana", id as i64), ("plaza", plaza as i64), ("sale", escala.sale)]);
+    }
+
+    /// Acaba la estancia de una caravana dentro de una plaza (el carro de acarreo que descarga en su madre, o la escala de una comercial en una plaza de paso):
+    /// vuelve al mapa con el plan que ya tenía.
+    pub(super) fn salida_de_la_plaza(&mut self, id: u64, t: Instante) {
+        let Some(c) = self.estado.comercio.caravana(id) else { return };
+        let empieza = c.plan.as_ref().and_then(|p| p.vertices.first()).map(|v| v.en);
+        if !matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) || empieza.is_none_or(|e| e > t) || c.en_escala(t).is_some() {
+            return;
+        }
+        let escala = c.escalas.iter().find(|e| e.sale == t).copied();
+        let (origen, plan) = (c.origen as u64, c.plan.clone().expect("comprobado arriba"));
+        self.instalar_plan(id, plan);
+        if let Some(e) = escala {
+            let plaza = e.plaza as u64;
+            self.emitir_propio(t, "comercio.caravana_sale_de_plaza", vec![origen, plaza], vec![("caravana", id as i64), ("plaza", plaza as i64)]);
         }
     }
 
@@ -502,9 +636,14 @@ impl Nucleo {
                 self.reparto_de_plaza(origen, t);
             }
             Llegada::Acarreo { destino, contenido } => {
-                if let Some(plan) = self.estado.comercio.flota[i].plan.clone() {
-                    self.instalar_plan(id, plan); // la vuelta: la misma ruta invertida, con una generación nueva
+                // Entra en su plaza y sale del mapa mientras descarga (bloque E, 2026-11-23): la vuelta, la misma ruta invertida, empieza al acabar la estancia, y hasta entonces
+                // no está en la rejilla de encuentros ni se ve (su plan aún no ha empezado).
+                let estancia = self.estancia_en_plaza(self.estado.comercio.flota[i].carros_con_traccion().count());
+                if let Some(plan) = self.estado.comercio.flota[i].plan.as_mut() {
+                    plan.vertices.iter_mut().for_each(|v| v.en += estancia);
                 }
+                self.retirar_plan(id);
+                self.programar_comercio(t + estancia, entidad_caravana(id), SucesoComercio::SalidaDeLaPlaza);
                 self.acarreo_llega(t, id, destino as u64, &contenido);
             }
             Llegada::Casa { escolta, .. } if acarreo => {
@@ -767,7 +906,7 @@ impl Nucleo {
         if self.estado.asentamientos.get(&(c.origen as u64)).map(|o| o.faccion) != e.columna.faccion {
             return Err(rechazo(rechazos::CARAVANA_FACCION_AJENA, "la caravana es de otra Facción".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(sitio.posicion) > self.radio_puerta() {
+        if !p.admin && !self.en_la_puerta_de_plaza(sitio, e.posicion_en(t)) {
             return Err(rechazo(rechazos::CARAVANA_FUERA_DE_LA_PUERTA, "la columna no está en la puerta de la plaza donde está la caravana".into()));
         }
         let antes = self.velocidad_de_columna(e);
@@ -893,6 +1032,66 @@ impl Nucleo {
 /// Rehace un plan desde `t` si su tramo restante pisa alguna arista de `nuevas` (que acaban de pasar a ser camino): el pasado se conserva, se
 /// inserta la posición de `t` y a cada tramo restante que es camino se le divide el tiempo por el `factor` de camino (ppm del coste). `None`
 /// si el plan no cambia.
+/// Holgura (milésimas) con que un vértice cuenta como puesto en el contorno de una plaza: el corte se redondea a la milésima.
+const HOLGURA_CONTORNO: Mil = 4;
+
+/// El punto del tramo `a`→`b` más cercano a `c`: su fracción del tramo (millonésimas) y su distancia al cuadrado.
+fn mas_cercano(a: Punto, b: Punto, c: Punto) -> (i64, i128) {
+    let (dx, dy) = ((b.x - a.x) as i128, (b.y - a.y) as i128);
+    let l2 = dx * dx + dy * dy;
+    let f = if l2 == 0 { 0 } else { (((c.x - a.x) as i128 * dx + (c.y - a.y) as i128 * dy) * 1_000_000 / l2).clamp(0, 1_000_000) as i64 };
+    (f, punto_del_tramo(a, b, f).dist2(c))
+}
+
+fn punto_del_tramo(a: Punto, b: Punto, f: i64) -> Punto {
+    Punto::new(a.x + ((b.x - a.x) as i128 * f as i128 / 1_000_000) as i64, a.y + ((b.y - a.y) as i128 * f as i128 / 1_000_000) as i64)
+}
+
+/// El vértice del contorno de `centro` y `radio` en el tramo `a`→`b`: por donde entra (`entrando`, la primera fracción dentro) o por donde sale (la última), con su
+/// instante en proporción. El punto más cercano del tramo tiene que estar dentro.
+fn corte_en_contorno(a: Vertice, b: Vertice, centro: Punto, radio: Mil, entrando: bool) -> Vertice {
+    let dentro = |f: i64| punto_del_tramo(a.p, b.p, f).dist2(centro) <= (radio as i128).pow(2);
+    let (medio, _) = mas_cercano(a.p, b.p, centro);
+    // Bisección: `fuera` fuera del disco y `hondo` dentro.
+    let (mut fuera, mut hondo) = if entrando { (0, medio) } else { (1_000_000, medio) };
+    while (fuera - hondo).abs() > 1 {
+        let m = (fuera + hondo) / 2;
+        if dentro(m) { hondo = m } else { fuera = m }
+    }
+    Vertice { p: punto_del_tramo(a.p, b.p, hondo), en: a.en + ((b.en - a.en) as i128 * hondo as i128 / 1_000_000) as Instante }
+}
+
+/// Los vértices por donde el plan entra en el disco de `centro` y `radio` y por donde sale de él (el primero y el último que lo tocan), puestos en el contorno si
+/// hace falta. `None` si el camino no se mete en el disco (rozarlo no cuenta). Sobre un plan que ya los tiene no añade nada.
+fn contornos_de_escala(vs: &mut Vec<Vertice>, centro: Punto, radio: Mil) -> Option<(usize, usize)> {
+    let limite = ((radio - HOLGURA_CONTORNO).max(0) as i128).pow(2);
+    let fuera = |p: Punto| p.dist2(centro) > ((radio + HOLGURA_CONTORNO) as i128).pow(2);
+    let hondo = |vs: &[Vertice], k: usize| mas_cercano(vs[k].p, vs[k + 1].p, centro).1 < limite;
+    let k = (0..vs.len().checked_sub(1)?).find(|&k| hondo(vs, k))?;
+    let i = if fuera(vs[k].p) {
+        let v = corte_en_contorno(vs[k], vs[k + 1], centro, radio, true);
+        if v.p != vs[k + 1].p {
+            vs.insert(k + 1, v);
+        }
+        k + 1
+    } else {
+        k
+    };
+    let m = (k..vs.len() - 1).rev().find(|&m| hondo(vs, m))?;
+    let j = if fuera(vs[m + 1].p) {
+        let v = corte_en_contorno(vs[m], vs[m + 1], centro, radio, false);
+        if v.p == vs[m].p {
+            m
+        } else {
+            vs.insert(m + 1, v);
+            m + 1
+        }
+    } else {
+        m + 1
+    };
+    (j > i).then_some((i, j))
+}
+
 fn replanificar_con_camino(plan: &Plan, t: Instante, nuevas: &BTreeSet<Arista>, factor: i64) -> Option<Plan> {
     let v = &plan.vertices;
     let k = v.partition_point(|x| x.en <= t); // primer vértice por llegar

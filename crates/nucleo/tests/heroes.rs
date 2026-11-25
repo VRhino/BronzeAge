@@ -1047,6 +1047,7 @@ fn la_escolta_se_cede_con_la_caravana_parada_en_su_origen_y_vuelve_al_campamento
     e.ok("ana", asignar(c, &[milicia, lenadores]));
     e.avanzar(11 * MIN);
     e.ok("ana", Comando::PrepararCaravana { caravana: c, destino: b, carga: vec![(Cobre, 20_000)], salir_en: None, escolta: None });
+    e.avanzar(2 * MIN); // la preparación mínima, aunque sea de un carro (bloque E, 2026-11-23)
     assert_eq!(e.n.caravana(c).unwrap().estado, comercio::caravana::EstadoCaravana::EnTransito);
     let ida = e.n.caravana(c).unwrap().plan.as_ref().unwrap().fin().unwrap();
     e.n.avanzar_hasta(ida - 1);
@@ -1200,7 +1201,8 @@ fn de_la_puerta_de_una_plaza_de_su_faccion_se_guarnece_y_se_recoge_con_la_column
     let radio = e.n.estado().reglas.economia.militar.movimiento.radio_puerta;
     let puerta = e.n.estado().asentamientos[&a].posicion;
     let t = e.n.ahora();
-    let lejos = e.n.crear_ejercito(t, "leo", 1, Punto { x: puerta.x + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
+    let borde = e.n.radio_en(puerta);
+    let lejos = e.n.crear_ejercito(t, "leo", 1, Punto { x: puerta.x + borde + 3 * radio, y: puerta.y }, 500, 100_000).unwrap();
     let leo = e.n.ejercito(lejos).unwrap().columna.lider;
     let de_leo = e.ok("admin", Comando::DarEscuadra { heroe: leo, tropa: Tropa::Lenadores, cantidad: 10 }).creadas[0];
     assert_eq!(contenedor(&e, de_leo).contenedor, Contenedor::Ejercito(lejos));
@@ -1334,7 +1336,7 @@ fn las_tecnologias_de_la_administracion_abren_las_obras_que_las_piden_y_un_heroe
     let mut n = Nucleo::nuevo(arranque(m, 7));
     let (hierro, sitio) = (0..mapa.nodos.len())
         .filter(|&i| mapa.nodos[i].tipo == Tipo::MinaHierro)
-        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 13_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de hierro junto a un sitio rico");
     let a = fundar(&mut n, 0, "a", "ana", 1, sitio);
     let mut e = Escenario { n, a, cuenta: 0 };
@@ -1446,7 +1448,7 @@ fn el_estado_militar_se_serializa_de_ida_y_vuelta_y_cualquier_campo_cambia_el_ha
     let reglas = Reglas::default();
     let base = estado_con_heroes();
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN69");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.militar, base.militar, "incluido el índice de residentes, que se reconstruye");

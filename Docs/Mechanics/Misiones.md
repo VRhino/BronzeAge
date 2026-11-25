@@ -12,7 +12,7 @@
 
 ## 1. Alcance
 
-Las misiones guían al jugador al principio del juego para que descubra las mecánicas, con recompensa. Tienen tres dueños: el **héroe**, el **asentamiento** y la **Facción**. Valen igual para los bots (`12_NPC_Fuera_Del_Motor.md` §2), que las siguen como currículo.
+Las misiones guían al jugador al principio del juego para que descubra las mecánicas, con recompensa. Tienen tres dueños: el **héroe**, el **asentamiento** y la **Facción**. Valen igual para los bots (`12_NPC_Fuera_Del_Motor.md` (retirado el 2026-11-23; sigue en git) §2), que las siguen como currículo.
 
 ## 2. Modelo
 
@@ -218,4 +218,4 @@ Cada misión del bloque lleva su `id`, su `previa` (si es de una cadena), sus `c
 - **La tropa no rechaza por estar completa.** Si el héroe ya tiene la escuadra al tope, los soldados se pierden y el resto de la recompensa se cobra (decisión del 2026-11-01).
 - **Los objetos tampoco.** Con la mochila y el almacén de objetos llenos, lo que no cabe se pierde y lo dice `heroe.botin` en `perdido` (mecánica 70).
 - **La administración reclama sin héroe.** Una cadena de plaza reclamada por la administración sin héroe da todo lo demás pero la participación fija no se apunta a nadie.
-- **Foto anterior.** Las recompensas flexibles cambian la huella de las reglas: una foto anterior no carga y hace falta partida nueva. La foto es hoy BAN60 (las anteriores ya no se leen).
+- **Foto anterior.** Las recompensas flexibles cambian la huella de las reglas: una foto anterior no carga y hace falta partida nueva. La foto es hoy BAN69 (solo se lee el formato vigente).

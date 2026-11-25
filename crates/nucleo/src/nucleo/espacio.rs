@@ -149,22 +149,23 @@ impl Nucleo {
     /// se toca.
     pub(super) fn reconstruir_espacio(&mut self) {
         let t = self.estado.ahora;
-        let mut puestos: Vec<(u64, Plan)> = Vec::new();
-        puestos.extend(self.estado.ejercitos.values().filter(|e| self.columna_en_el_mapa(e)).map(|e| (e.id, self.plan_de_columna(e, t))));
-        puestos.extend(self.estado.comercio.flota.iter().filter(|k| matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?))));
+        // Con el radio de lo que ocupa en el mapa (las plazas y las avanzadas; lo demás, un punto): los encuentros se miden desde su contorno (2026-11-23).
+        let mut puestos: Vec<(u64, Plan, Mil)> = Vec::new();
+        puestos.extend(self.estado.ejercitos.values().filter(|e| self.columna_en_el_mapa(e)).map(|e| (e.id, self.plan_de_columna(e, t), 0)));
+        puestos.extend(self.estado.comercio.flota.iter().filter(|k| Nucleo::caravana_en_el_mapa(k, t)).filter_map(|k| Some((entidad_caravana(k.id), k.plan.clone()?, 0))));
         // La que una batalla aparta se queda quieta (un plan de un punto) y no está en el espacio.
         let vuelven = self.estado.fundacion.caravanas.values().filter_map(|k| match &k.situacion {
-            crate::estado_fundacion::Situacion::Retornando(plan) if plan.vertices.len() > 1 => Some((crate::estado_fundacion::entidad_fundacion(k.id), plan.clone())),
+            crate::estado_fundacion::Situacion::Retornando(plan) if plan.vertices.len() > 1 => Some((crate::estado_fundacion::entidad_fundacion(k.id), plan.clone(), 0)),
             _ => None,
         });
         puestos.extend(vuelven);
-        puestos.extend(self.estado.asentamientos.values().map(|a| (a.id, plan_quieto(a.posicion, t, 0))));
+        puestos.extend(self.estado.asentamientos.values().map(|a| (a.id, plan_quieto(a.posicion, t, 0), self.radio_de_plaza(a))));
         let puestos_de_mapa = self.estado.asentamientos.values().flat_map(|a| a.economia.avanzadas.iter()).filter(|v| v.estado != EstadoAvanzada::EnConstruccion);
-        puestos.extend(puestos_de_mapa.map(|v| (entidad_avanzada(v.id), plan_quieto(v.posicion, t, 0))));
-        puestos.extend(self.estado.combate.bandidos.values().map(|b| (entidad_bandidos(b.id), plan_quieto(b.posicion, t, 0))));
-        for (entidad, plan) in puestos {
+        puestos.extend(puestos_de_mapa.map(|v| (entidad_avanzada(v.id), plan_quieto(v.posicion, t, 0), self.radio_de_avanzada(v))));
+        puestos.extend(self.estado.combate.bandidos.values().map(|b| (entidad_bandidos(b.id), plan_quieto(b.posicion, t, 0), 0)));
+        for (entidad, plan, huella) in puestos {
             let g = if self.estado.asentamientos.contains_key(&entidad) { 0 } else { self.estado.generaciones.actual(entidad) };
-            self.espacio.rejilla.apuntar(entidad, g, &plan);
+            self.espacio.rejilla.apuntar_con_huella(entidad, g, &plan, huella);
         }
         self.espacio.plazas_por_faccion.clear();
         self.espacio.plazas_por_nivel = Default::default();
@@ -193,9 +194,20 @@ impl Nucleo {
         }
     }
 
+    /// La plaza `id` crece al subir de nivel o al levantar la muralla: si lo que ocupa ya no es lo apuntado, se reapunta con su radio de ahora. Los encuentros ya
+    /// programados de las columnas en marcha siguen con el de antes hasta que rehagan su plan.
+    pub(super) fn refrescar_huella_de_plaza(&mut self, id: u64) {
+        let Some(a) = self.estado.asentamientos.get(&id) else { return };
+        let (radio, posicion) = (self.radio_de_plaza(a), a.posicion);
+        if self.espacio.rejilla.huella(id).is_some_and(|h| h != radio) {
+            self.espacio.rejilla.apuntar_con_huella(id, 0, &plan_quieto(posicion, self.estado.ahora, 0), radio);
+        }
+    }
+
     /// Una plaza recién fundada es una cosa fija del espacio, y una plaza más de su Facción.
     pub(super) fn situar_plaza(&mut self, id: u64, posicion: Punto, faccion: u32) {
-        self.espacio.rejilla.apuntar(id, 0, &plan_quieto(posicion, self.estado.ahora, 0));
+        let huella = self.estado.asentamientos.get(&id).map_or(0, |a| self.radio_de_plaza(a));
+        self.espacio.rejilla.apuntar_con_huella(id, 0, &plan_quieto(posicion, self.estado.ahora, 0), huella);
         let nace = !self.espacio.plazas_por_faccion.contains_key(&faccion);
         self.espacio.plazas_por_faccion.entry(faccion).or_default().insert(id);
         let (nivel, alcanzado) = self.estado.asentamientos.get(&id).map(|a| (a.nivel_actual(), a.nivel())).unzip();
@@ -372,7 +384,7 @@ impl Nucleo {
     fn en_juego(&self, c: &Cosa<'_>, t: Instante) -> bool {
         match c {
             Cosa::Columna(e) => self.columna_en_el_mapa(e) && self.tiene_heroe_sano(e, t),
-            Cosa::Caravana(k) => matches!(k.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando),
+            Cosa::Caravana(k) => Nucleo::caravana_en_el_mapa(k, t),
             Cosa::Fundacion(k) => matches!(k.situacion, crate::estado_fundacion::Situacion::Retornando(_)),
             Cosa::Plaza(_) => true,
             Cosa::Avanzada(v, _) => atacable(v.estado, t),

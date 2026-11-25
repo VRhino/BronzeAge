@@ -549,3 +549,66 @@ fn mundo_real_las_rutas_cruzan_los_rios_por_el_punto_del_vado() {
     eprintln!("{} vados, {con_dos_orillas} con las dos orillas, {cruces} cruces probados, {por_el_vado} rutas por el punto de un vado", vados.len());
     assert!(con_dos_orillas * 4 >= vados.len() * 3, "la mayoría de los vados unen sus dos orillas");
 }
+
+#[test]
+fn el_camino_se_corta_donde_entra_en_el_contorno() {
+    let p = |x: i64, y: i64| Punto::new(x, y);
+    let camino = Camino { puntos: vec![p(0, 0), p(10_000, 0), p(20_000, 0)], costes: vec![10_000, 10_000], nodos: vec![7], espaciado: 1_000 };
+    // Un disco de 3 u en (20, 0): la ruta llega por el oeste y acaba a 3 u del centro, con el coste del último tramo en proporción.
+    let c = camino.clone().hasta_el_contorno(p(20_000, 0), 3_000);
+    assert_eq!(c.puntos.len(), 3);
+    assert!((c.puntos[2].dist(p(20_000, 0)) - 3_000).abs() <= 1, "{:?}", c.puntos);
+    assert!((c.costes[1] - 7_000).abs() <= 1, "{:?}", c.costes);
+    assert_eq!(c.nodos, vec![7]);
+    // Si entra en un tramo anterior, se queda ahí.
+    let c = camino.clone().hasta_el_contorno(p(12_000, 0), 4_000);
+    assert_eq!((c.puntos.len(), c.costes.len(), c.nodos.len()), (2, 1, 0));
+    assert!((c.puntos[1].x - 8_000).abs() <= 1);
+    // Ya dentro: solo el origen. Sin tocar el disco: tal cual.
+    assert_eq!(camino.clone().hasta_el_contorno(p(1_000, 0), 2_000).puntos, vec![p(0, 0)]);
+    assert_eq!(camino.clone().hasta_el_contorno(p(0, 50_000), 2_000), camino);
+}
+
+fn con_plaza(centro: Punto, radio: Mil, factor: i64, suavizar: bool) -> Opciones {
+    Opciones { suavizar, estorbos: Some(Arc::new(Estorbos { discos: vec![(centro, radio)], factor })), ..Opciones::default() }
+}
+
+/// ¿Pasa algún tramo del camino por dentro del disco?
+fn mete(cam: &Camino, centro: Punto, radio: Mil) -> bool {
+    cam.puntos.windows(2).any(|w| tramo_en_disco(w[0], w[1], centro, radio))
+}
+
+#[test]
+fn una_plaza_en_medio_se_rodea_con_y_sin_suavizado_y_el_coste_es_el_real() {
+    // Una plaza de 1,5 espaciados en medio de la recta (1, 6) → (11, 6): sin estorbos la cruza; con ellos la rodea.
+    let (plaza, radio) = (c(6, 6), 12_000);
+    let r = abierta(13, 13);
+    let recta = r.ruta(c(1, 6), c(11, 6), &Opciones::default()).unwrap();
+    assert!(mete(&recta, plaza, radio));
+    let rodea = r.ruta(c(1, 6), c(11, 6), &con_plaza(plaza, radio, 50, false)).unwrap();
+    assert!(!mete(&rodea, plaza, radio), "{:?}", rodea.puntos);
+    assert!(rodea.coste_total() > recta.coste_total() && rodea.coste_total() < 2 * recta.coste_total(), "el coste del camino es el real, sin recargo");
+    // Con el terreno y el suavizado, la recta estirada tampoco se mete.
+    let t = con_terreno(13, 13, |_, _| 1000, |_, _| false);
+    let suave = t.ruta(c(1, 6), c(11, 6), &con_plaza(plaza, radio, 50, true)).unwrap();
+    assert!(!mete(&suave, plaza, radio), "{:?}", suave.puntos);
+    // Factor 1: no estorba.
+    assert_eq!(r.ruta(c(1, 6), c(11, 6), &con_plaza(plaza, radio, 1, false)).unwrap(), recta);
+}
+
+#[test]
+fn la_plaza_se_cruza_solo_como_ultimo_recurso_y_no_estorba_si_tiene_dentro_un_extremo() {
+    // Un pasillo de una celda de alto (y = 3) con la plaza encima: no hay otro camino, así que la cruza.
+    let r = Rutas::desde_grafo(&reticula(13, 7, |_, y| y == 3, |_, _| false));
+    let (plaza, radio) = (c(6, 3), 10_000);
+    let cam = r.ruta(c(1, 3), c(11, 3), &con_plaza(plaza, radio, 50, false)).expect("como último recurso, por dentro");
+    assert!(mete(&cam, plaza, radio));
+    // El destino en el centro de la plaza: el disco no cuenta y la ruta va recta (luego la corta el núcleo en el contorno).
+    let a = abierta(13, 13);
+    let al_centro = a.ruta(c(1, 6), c(6, 6), &con_plaza(c(6, 6), 12_000, 50, false)).unwrap();
+    assert_eq!(al_centro, a.ruta(c(1, 6), c(6, 6), &Opciones::default()).unwrap());
+    // Saliendo del contorno hacia fuera no se mete: el disco cuenta, pero el primer tramo se aleja.
+    let borde = Punto::new(c(6, 6).x - 12_000, c(6, 6).y);
+    let sale = a.ruta(borde, c(1, 6), &con_plaza(c(6, 6), 12_000, 50, false)).unwrap();
+    assert!(!mete(&sale, c(6, 6), 12_000), "{:?}", sale.puntos);
+}

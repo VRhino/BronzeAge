@@ -1,6 +1,6 @@
 # 07. Catálogo de rechazos
 
-El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`RechazoOrden.codigo` de `ResultadoOrden`, contrato 05 §6) o un mensaje del servidor de batalla (`AcuseBatalla.rechazo`). Decisión 7 de la fase 4H (`Docs/Arquitectura/4H_Contraste_y_Plan.md` §5): **un cliente decide por el código, nunca por el texto**, que es solo para personas y puede cambiar. Un código de esta lista no cambia de significado ni se reutiliza; uno que deje de usarse se marca aquí como retirado en lugar de borrarse.
+El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`RechazoOrden.codigo` de `ResultadoOrden`, contrato 05 §6) o un mensaje del servidor de batalla (`AcuseBatalla.rechazo`). Decisión 7 de la fase 4H (`4H_Contraste_y_Plan.md` (retirado el 2026-11-23; sigue en git) §5): **un cliente decide por el código, nunca por el texto**, que es solo para personas y puede cambiar. Un código de esta lista no cambia de significado ni se reutiliza; uno que deje de usarse se marca aquí como retirado en lugar de borrarse.
 
 - **De dónde sale.** El bloque de abajo se escribe a partir del módulo `rechazos` de `crates/nucleo/src/comando.rs` (una constante por código, agrupadas por los comentarios del módulo, con lo que dice cada una). La prueba `cada_rechazo_del_nucleo_esta_en_el_catalogo_de_rechazos` (`crates/nucleo/tests/catalogo.rs`) falla si un rechazo del núcleo no está aquí, si aquí sobra alguno o si cambió lo que dice; `BRONZEAGE_REGENERAR=1 cargo test -p nucleo --test catalogo` lo reescribe. Todo rechazo del núcleo es una de estas constantes: un literal `"familia.nombre"` suelto en el código lo detecta la prueba del catálogo de eventos de la misma fuente.
 - **Detalle.** Algunos llevan además `RechazoOrden.detalle` (`google.protobuf.Struct`) con lo que el cliente necesita para actuar: hoy solo `guerra.confirmar` (`{ objetivo: "f-N", facciones: [...] }`, contrato 05 §6).
@@ -170,10 +170,12 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | Código | Constante | Qué dice |
 |---|---|---|
 | `encargo.mismo_origen` | `ENCARGO_MISMO_ORIGEN` | El destino del encargo es el origen de la caravana. |
-| `encargo.destino_ajeno` | `ENCARGO_DESTINO_AJENO` | Una ruta permanente a una plaza que no es de la Facción del origen (a una ajena solo va un envío). |
+| `encargo.demasiadas_paradas` | `ENCARGO_DEMASIADAS_PARADAS` | Más de cinco paradas en el circuito, el origen incluido (la ruta compuesta, 2026-11-23). |
+| `encargo.parada_repetida` | `ENCARGO_PARADA_REPETIDA` | La misma plaza en dos paradas seguidas del circuito, contando el cierre (la última con el origen). |
+| `encargo.deja_sin_recoger` | `ENCARGO_DEJA_SIN_RECOGER` | Una parada deja un recurso que ninguna parada del circuito recoge (ella incluida: el sobrante da la vuelta); el oro siempre vale. |
 | `encargo.linea_invalida` | `ENCARGO_LINEA_INVALIDA` | Una línea con cantidad o tope de menos de una unidad, un recurso repetido en la misma lista, precio en una plaza propia u oro en una ajena. |
 | `encargo.falta_precio` | `ENCARGO_FALTA_PRECIO` | Una línea en una plaza ajena sin precio máximo (al recoger) o mínimo (al dejar), o con un precio que no es positivo. |
-| `encargo.supera_capacidad` | `ENCARGO_SUPERA_CAPACIDAD` | Lo que se recoge en una parada pasa de la capacidad de la caravana. |
+| `encargo.supera_capacidad` | `ENCARGO_SUPERA_CAPACIDAD` | En algún tramo de una vuelta con todo lo pedido, lo que lleva pasa de la capacidad de la caravana. |
 | `encargo.ya_tiene` | `ENCARGO_YA_TIENE` | La caravana ya tiene un encargo: se cambia o se cancela. |
 | `encargo.no_tiene` | `ENCARGO_NO_TIENE` | La caravana no tiene encargo. |
 
@@ -207,7 +209,7 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `pueblo.no_esta_activo` | `PUEBLO_NO_ESTA_ACTIVO` | — |
 | `pueblo.ya_tiene_carro` | `PUEBLO_YA_TIENE_CARRO` | — |
 | `pueblo.fertilidad_insuficiente` | `PUEBLO_FERTILIDAD_INSUFICIENTE` | Aldea agrícola (§14.2): el punto no llega a la fertilidad mínima. |
-| `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está demasiado cerca de otro pueblo. |
+| `pueblo.demasiado_cerca` | `PUEBLO_DEMASIADO_CERCA` | Aldea agrícola: el punto está a menos de `separacionAPlaza` (15 u) del centro de una plaza o a menos de `separacionAPueblo` (7,5 u) de otro pueblo. |
 | `pueblo.fuera_de_su_anillo` | `PUEBLO_FUERA_DE_SU_ANILLO` | Aldea agrícola: el punto no cae en el anillo de la zona que toca a la siguiente aldea de la plaza (2026-11-01). |
 | `pueblo.nivel_maximo` | `PUEBLO_NIVEL_MAXIMO` | — |
 | `pueblo.mejora_en_curso` | `PUEBLO_MEJORA_EN_CURSO` | — |
@@ -233,8 +235,8 @@ El catálogo **estable** de los códigos con que el núcleo rechaza una orden (`
 | `avanzada.nivel_insuficiente` | `AVANZADA_NIVEL_INSUFICIENTE` | — |
 | `avanzada.sin_cupo` | `AVANZADA_SIN_CUPO` | — |
 | `avanzada.fuera_de_la_zona` | `AVANZADA_FUERA_DE_LA_ZONA` | — |
-| `avanzada.dentro_del_asentamiento` | `AVANZADA_DENTRO_DEL_ASENTAMIENTO` | El sitio cae sobre la ciudad de la plaza madre (su radio es una décima del de su zona). |
-| `avanzada.pisa_otro_elemento` | `AVANZADA_PISA_OTRO_ELEMENTO` | El sitio pisa otra avanzada, un pueblo o un campamento (cada elemento del mapa mide 0,2). |
+| `avanzada.dentro_del_asentamiento` | `AVANZADA_DENTRO_DEL_ASENTAMIENTO` | El sitio está a menos de `AVANZADAS.distanciaALaMadre` (15 u) del centro de la plaza madre. |
+| `avanzada.pisa_otro_elemento` | `AVANZADA_PISA_OTRO_ELEMENTO` | El sitio pisa otra avanzada, un pueblo, una aldea o un campamento (con los radios de `TAMANOS_MAPA`; la avanzada reserva el de la ciudadela). |
 | `avanzada.nada_que_cancelar` | `AVANZADA_NADA_QUE_CANCELAR` | No hay una mejora ni una reparación que cancelar. |
 | `avanzada.fuera_del_sitio` | `AVANZADA_FUERA_DEL_SITIO` | El sitio donde se pide colocarla no es tierra firme (desde el 2026-11-04 se coloca desde dentro de la madre, como la aldea; antes: la columna del héroe no estaba en el sitio). |
 | `avanzada.sin_ruta` | `AVANZADA_SIN_RUTA` | Del sitio no hay ruta por tierra hasta la plaza madre: no se le podrían llevar los materiales (2026-11-04). |

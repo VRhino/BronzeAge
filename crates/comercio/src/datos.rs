@@ -146,6 +146,8 @@ pub struct ReglasFlota {
     pub camello: DefAnimal,
     pub cooldown_creacion: i64,
     pub k_preparacion_por_carro: i64,
+    /// `CARAVANA_PREPARACION.minimoMinutos` (ms): ninguna caravana lanzada a mano sale antes (2026-11-23, «Tamaños y distancias del mapa», bloque E).
+    pub preparacion_minima: i64,
     pub max_programacion: i64,
     /// Liderazgo de escolta por caja de Mercado (nivel interno 1, 2, 3).
     pub liderazgo_por_nivel_mercado: Vec<i64>,
@@ -161,6 +163,9 @@ pub struct ReglasFlota {
 pub struct ReglasEncargo {
     pub tiempo_carga: i64,
     pub tiempo_descarga: i64,
+    /// `ENCARGO.paradaMinimaMinutos` (ms): lo menos que dura una estancia de una caravana dentro de una plaza, de la llegada a la salida (2026-11-23,
+    /// «Tamaños y distancias del mapa», bloque E): una parada de encargo, la descarga del carro de acarreo y la escala en una plaza que cruza.
+    pub parada_minima: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -296,6 +301,7 @@ impl Reglas {
             camello: animal("camello"),
             cooldown_creacion: num(&cool, "cooldownMinutos") as i64 * MS_POR_MINUTO,
             k_preparacion_por_carro: num(&prep, "kPorCarro") as i64 * MS_POR_MINUTO,
+            preparacion_minima: num(&prep, "minimoMinutos") as i64 * MS_POR_MINUTO,
             max_programacion: num(&prep, "maxProgramacionDias") as i64 * 24 * 60 * MS_POR_MINUTO,
             liderazgo_por_nivel_mercado: esc["liderazgoPorNivelMercado"].as_array().expect("liderazgoPorNivelMercado").iter().map(|x| x.as_i64().expect("liderazgo")).collect(),
             militar: categoria("militar"),
@@ -307,6 +313,7 @@ impl Reglas {
         let encargo = ReglasEncargo {
             tiempo_carga: num(&en, "tiempoCargaMinutosPorCarro") as i64 * MS_POR_MINUTO,
             tiempo_descarga: num(&en, "tiempoDescargaMinutosPorCarro") as i64 * MS_POR_MINUTO,
+            parada_minima: num(&en, "paradaMinimaMinutos") as i64 * MS_POR_MINUTO,
         };
         let rc = b("RED_CAMINOS");
         let red = ReglasRed {

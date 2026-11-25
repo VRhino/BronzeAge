@@ -336,6 +336,7 @@ impl Nucleo {
             return;
         }
         self.programar_minuto(id, t + MS_POR_MINUTO);
+        self.refrescar_huella_de_plaza(id);
         // La tendencia «+N/min» es lo que cambió el almacén y la población en el paso entero (el de la guarnición, que come después, se le suma en `alimentar_guarnicion`), y lo que
         // entró y salió de cada recurso por separado (mecánica 60).
         let Some((sucesos, racion)) = self.con_exterior(id, t, |eco, x| {

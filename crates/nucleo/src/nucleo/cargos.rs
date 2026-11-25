@@ -126,8 +126,9 @@ impl Nucleo {
             return en_la_plaza;
         }
         let Some(puerta) = self.posicion_de_pueblo(pueblo) else { return en_la_plaza };
+        let radio = self.pueblo(pueblo).map_or(0, |(_, pu)| self.radio_de_pueblo(pu));
         let a_su_puerta = |yo: u64| match self.heroe(yo).map(|h| h.heroe.presencia.ubicacion) {
-            Some(militar::presencia::Ubicacion::Columna(c)) => self.estado.ejercitos.get(&c).is_some_and(|e| e.posicion_en(self.estado.ahora).dist(puerta) <= self.radio_puerta()),
+            Some(militar::presencia::Ubicacion::Columna(c)) => self.estado.ejercitos.get(&c).is_some_and(|e| self.a_la_puerta(puerta, radio, e.posicion_en(self.estado.ahora))),
             _ => false,
         };
         if self.heroes_en_el_mundo(&p.actor).any(|yo| a_su_puerta(yo) && (Actor { yo, politica: &self.estado.politica, vista: self }).cargo_en_el_sitio(a as u32, cargos)) {
@@ -140,7 +141,7 @@ impl Nucleo {
     pub(super) fn a_la_puerta_de_plaza(&self, heroe: u64, plaza: u64) -> bool {
         let (Some(h), Some(a)) = (self.heroe(heroe), self.estado.asentamientos.get(&plaza)) else { return false };
         let militar::presencia::Ubicacion::Columna(c) = h.heroe.presencia.ubicacion else { return false };
-        self.estado.ejercitos.get(&c).is_some_and(|e| e.posicion_en(self.estado.ahora).dist(a.posicion) <= self.radio_puerta())
+        self.estado.ejercitos.get(&c).is_some_and(|e| self.en_la_puerta_de_plaza(a, e.posicion_en(self.estado.ahora)))
     }
 
     /// Los héroes de la cuenta que están en el mundo, por el índice cuenta → héroes.

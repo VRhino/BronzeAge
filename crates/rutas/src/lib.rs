@@ -21,6 +21,12 @@
 //! [`MAX_SALTO`] vértices) al que se llega en recta libre, sin saltarse una arista de vado y sin que la recta cueste más que
 //! el tramo que sustituye, medidos los dos con la capa. Los tramos nuevos llevan el coste de la capa; los que quedan, el
 //! suyo. Lo piden las columnas (marchar, perseguir); las caravanas no, porque van por la red de caminos.
+//!
+//! # Estorbos (`Opciones::estorbos`)
+//! Discos que la ruta rodea: las plazas, para las columnas (Tamaños y distancias del mapa, bloque E, 2026-11-23). Un tramo que se mete en uno
+//! (que pasa a menos de su radio del centro, con [`HOLGURA_ESTORBO`] de margen) cuesta en la búsqueda `factor` veces lo suyo: es un paso muy caro,
+//! no cerrado, así que solo se cruza por dentro si no hay otro camino. Vale para las aristas, los enganches, la recta directa y el suavizado. Un
+//! disco que tiene dentro el origen o el destino no cuenta. Como el vado, no entra en los costes del camino: solo lo desvía.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -40,6 +46,9 @@ const DESPLAZ: u32 = 20;
 const SIN_PADRE: u32 = u32::MAX;
 /// Uno, en ppm.
 const UNO: i64 = 1_000_000;
+/// Lo que un tramo puede rozar un estorbo sin contar como dentro (milésimas): el punto de salida de una plaza, en su contorno, puede quedar una
+/// milésima dentro por el redondeo.
+pub const HOLGURA_ESTORBO: i64 = 100;
 
 /// Clave de una arista de la red de caminos: los dos extremos **redondeados a unidad entera** y ordenados (la de
 /// `comercio::red_caminos::Arista`, que este crate no conoce).
@@ -71,6 +80,30 @@ pub struct Atraccion {
     pub minimo: i64,
 }
 
+/// Los discos que una ruta rodea (ver «Estorbos» arriba).
+#[derive(Clone, Debug, Default)]
+pub struct Estorbos {
+    /// Centro y radio de cada disco.
+    pub discos: Vec<(Punto, Mil)>,
+    /// Cuántas veces su coste cuesta en la búsqueda un tramo que se mete en uno (1 o menos: no estorban).
+    pub factor: i64,
+}
+
+/// ¿Pasa el tramo `a → b` a menos de `r − HOLGURA_ESTORBO` de `c`? El punto del tramo más cercano a `c` se redondea a la milésima.
+fn tramo_en_disco(a: Punto, b: Punto, c: Punto, r: Mil) -> bool {
+    // Descarte rápido: el disco fuera de la caja del tramo.
+    if c.x + r < a.x.min(b.x) || c.x - r > a.x.max(b.x) || c.y + r < a.y.min(b.y) || c.y - r > a.y.max(b.y) {
+        return false;
+    }
+    let lim = (r - HOLGURA_ESTORBO).max(0) as i128;
+    let (dx, dy) = ((b.x - a.x) as i128, (b.y - a.y) as i128);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 == 0 { 0 } else { ((c.x - a.x) as i128 * dx + (c.y - a.y) as i128 * dy).clamp(0, l2) };
+    let (qx, qy) = if l2 == 0 { (a.x as i128, a.y as i128) } else { (a.x as i128 + dx * t / l2, a.y as i128 + dy * t / l2) };
+    let (ex, ey) = (qx - c.x as i128, qy - c.y as i128);
+    ex * ex + ey * ey < lim * lim
+}
+
 impl Atraccion {
     /// El factor (ppm) de una arista de peso `p`.
     pub fn factor(&self, p: u32) -> i64 {
@@ -99,6 +132,8 @@ pub struct Opciones {
     /// Estirar la ruta en rectas que no cuestan más (ver «Suavizado» arriba). Solo hace algo si el mundo trae la capa
     /// `coste`; sin ella la ruta es la del A* tal cual.
     pub suavizar: bool,
+    /// Discos que la ruta rodea (las plazas, para las columnas); `None` = nada estorba.
+    pub estorbos: Option<Arc<Estorbos>>,
 }
 
 impl Opciones {
@@ -138,6 +173,36 @@ impl Camino {
     /// Plan de marcha: `salida` es el instante en el primer punto; `velocidad` en milésimas de unidad por segundo.
     pub fn a_plan(&self, salida: Instante, velocidad: Mil, generacion: u32) -> Plan {
         a_plan(self, salida, velocidad, generacion)
+    }
+
+    /// El camino hasta donde entra por primera vez en el disco de `centro` y `radio` (el contorno de un lugar del mapa: Tamaños y distancias del
+    /// mapa, bloque C, 2026-11-23): el último tramo se corta en el punto del contorno por donde llega, con su coste en proporción. Un origen ya dentro
+    /// del disco (a `radio` o menos) deja solo el origen. Sin entrar en el disco, el camino tal cual. Los `nodos` se quedan con los de antes del corte.
+    pub fn hasta_el_contorno(mut self, centro: Punto, radio: Mil) -> Camino {
+        let dentro = |p: Punto| p.dist2(centro) <= (radio as i128) * (radio as i128);
+        let Some(&origen) = self.puntos.first() else { return self };
+        if dentro(origen) {
+            return Camino { puntos: vec![origen], costes: vec![], nodos: vec![], espaciado: self.espaciado };
+        }
+        let Some(k) = (0..self.puntos.len().saturating_sub(1)).find(|&k| dentro(self.puntos[k + 1])) else { return self };
+        let (a, b) = (self.puntos[k], self.puntos[k + 1]);
+        // Bisección sobre la fracción del tramo, en millonésimas: `a` queda fuera y `b` dentro.
+        let en = |f: i64| Punto::new(a.x + ((b.x - a.x) as i128 * f as i128 / 1_000_000) as i64, a.y + ((b.y - a.y) as i128 * f as i128 / 1_000_000) as i64);
+        let (mut fuera, mut entra) = (0i64, 1_000_000i64);
+        while entra - fuera > 1 {
+            let m = (fuera + entra) / 2;
+            if dentro(en(m)) { entra = m } else { fuera = m }
+        }
+        let corte = en(entra);
+        let coste = (self.costes.get(k).copied().unwrap_or(0) as i128 * entra as i128 / 1_000_000) as i64;
+        self.puntos.truncate(k + 1);
+        self.costes.truncate(k);
+        if corte != a {
+            self.puntos.push(corte);
+            self.costes.push(coste);
+        }
+        self.nodos.truncate(k);
+        self
     }
 }
 
@@ -186,6 +251,11 @@ pub struct Escritorio {
     visto: Vec<u32>,
     /// `bloqueado[i] == marca` ⇒ nodo bloqueado en esta búsqueda.
     bloqueado: Vec<u32>,
+    /// `cerca[i] == marca` ⇒ el nodo está lo bastante cerca de un estorbo para que una arista suya pueda meterse en él.
+    cerca: Vec<u32>,
+    /// El estorbo (índice en los de esta búsqueda) del que está cerca, si `cerca` es de esta búsqueda. Las plazas están a 60 u unas de otras: un nodo
+    /// no está cerca de dos.
+    disco: Vec<u32>,
     marca: u32,
     cola: BinaryHeap<Reverse<(i64, i64, u32, bool)>>,
 }
@@ -198,6 +268,8 @@ impl Escritorio {
             padre_arista: vec![0; nodos],
             visto: vec![0; nodos],
             bloqueado: vec![0; nodos],
+            cerca: vec![0; nodos],
+            disco: vec![0; nodos],
             marca: 0,
             cola: BinaryHeap::new(),
         }
@@ -215,6 +287,8 @@ pub struct Rutas {
     coste: Vec<u32>,
     vado: Vec<bool>,
     espaciado: i64,
+    /// La arista más larga (milésimas): un tramo que se mete en un disco tiene los dos extremos a `radio + arista_max` o menos de su centro.
+    arista_max: i64,
     /// Coste mínimo por milésima de longitud, en punto fijo `<< DESPLAZ` (suelo): heurística admisible.
     ratio_min: i64,
     // Índice espacial (CSR por celdas)
@@ -390,6 +464,8 @@ impl Rutas {
             ratio_min = ratio_min.min(((c as i128) << DESPLAZ) / l);
         }
 
+        let arista_max = aristas.iter().map(|&(a, b, ..)| pos[a as usize].dist(pos[b as usize])).max().unwrap_or(0);
+
         // Índice espacial: celdas de 2 espaciados.
         let (mut min, mut max) = (Punto::new(i64::MAX, i64::MAX), Punto::new(i64::MIN, i64::MIN));
         for p in &pos {
@@ -417,7 +493,7 @@ impl Rutas {
         }
 
         Rutas {
-            ids, indice_de, pos, inicio, destino, coste, vado, espaciado, ratio_min: ratio_min as i64,
+            ids, indice_de, pos, inicio, destino, coste, vado, espaciado, arista_max, ratio_min: ratio_min as i64,
             min, lado, cols, filas, celda_inicio, celda_nodos, transitable,
         }
     }
@@ -476,6 +552,25 @@ impl Rutas {
         Vec::new()
     }
 
+    /// Llama a `f` con cada nodo a `radio` o menos de `p`.
+    fn para_nodos_a(&self, p: Punto, radio: i64, mut f: impl FnMut(u32)) {
+        if self.pos.is_empty() {
+            return;
+        }
+        let (cx0, cx1) = (((p.x - radio - self.min.x).div_euclid(self.lado)).max(0), ((p.x + radio - self.min.x).div_euclid(self.lado)).min(self.cols - 1));
+        let (cy0, cy1) = (((p.y - radio - self.min.y).div_euclid(self.lado)).max(0), ((p.y + radio - self.min.y).div_euclid(self.lado)).min(self.filas - 1));
+        for cy in cy0..=cy1 {
+            for cx in cx0..=cx1 {
+                let c = (cy * self.cols + cx) as usize;
+                for &i in &self.celda_nodos[self.celda_inicio[c] as usize..self.celda_inicio[c + 1] as usize] {
+                    if p.dist2(self.pos[i as usize]) <= (radio as i128).pow(2) {
+                        f(i);
+                    }
+                }
+            }
+        }
+    }
+
     /// Coste de un tramo recto en llano, en milésimas de espaciado (redondeo al más cercano).
     fn coste_recto(&self, a: Punto, b: Punto) -> i64 {
         (a.dist(b) * 1000 + self.espaciado / 2) / self.espaciado
@@ -496,7 +591,16 @@ impl Rutas {
         if origen == destino {
             return Some(recta(Vec::new(), vec![origen]));
         }
-        let directo = origen.dist(destino) <= self.espaciado && self.transitable.as_ref().is_none_or(|t| t.libre(origen, destino));
+        // Los estorbos que cuentan: los que no tienen dentro el origen ni el destino.
+        let factor = opciones.estorbos.as_deref().map_or(1, |x| x.factor);
+        let fuera = |p: Punto, c: Punto, r: Mil| p.dist2(c) >= ((r - HOLGURA_ESTORBO).max(0) as i128).pow(2);
+        let discos: Vec<(Punto, Mil)> = match opciones.estorbos.as_deref() {
+            Some(x) if factor > 1 => x.discos.iter().copied().filter(|&(c, r)| fuera(origen, c, r) && fuera(destino, c, r)).collect(),
+            _ => Vec::new(),
+        };
+        let cruza = |a: Punto, b: Punto| discos.iter().any(|&(c, r)| tramo_en_disco(a, b, c, r));
+        let caro = |a: Punto, b: Punto, coste: i64| if !discos.is_empty() && cruza(a, b) { coste * factor } else { coste };
+        let directo = origen.dist(destino) <= self.espaciado && self.transitable.as_ref().is_none_or(|t| t.libre(origen, destino)) && !cruza(origen, destino);
         if directo {
             return Some(recta(vec![self.coste_recto(origen, destino)], vec![origen, destino]));
         }
@@ -506,6 +610,7 @@ impl Rutas {
         if e.marca == 0 {
             e.visto.fill(0);
             e.bloqueado.fill(0);
+            e.cerca.fill(0);
             e.marca = 1;
         }
         let marca = e.marca;
@@ -514,6 +619,16 @@ impl Rutas {
                 e.bloqueado[i as usize] = marca;
             }
         }
+        for (k, &(c, r)) in discos.iter().enumerate() {
+            self.para_nodos_a(c, r + self.arista_max, |i| (e.cerca[i as usize], e.disco[i as usize]) = (marca, k as u32));
+        }
+        // Solo los estorbos de los extremos de la arista (los de los nodos cercanos): con cientos de plazas, mirarlas todas en cada arista es caro.
+        let cruza_arista = |e: &Escritorio, u: usize, v: usize| {
+            [u, v].iter().filter(|&&n| e.cerca[n] == marca).any(|&n| {
+                let (c, r) = discos[e.disco[n] as usize];
+                tramo_en_disco(self.pos[u], self.pos[v], c, r)
+            })
+        };
         let esta_bloqueado = |i: u32| e.bloqueado[i as usize] == marca;
         // La atracción de la red solo abarata aristas: la heurística se afloja al menor factor que puede aparecer (sigue admisible).
         let atraccion = opciones.atraccion.as_deref().filter(|a| !a.pesos.is_empty());
@@ -526,6 +641,7 @@ impl Rutas {
 
         e.cola.clear();
         for &(s, c) in &salidas {
+            let c = caro(origen, self.pos[s as usize], c);
             let (s_, h) = (s as usize, self.h(self.pos[s as usize], destino, fh));
             if e.visto[s_] != marca || c < e.g[s_] {
                 (e.visto[s_], e.g[s_], e.padre[s_]) = (marca, c, SIN_PADRE);
@@ -548,7 +664,7 @@ impl Rutas {
                 continue; // entrada vieja
             }
             if let Some(&(_, c)) = llegadas.iter().find(|&&(n, _)| n == u) {
-                e.cola.push(Reverse((gu + c, 0, u, true)));
+                e.cola.push(Reverse((gu + caro(self.pos[u as usize], destino, c), 0, u, true)));
             }
             for k in self.inicio[u as usize] as usize..self.inicio[u as usize + 1] as usize {
                 let v = self.destino[k];
@@ -561,7 +677,10 @@ impl Rutas {
                         coste = coste * a.factor(peso) / UNO;
                     }
                 }
-                let paso = coste + if self.vado[k] { opciones.penalizacion_vado } else { 0 };
+                let mut paso = coste + if self.vado[k] { opciones.penalizacion_vado } else { 0 };
+                if !discos.is_empty() && cruza_arista(e, u as usize, v as usize) {
+                    paso += coste * (factor - 1);
+                }
                 let g2 = gu + paso;
                 let vi = v as usize;
                 if e.visto[vi] != marca || g2 < e.g[vi] {
@@ -616,7 +735,7 @@ impl Rutas {
         let mut camino = Camino { puntos, costes, nodos, espaciado: self.espaciado };
         if opciones.suavizar {
             if let Some(t) = self.transitable.as_ref().filter(|t| t.tiene_coste()) {
-                self.estirar(t, &mut camino, &vados);
+                self.estirar(t, &mut camino, &vados, &caro);
             }
         }
         Some(camino)
@@ -624,14 +743,15 @@ impl Rutas {
 
     /// El suavizado por coste (ver «Suavizado» arriba). `vados[i]` dice si el tramo `i` es una arista de vado: esos tramos
     /// se quedan, y no se salta por encima de ellos.
-    fn estirar(&self, t: &Transitable, camino: &mut Camino, vados: &[bool]) {
+    fn estirar(&self, t: &Transitable, camino: &mut Camino, vados: &[bool], caro: &dyn Fn(Punto, Punto, i64) -> i64) {
         let p = &camino.puntos;
         let n = p.len();
         if n < 3 {
             return;
         }
         // Coste de capa de cada tramo de la ruta del A* (lo que no se puede pisar cuenta como infinito).
-        let tramo: Vec<i64> = (0..n - 1).map(|k| t.coste_recto(p[k], p[k + 1], self.espaciado).unwrap_or(i64::MAX / 4)).collect();
+        // Un tramo que se mete en un estorbo cuenta con su recargo, también la recta que lo sustituiría.
+        let tramo: Vec<i64> = (0..n - 1).map(|k| t.coste_recto(p[k], p[k + 1], self.espaciado).map_or(i64::MAX / 4, |c| caro(p[k], p[k + 1], c))).collect();
         let (mut puntos, mut costes) = (vec![p[0]], Vec::with_capacity(n - 1));
         let mut i = 0;
         while i + 1 < n {
@@ -643,7 +763,7 @@ impl Rutas {
                     continue;
                 }
                 let sustituye = tramo[i..j].iter().fold(0i64, |s, &c| s.saturating_add(c));
-                if let Some(c) = t.coste_recto(p[i], p[j], self.espaciado).filter(|&c| c <= sustituye) {
+                if let Some(c) = t.coste_recto(p[i], p[j], self.espaciado).filter(|&c| caro(p[i], p[j], c) <= sustituye) {
                     salto = (j, c);
                     break;
                 }

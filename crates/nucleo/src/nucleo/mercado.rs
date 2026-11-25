@@ -166,8 +166,8 @@ fn datos_de(ev: &EventoComercio) -> Vec<(&'static str, i64)> {
 }
 
 impl Nucleo {
-    /// Radio de la puerta de una plaza, de un pueblo, de una avanzada o de un campamento (`MOVIMIENTO.radioPuerta`: 2 tras la calibración de distancias,
-    /// Movimiento_Ejercitos §14).
+    /// Lo que se puede estar del **borde** de una plaza, un pueblo, una avanzada o un campamento para estar a su puerta (`MOVIMIENTO.radioPuerta`: 1 desde el
+    /// 2026-11-23, medido desde el contorno; antes 2 desde el centro; Movimiento_Ejercitos §14). Ver [`Nucleo::a_la_puerta`].
     pub(super) fn radio_puerta(&self) -> Mil {
         self.estado.reglas.economia.militar.movimiento.radio_puerta
     }
@@ -352,6 +352,8 @@ impl Nucleo {
             SucesoComercio::PeajeCaravana => self.peaje_de_caravana(id, t),
             SucesoComercio::PulsoReparto => self.pulso_de_reparto(id, t),
             SucesoComercio::FinPasoEncargo => self.fin_de_paso_de_encargo(id, t),
+            SucesoComercio::SalidaDeLaPlaza => self.salida_de_la_plaza(id, t),
+            SucesoComercio::EntradaEnPlaza => self.entrada_en_plaza(id, t),
             SucesoComercio::PulsoEncargo => self.pulso_de_encargo(id, t),
             SucesoComercio::ReponeMercenarios => self.repone_mercenarios(t),
         }
@@ -521,7 +523,7 @@ impl Nucleo {
         let ctx = ContextoMostrador {
             ahora: t,
             es_lider,
-            en_puerta: pos_columna.dist(plaza.posicion) <= self.radio_puerta(),
+            en_puerta: self.en_la_puerta_de_plaza(plaza, pos_columna),
             mercado_activo: nivel_mercado(plaza).is_some(),
             misma_faccion: faccion_columna == plaza.faccion,
             factor_comision_externa: factor,

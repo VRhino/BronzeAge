@@ -39,20 +39,20 @@ const base = recursos.filter(r => !esCapaLejana(r)), capa = recursos.filter(esCa
 const de = (tipo: string, anillo?: string) => base.filter(r => r.tipo === tipo && (!anillo || r.anillo === anillo));
 
 describe('recursos no metálicos', () => {
-  it('totales exactos de partida: piedra 2489 (desde el 2026-11-06; antes 5601), cobre 240, hierro 360', () => {
-    expect(de('piedra')).toHaveLength(2489);
-    expect(de('cobre')).toHaveLength(240);
-    expect(de('hierro')).toHaveLength(360);
-    expect(base).toHaveLength(3089);
+  it('totales exactos de partida: piedra 1106, cobre 107, hierro 160 (desde el 2026-11-23; antes 2489, 240 y 360)', () => {
+    expect(de('piedra')).toHaveLength(1106);
+    expect(de('cobre')).toHaveLength(107);
+    expect(de('hierro')).toHaveLength(160);
+    expect(base).toHaveLength(1373);
     expect(new Set(recursos.map(r => r.id)).size).toBe(recursos.length);
   });
-  it('el hierro es 1,5 veces el cobre', () => {
-    expect(de('hierro').length).toBe(1.5 * de('cobre').length);
+  it('el hierro es 1,5 veces el cobre (redondeado: 107 y 160 desde el 2026-11-23)', () => {
+    expect(de('hierro').length).toBe(Math.round(1.5 * de('cobre').length - 0.5));
   });
   it('el reparto por anillo sigue el canon 1.9c', () => {
-    expect([de('piedra', 'foco').length, de('piedra', 'frontera').length, de('piedra', 'lejana').length]).toEqual([1493, 996, 0]);
-    expect([de('cobre', 'foco').length, de('cobre', 'frontera').length, de('cobre', 'lejana').length]).toEqual([48, 192, 0]);
-    expect([de('hierro', 'foco').length, de('hierro', 'frontera').length, de('hierro', 'lejana').length]).toEqual([72, 288, 0]);
+    expect([de('piedra', 'foco').length, de('piedra', 'frontera').length, de('piedra', 'lejana').length]).toEqual([664, 442, 0]);
+    expect([de('cobre', 'foco').length, de('cobre', 'frontera').length, de('cobre', 'lejana').length]).toEqual([21, 86, 0]);
+    expect([de('hierro', 'foco').length, de('hierro', 'frontera').length, de('hierro', 'lejana').length]).toEqual([32, 128, 0]);
   });
   it('la capa lejana: solo cobre, hierro y piedra, todo en la tierra lejana, a su fracción de la densidad de la frontera', () => {
     expect(capa.length).toBeGreaterThan(0);
@@ -98,7 +98,7 @@ describe('recursos no metálicos', () => {
     const pesos = [...porZona.entries()].sort((a, b) => b[1] - a[1]), cuarto = pesos.slice(0, Math.ceil(pesos.length / 4));
     for (const [z] of cuarto) expect(minerales.some(r => zonaDe(r.posicion) === z)).toBe(true);
   });
-  it('separaciones mínimas: mismo tipo (piedra 105, resto 250) y 45 entre tipos distintos', () => {
+  it('separaciones mínimas: mismo tipo (piedra 105, resto 250) y 72 entre tipos distintos (desde el 2026-11-23; antes 45)', () => {
     let infracciones = 0;
     for (const [i, a] of recursos.entries()) for (const b of recursos.slice(i + 1)) {
       const minimo = a.tipo === b.tipo ? P.separacionMismoTipo[a.tipo as keyof typeof P.separacionMismoTipo] : P.separacionOtroTipo;
@@ -106,7 +106,7 @@ describe('recursos no metálicos', () => {
     }
     expect(infracciones).toBe(0);
   });
-  it('los puntos ocupados (metales) también quedan a 45', () => {
+  it('los puntos ocupados (metales) también quedan a 72', () => {
     const ocupados = recursos.slice(0, 200).map(r => r.posicion);
     const otros = repartirRecursosNoMetalicos(42, campamentos, sintetico, { ancho: ANCHO, alto: ALTO }, ocupados);
     expect(otros.some(r => ocupados.some(q => dist(r.posicion, q) < P.separacionOtroTipo))).toBe(false);
@@ -117,8 +117,8 @@ describe('recursos no metálicos', () => {
   });
   it('escala por área: un mundo más pequeño tiene proporcionalmente menos', () => {
     const chico = repartirRecursosNoMetalicos(42, campamentos.slice(0, 3), sintetico, { ancho: 16002, alto: 12000 });
-    expect(chico.filter(r => r.tipo === 'piedra' && !esCapaLejana(r))).toHaveLength(622);
-    expect(chico.filter(r => r.tipo === 'hierro' && !esCapaLejana(r))).toHaveLength(90);
+    expect(chico.filter(r => r.tipo === 'piedra' && !esCapaLejana(r))).toHaveLength(277);
+    expect(chico.filter(r => r.tipo === 'hierro' && !esCapaLejana(r))).toHaveLength(40);
   });
   it('si un tipo no cabe, lanza error en vez de entregar menos', () => {
     expect(() => repartirRecursosNoMetalicos(42, campamentos, { ...sintetico, geologia: () => 0 }, { ancho: ANCHO, alto: ALTO }, [], { ...P, calidadMinima: 0.9 })).toThrow(/faltan/);

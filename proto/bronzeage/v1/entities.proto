@@ -1087,6 +1087,8 @@ message Encargo {
   bool cancelado = 10;  // cancelado en ruta: acaba el tramo sin comerciar, vuelve y deja todo en el origen
   optional int64 inicio_paso_ms = 11;  // cuándo empezó la descarga o la carga en curso (2026-11-04): con fin_paso_ms, la barra de tiempo del paso
   bool detener = 12;  // ruta detenida (2026-11-04, OrdenDetenerEncargo): acaba la ida y vuelta en curso y, al descargar en el origen, se queda sin encargo
+  repeated ParadaEncargoEn mas_paradas = 13;  // la ruta compuesta (2026-11-23): las paradas después del destino, en orden
+  uint32 tramo = 14;  // con parada_actual = destino, en qué parada de fuera está o hacia cuál va: 0 es el destino y k es mas_paradas[k − 1]
 }
 
 message SeleccionDeSalida {

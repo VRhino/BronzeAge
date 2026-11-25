@@ -300,14 +300,16 @@ impl Nucleo {
         Ok(vec![])
     }
 
-    /// Lo que toda agresión comprueba: el alcance (`radioEncuentro`), la protección de los campamentos y la guerra. Devuelve la guerra que hay que declarar
-    /// (entre las dos Facciones) si falta una y la orden la pide; no declara nada: eso se hace cuando todo lo demás ya vale.
-    pub(super) fn comprobar_agresion(&self, e: &Ejercito, t: Instante, donde: Punto, contra: Option<u32>, declara_guerra: bool) -> Result<Option<(u32, u32)>, Respuesta> {
+    /// Lo que toda agresión comprueba: el alcance (`radioEncuentro`, desde el borde de lo que ocupa el objetivo, de radio `huella`: 2026-11-23), la protección
+    /// de los campamentos y la guerra. Devuelve la guerra que hay que declarar (entre las dos Facciones) si falta una y la orden la pide; no declara nada: eso se
+    /// hace cuando todo lo demás ya vale.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn comprobar_agresion(&self, e: &Ejercito, t: Instante, donde: Punto, huella: Mil, contra: Option<u32>, declara_guerra: bool) -> Result<Option<(u32, u32)>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
         let aqui = e.posicion_en(t);
         let radio = self.estado.reglas.economia.militar.logistica.radio_encuentro;
-        if aqui.dist(donde) > radio {
+        if Self::desde_el_borde(donde, huella, aqui) > radio {
             return Err(rechazo(rechazos::COMBATE_LEJOS, format!("hay que estar a {radio} o menos para atacar")));
         }
         if self.en_proteccion_de_campamento(aqui) || self.en_proteccion_de_campamento(donde) {
@@ -356,7 +358,7 @@ impl Nucleo {
         if !self.tiene_heroe_sano(o, t) {
             return Err(rechazo(rechazos::COMBATE_SIN_HEROE_SANO, "esa columna solo lleva héroes heridos: no se la puede tocar"));
         }
-        let guerra = self.comprobar_agresion(e, t, o.posicion_en(t), o.columna.faccion, declara_guerra)?;
+        let guerra = self.comprobar_agresion(e, t, o.posicion_en(t), 0, o.columna.faccion, declara_guerra)?;
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_columna(t, heroe, id, x);
             self.abrir_batalla_de_ataque(t, ap, guerra);
@@ -485,7 +487,7 @@ impl Nucleo {
         }
         let (origen, dueno) = (k.origen as u64, self.estado.asentamientos.get(&(k.origen as u64)).map(|a| a.faccion));
         let donde = self.posicion_de_caravana(x, t).unwrap_or(k.posicion);
-        let guerra = self.comprobar_agresion(e, t, donde, dueno, declara_guerra)?;
+        let guerra = self.comprobar_agresion(e, t, donde, 0, dueno, declara_guerra)?;
 
         let modalidad = asalto::modalidad_de(self.zona_en(donde, dueno));
         if self.estado.reglas.batallas_en_unity {
@@ -589,7 +591,7 @@ impl Nucleo {
         let v = self.estado.version;
         let b = self.estado.combate.bandidos.get(&x).ok_or_else(|| Respuesta::rechazo(rechazos::CAMPAMENTO_DE_BANDIDOS_DESCONOCIDO, format!("bandidos-{x}"), v))?;
         let (nivel, donde, origen) = (b.nivel, b.posicion, b.origen);
-        self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, None, false)?;
+        self.comprobar_agresion(&self.estado.ejercitos[&id], t, donde, self.estado.reglas.economia.datos.tamanos.campamento_bandidos, None, false)?;
         if self.estado.reglas.batallas_en_unity {
             let ap = self.apertura_de_campamento(t, heroe, id, x);
             self.abrir_batalla_de_ataque(t, ap, None);
@@ -713,8 +715,8 @@ impl Nucleo {
         if plaza.faccion == yo {
             return Err(rechazo(rechazos::COMBATE_PLAZA_PROPIA, "no se asedia una plaza de tu Facción"));
         }
-        let (faccion_vieja, posicion) = (plaza.faccion, plaza.posicion);
-        let guerra = self.comprobar_agresion(e, t, posicion, Some(faccion_vieja), declara_guerra)?;
+        let (faccion_vieja, posicion, huella) = (plaza.faccion, plaza.posicion, self.radio_de_plaza(plaza));
+        let guerra = self.comprobar_agresion(e, t, posicion, huella, Some(faccion_vieja), declara_guerra)?;
         if esta_protegida(plaza.protegida_hasta, t) {
             return Err(rechazo(rechazos::COMBATE_PLAZA_PROTEGIDA, "esa plaza está protegida (recién fundada o conquistada): todavía no se la puede asediar"));
         }
@@ -836,7 +838,7 @@ impl Nucleo {
         }
         let donde = self.posicion_de_pueblo(x).ok_or_else(|| rechazo(rechazos::SIN_MUNDO, "el núcleo no tiene mundo cargado"))?;
         let faccion_madre = self.estado.asentamientos[&madre].faccion;
-        let guerra = self.comprobar_agresion(e, t, donde, Some(faccion_madre), declara_guerra)?;
+        let guerra = self.comprobar_agresion(e, t, donde, self.radio_de_pueblo(pueblo), Some(faccion_madre), declara_guerra)?;
         let cr = self.estado.reglas.economia.combate.clone();
         let mut atac = self.tropa_de_columna(id, t, cr.batalla.capacidad_resto);
         if !atac.escuadras.iter().any(Escuadra::con_soldados) {

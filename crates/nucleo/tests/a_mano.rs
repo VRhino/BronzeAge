@@ -109,9 +109,12 @@ impl Esc {
     }
     /// La columna marcha hasta `destino` y llega.
     fn llevar(&mut self, cuenta: &str, col: u64, destino: Punto) {
-        self.ok(cuenta, Comando::MarcharA { ejercito: col, destino });
-        let fin = self.n.ejercito(col).unwrap().plan.fin().unwrap();
-        self.n.avanzar_hasta(fin);
+        // Si ya está (en el contorno de la plaza a la que va), no cambia nada.
+        let r = self.ord(cuenta, Comando::MarcharA { ejercito: col, destino });
+        assert!(r.aceptada() || r.resultado == Resultado::SinCambios, "{r:?}");
+        if let Some(fin) = self.n.ejercito(col).unwrap().plan.fin() {
+            self.n.avanzar_hasta(fin);
+        }
     }
     fn dar(&mut self, plaza: u64, recurso: Recurso, cantidad: i64) {
         let r = self.ord("admin", Comando::DarRecursos { asentamiento: plaza, recurso, cantidad });
@@ -459,7 +462,7 @@ fn renombrar_una_caravana_recorta_el_nombre_lo_proyecta_y_viaja_en_la_foto() {
     // Viaja en la foto (BAN55).
     let (reglas, hash) = (Reglas::default(), m.0.hash().to_string());
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN69");
     let s = Estado::deserializar(&bytes, &reglas, &hash).unwrap();
     assert_eq!(s.comercio.flota.iter().find(|c| c.id == k).unwrap().nombre, "á".repeat(32));
     // Vacío: se queda sin nombre.

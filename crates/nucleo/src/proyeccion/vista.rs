@@ -314,14 +314,15 @@ impl<'n> Mirada<'n> {
         let mut con_caravana_dentro: BTreeSet<u64> = BTreeSet::new();
         for c in e.comercio.flota.iter().filter(|c| c.estado != EstadoCaravana::Disponible) {
             if c.estado == EstadoCaravana::Esperando {
-                if let Some(destino) = c.encargo.as_ref().filter(|x| x.punta == Punta::Destino).map(|x| x.destino) {
+                if let Some(destino) = c.encargo.as_ref().filter(|x| x.punta == Punta::Destino).map(|x| x.plaza_fuera()) {
                     if de_la_faccion(Some(c.origen)) && !de_la_faccion(Some(destino)) {
                         con_caravana_dentro.insert(u64::from(destino));
                     }
                 }
                 continue;
             }
-            if c.estado == EstadoCaravana::EnBatalla {
+            // En batalla, o dentro de una plaza con el plan por empezar (el carro de acarreo que descarga): no está en el mapa.
+            if c.estado == EstadoCaravana::EnBatalla || (matches!(c.estado, EstadoCaravana::EnTransito | EstadoCaravana::Retornando) && !crate::Nucleo::caravana_en_el_mapa(c, t)) {
                 continue;
             }
             let Some(p) = n.posicion_de_caravana(c.id, t) else { continue };
@@ -568,7 +569,7 @@ impl<'n> Mirada<'n> {
     fn propia_a_la_puerta(&self, viewer: Option<u64>, a: &'n crate::estado::Asentamiento) -> Option<Vec<Visible<'_>>> {
         let (n, e) = (self.n, self.n.estado());
         let columna = e.ejercitos.get(&e.ejercito_de_heroe(viewer?)?)?;
-        if !crate::nucleo::cerca(columna.posicion_en(self.t), a.posicion, e.reglas.economia.militar.movimiento.radio_puerta) {
+        if !n.en_la_puerta_de_plaza(a, columna.posicion_en(self.t)) {
             return None;
         }
         let interior = n.version_interior(a.id)?;

@@ -108,9 +108,10 @@ fn fertil(m: &Mundo, p: Punto) -> bool {
 
 fn sitio_junto_a(n: &Nucleo, m: &Mundo, c: Punto, r: i64) -> Option<Punto> {
     (0..36).map(|g| ((g * 10) as f64).to_radians()).map(|a| Punto::new(c.x + (r as f64 * a.cos()) as i64, c.y + (r as f64 * a.sin()) as i64)).find(|&p| {
-        // Las avanzadas se levantan a 9 y a 12 u al este: tierra pisable y fuera de la protección de los campamentos.
+        // Las avanzadas se levantan a 16 u al este y al oeste (a 15 o más de la madre desde el 2026-11-23) y las columnas llegan 3 u más allá: tierra pisable
+        // y fuera de la protección de los campamentos.
         let libre = |q: Punto| !n.en_proteccion_de_campamento(q) && m.transitable_en(q.x, q.y);
-        libre(p) && libre(Punto::new(p.x + 12_000, p.y)) && libre(Punto::new(p.x + 9_000, p.y))
+        libre(p) && [16_000, 17_000, 19_000, -16_000].iter().all(|&dx| libre(Punto::new(p.x + dx, p.y)))
             && n.viabilidad(p, 1).is_some_and(|v| v.motivo.is_none() && v.color == territorio::Viabilidad::Verde && v.parcelas_en_techo >= 3 && !v.condenada) && fertil(m, p)
     })
 }
@@ -231,7 +232,7 @@ impl Esc {
     }
     /// El sitio de la primera avanzada: 8 u al este de la plaza (dentro de su zona de 15).
     fn sitio(&self) -> Punto {
-        Punto::new(self.centro.x + 8_000, self.centro.y)
+        Punto::new(self.centro.x + 16_000, self.centro.y)
     }
     fn avanzada(&self, id: u64) -> &asentamiento::avanzadas::Avanzada {
         self.n.avanzada(id).unwrap_or_else(|| panic!("no existe la avanzada {id}")).1
@@ -339,7 +340,7 @@ fn montar(m: &M, semilla: u64, nivel: u32) -> Esc {
 
 fn montar_con(mut n: Nucleo, m: &M, nivel: u32) -> Esc {
     let mapa = Mapa::de(&m.0);
-    let sitio = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000)).expect("hay un sitio rico, lejos de los campamentos");
+    let sitio = (0..mapa.nodos.len()).filter(|&i| mapa.nodos[i].tipo == Tipo::MinaCobre).find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 13_000)).expect("hay un sitio rico, lejos de los campamentos");
     let e = n.crear_ejercito(0, "ana", 1, sitio, 500, 100_000).unwrap();
     assert!(n.aplicar_en(0, Peticion::nueva("admin", "c", Comando::DarCaravanaFundacion { ejercito: e }).de_admin()).aceptada());
     let r = n.aplicar_en(0, Peticion::nueva("ana", "f", Comando::Fundar { ejercito: e }));
@@ -434,16 +435,16 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     assert_eq!(e.rechazada("!ana", colocar(plaza, 9_999, pos)), rechazos::HEROE_DESCONOCIDO);
     // La zona manda y el asentamiento no vale. (Desde el 2026-11-04 no hace falta la columna en el sitio: se coloca desde dentro de la madre.)
     let _ = heroe;
-    let lejos = Punto::new(e.centro.x + 35_000, e.centro.y);
+    let lejos = Punto::new(e.centro.x + 55_000, e.centro.y);
     let (_, h2) = e.colocador(lejos);
-    assert_eq!(e.rechazada("ana", colocar(plaza, h2, lejos)), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "la zona de nivel 2 llega a 30 u (15 hasta el 2026-11-05)");
-    let dentro = Punto::new(e.centro.x + 1_599, e.centro.y);
+    assert_eq!(e.rechazada("ana", colocar(plaza, h2, lejos)), rechazos::AVANZADA_FUERA_DE_LA_ZONA, "la zona de nivel 2 llega a 50 u (desde el 2026-11-23; 30 hasta entonces)");
+    let dentro = Punto::new(e.centro.x + 14_999, e.centro.y);
     let (_, h3) = e.colocador(dentro);
-    assert_eq!(e.rechazada("ana", colocar(plaza, h3, dentro)), rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "la ciudad mide una vigésima de la zona (1,5) y la avanzada pide su media anchura (0,1) más");
+    assert_eq!(e.rechazada("ana", colocar(plaza, h3, dentro)), rechazos::AVANZADA_DENTRO_DEL_ASENTAMIENTO, "a menos de 15 u del centro de la madre (desde el 2026-11-23)");
     // Con la plaza de nivel 1 no hay avanzadas.
     let mut uno = montar(m, 7, 1);
     let (p1, centro) = (uno.plaza, uno.centro);
-    let dentro_de_zona = Punto::new(centro.x + 4_000, centro.y);
+    let dentro_de_zona = Punto::new(centro.x + 20_000, centro.y);
     let (_, h) = uno.colocador(dentro_de_zona);
     assert_eq!(uno.rechazada("ana", Comando::ColocarAvanzada { asentamiento: p1, heroe: h, posicion: dentro_de_zona }), rechazos::AVANZADA_NIVEL_INSUFICIENTE);
     // 5E-1: la coloca el Gobernador o el Maestro de Obras de la madre, residente (y desde el 2026-11-04, dentro); un ciudadano sin cargo, o un residente que no es el titular, no.
@@ -454,10 +455,10 @@ fn colocar_se_rechaza_sin_rastro_y_en_su_orden() {
     // El cupo: dos en el nivel 2, contando las pendientes.
     e.maestro(heroe);
     e.ok("ana", colocar(plaza, heroe, pos));
-    let otro = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let otro = Punto::new(e.centro.x - 16_000, e.centro.y);
     let (_, h4) = e.colocador(otro);
     e.ok("ana", colocar(plaza, h4, otro));
-    let tercero = Punto::new(e.centro.x, e.centro.y + 8_000);
+    let tercero = Punto::new(e.centro.x, e.centro.y + 16_000);
     let (_, h5) = e.colocador(tercero);
     assert_eq!(e.rechazada("ana", colocar(plaza, h5, tercero)), rechazos::AVANZADA_SIN_CUPO);
 }
@@ -468,29 +469,37 @@ fn colocar_respeta_la_ciudad_de_la_madre_y_no_pisa_otro_elemento_del_mapa() {
     let mut e = montar(m, 7, 2);
     let (plaza, centro) = (e.plaza, e.centro);
     let colocar = |heroe: u64, posicion: Punto| Comando::ColocarAvanzada { asentamiento: plaza, heroe, posicion };
-    // La ciudad mide una vigésima de la zona (desde el 2026-11-05; la de nivel 2 son 30: 1,5) y la avanzada pide además su media anchura (0,1): justo fuera de 1,6 sí cabe.
-    let primera = Punto::new(centro.x + 1_600, centro.y);
+    // A 15 u del centro de la madre (desde el 2026-11-23, sea cual sea su zona) sí cabe.
+    let primera = Punto::new(centro.x + 15_000, centro.y);
     let (_, h1) = e.colocador(primera);
     e.ok("ana", colocar(h1, primera));
-    // Otro elemento del mapa mide 0,2: a menos de eso de la primera se pisa (también con ella aún pendiente de materiales); a 0,2 justo, no.
-    let pisa = Punto::new(primera.x + 199, primera.y);
+    // Dos avanzadas reservan cada una lo que mide la ciudadela (1,44 u de radio): a menos de 2,88 de la primera se pisa (también con ella aún pendiente
+    // de materiales); a 2,88 justos, no.
+    let pisa = Punto::new(primera.x + 2_879, primera.y);
     let (_, h2) = e.colocador(pisa);
     assert_eq!(e.rechazada("ana", colocar(h2, pisa)), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
-    let cabe = Punto::new(primera.x + 200, primera.y);
+    let cabe = Punto::new(primera.x + 2_880, primera.y);
     let (_, h3) = e.colocador(cabe);
     e.ok("ana", colocar(h3, cabe));
     assert_eq!(e.n.avanzadas_de(plaza).len(), 2);
 
-    // Un pueblo extractor también es un elemento del mapa: sobre su nodo no se coloca, a 0,2 de él sí.
+    // Un pueblo extractor también es un elemento del mapa: mide 2,04 u y la avanzada reserva 1,44, así que a menos de 3,48 de su nodo no se coloca;
+    // a 3,48, por fuera (más lejos de la madre), sí.
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
     let cobre = e.n.candidatos_de_pueblo(plaza).into_iter().find(|&(_, t)| t == Tipo::MinaCobre).expect("la plaza se fundó junto a una mina de cobre").0;
     let nodo = Mapa::de(&m.0).nodos[cobre as usize].pos;
     e.ok("ana", Comando::MarcarPueblo { asentamiento: plaza, nodo: cobre });
-    let encima = Punto::new(nodo.x + 100, nodo.y);
+    let centro = e.centro;
+    let hacia_fuera = |d: f64| {
+        let (dx, dy) = ((nodo.x - centro.x) as f64, (nodo.y - centro.y) as f64);
+        let l = (dx * dx + dy * dy).sqrt();
+        Punto::new(nodo.x + (d * dx / l).round() as i64, nodo.y + (d * dy / l).round() as i64)
+    };
+    let encima = hacia_fuera(3_470.0);
     let (_, h) = e.colocador(encima);
     assert_eq!(e.rechazada("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: encima }), rechazos::AVANZADA_PISA_OTRO_ELEMENTO);
-    let al_lado = Punto::new(nodo.x + 200, nodo.y);
+    let al_lado = hacia_fuera(3_490.0);
     let (_, h) = e.colocador(al_lado);
     e.ok("ana", Comando::ColocarAvanzada { asentamiento: plaza, heroe: h, posicion: al_lado });
 }
@@ -693,7 +702,7 @@ fn cancelar_una_mejora_o_una_reparacion_pierde_lo_entregado_descarta_su_cita_y_d
     assert!(e.avanzada(av).en_ruinas(), "la reparación cancelada no acaba");
 
     // Perder la avanzada con la obra en marcha también descarta su cita: destruirla a mano, aquí.
-    let otro = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let otro = Punto::new(e.centro.x - 16_000, e.centro.y);
     let (segunda, col2, h2) = e.colocar_en(otro);
     e.acabar_obra(segunda, col2);
     e.ok("ana", Comando::MejorarAvanzada { heroe: h2, avanzada: segunda });
@@ -853,7 +862,7 @@ fn desde_dentro_de_la_avanzada_se_guarnece_se_retira_se_deposita_se_reposta_y_se
     assert_eq!(e.ubicacion(heroe), Ubicacion::Avanzada(av), "todo sin salir");
 
     // Dentro de otra avanzada no vale: hace falta estar en esta, o con la columna a su puerta.
-    let lejos = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let lejos = Punto::new(e.centro.x - 16_000, e.centro.y);
     let (otra, col2, h2) = e.colocar_en(lejos);
     e.acabar_obra(otra, col2);
     e.residir(h2);
@@ -1456,7 +1465,7 @@ fn si_la_madre_cae_en_ruinas_la_atalaya_y_el_fuerte_desaparecen_y_la_ciudadela_q
     e.residir(heroe);
     let escuadra = e.dar_escuadra(heroe, Tropa::MiliciaLanceros);
     e.ok("ana", Comando::GuarnecerAvanzada { heroe, avanzada: ciudadela, escuadras: vec![escuadra] });
-    let otra = Punto::new(centro.x - 8_000, centro.y);
+    let otra = Punto::new(centro.x - 16_000, centro.y);
     let (atalaya, col2, _) = e.colocar_en(otra);
     e.acabar_obra(atalaya, col2);
     // Sin auto-construcción ni madera que repongan el mantenimiento, la plaza acaba cayendo en ruinas.
@@ -1481,11 +1490,11 @@ fn si_la_madre_cae_en_ruinas_la_atalaya_y_el_fuerte_desaparecen_y_la_ciudadela_q
     assert_eq!(e.rechazada("ana", Comando::MejorarAvanzada { heroe, avanzada: ciudadela }), rechazos::AVANZADA_DESCONOCIDA);
     assert_eq!(e.rechazada("ana", Comando::GuarnecerAvanzada { heroe, avanzada: ciudadela, escuadras: vec![escuadra] }), rechazos::AVANZADA_DESCONOCIDA);
     let pos = e.n.posicion_de_avanzada(ciudadela).unwrap();
-    let (col_beto, beto) = e.atacante(Punto::new(pos.x + 1_000, pos.y), &[Tropa::EspadachinesBronce]);
+    let (col_beto, beto) = e.atacante(Punto::new(pos.x + 2_000, pos.y), &[Tropa::EspadachinesBronce]);
     e.guerra();
     assert_eq!(e.rechazada("beto", Comando::Atacar { heroe: beto, objetivo: ObjetivoAtaque::Avanzada(ciudadela), declara_guerra: false }), rechazos::COMBATE_AVANZADA_SIN_DUENO);
     // Pero se recuerdan como se vieron (Niebla_De_Guerra §4.1, decisión del autor del 2026-10-24): F2 pasa junto a ellas y su ficha dice ciudadela, de nadie, en ruinas.
-    e.ok("beto", Comando::MarcharA { ejercito: col_beto, destino: Punto::new(pos.x + 500, pos.y) });
+    e.ok("beto", Comando::MarcharA { ejercito: col_beto, destino: Punto::new(pos.x + 3_000, pos.y) });
     let ficha = e.n.estado().memoria.fichas[&2][&nucleo::memoria::Sitio::Avanzada(ciudadela)].clone();
     assert_eq!((ficha.datos.faccion, ficha.datos.nivel, ficha.datos.estado), (0, 3, nucleo::memoria::EstadoSitio::EnRuinas));
     // Quien tenga después esa zona la repara: una plaza nueva de Ana en el sitio de la antigua, de nivel 3, la adopta con su cupo.
@@ -1682,7 +1691,7 @@ fn el_estado_de_las_avanzadas_va_en_la_foto_y_cualquier_campo_cambia_el_hash() {
     g.repone_en = Some(6_000);
     base.combate.avanzadas.insert(9, g);
     let bytes = base.serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN69");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "h").unwrap();
     assert_eq!(vuelta.combate, base.combate);
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
@@ -1750,7 +1759,7 @@ fn cada_campo_de_la_avanzada_de_una_plaza_cambia_el_hash() {
         assert!(vistos.insert(s.hash()), "el hash no cambió al tocar {nombre}");
     }
     // Una obra a medias (con lo entregado) viaja entera.
-    let pos = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let pos = Punto::new(e.centro.x - 16_000, e.centro.y);
     let (otra_av, otra_col, _) = e.colocar_en(pos);
     e.ord("admin", Comando::DarSuministro { ejercito: otra_col, recurso: Madera, cantidad: 100_000 });
     e.ok("ana", Comando::EntregarMaterialesAAvanzada { ejercito: otra_col, avanzada: otra_av });
@@ -2007,7 +2016,7 @@ fn si_la_madre_es_conquistada_solo_sale_de_su_avanzada_quien_el_acceso_heredado_
     e.abrir_a_los_neutrales();
     let plaza = e.plaza;
     let (ciudadela, _, _) = e.avanzada_de(Etapa::Ciudadela);
-    let otra = Punto::new(e.centro.x - 8_000, e.centro.y);
+    let otra = Punto::new(e.centro.x - 16_000, e.centro.y);
     let (atalaya, col2, _) = e.colocar_en(otra);
     e.acabar_obra(atalaya, col2);
     let (c1, h1) = e.visita("uno", 3, &[]);
@@ -2234,7 +2243,7 @@ fn una_foto_con_un_heroe_dentro_de_una_avanzada_se_recupera_y_sigue_igual_que_el
         let mut e = montar_con(n, m, 2);
         let (av, col, h) = guion(&mut e);
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN65");
+        assert_eq!(&bytes[..5], b"BAN69");
         let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
         assert_eq!(vuelta.militar.heroes[&h].heroe.presencia.ubicacion, Ubicacion::Avanzada(av));
         assert_eq!((vuelta.serializar(), vuelta.hash()), (bytes, e.n.estado().hash()));
@@ -2262,10 +2271,12 @@ fn la_avanzada_operativa_ve_24_explora_su_disco_y_deja_de_ver_al_destruirla() {
     use nucleo::proyeccion::vista::{Mirada, Perspectiva};
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
-    let (av, col, heroe) = e.atalaya();
+    // Lejos de la madre, que ve su zona (50 en el nivel 2 desde el 2026-11-23): la atalaya a 40 u y las columnas que se miran, a más de 60 de la plaza.
+    let (av, col, heroe) = e.colocar_en(Punto::new(e.centro.x + 40_000, e.centro.y));
+    e.acabar_obra(av, col);
     let pos = e.avanzada(av).posicion;
     assert!(e.n.estado().memoria.exploracion[&1].explorado_en(Punto::new(pos.x + 22_000, pos.y)), "la avanzada explora su disco al quedar operativa");
-    // La columna de Ana se va lejos: solo la plaza (30 alrededor de su centro) y la avanzada (24, `VISION.avanzada` desde el 2026-11-05) ven por F1.
+    // La columna de Ana se va lejos: solo la plaza (su zona, 50 alrededor de su centro) y la avanzada (24, `VISION.avanzada` desde el 2026-11-05) ven por F1.
     e.ok("ana", Comando::MarcharA { ejercito: col, destino: Punto::new(e.centro.x - 80_000, e.centro.y) });
     let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
     e.hasta(fin + MIN);

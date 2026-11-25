@@ -13,7 +13,7 @@ use crate::encargo::{Encargo, Fase, Punta};
 use crate::precio::TablaPrecios;
 use crate::reparto::Candidata;
 use crate::tipos::{total, AcuerdoId, AsentamientoId, CaravanaId, Carga, EscuadraId, HeroeId, Lado};
-use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Peaje};
+use crate::viaje::{instante_de_progreso, invertir_plan, invertir_ruta, progreso_en, CobroPeaje, Escala, Peaje};
 use asentamiento::datos::{por, UNO};
 use asentamiento::{Almacen, Recurso};
 use base::{entero, entero_arriba, Instante, Mil, Plan, Punto};
@@ -162,6 +162,8 @@ pub struct Caravana {
     pub plan: Option<Plan>,
     /// Pasos forzados por ciudades ajenas que aún no ha cruzado (solo a la ida).
     pub peajes: Vec<Peaje>,
+    /// Las plazas del plan vigente que atraviesa y aún no ha dejado atrás, con cuándo entra y sale (bloque E, 2026-11-23). Las pone el núcleo al instalar el plan.
+    pub escalas: Vec<Escala>,
     /// Solo en el reparto automático: a qué trueque y a qué lado sirve.
     pub origen_acuerdo: Option<(AcuerdoId, Lado)>,
     /// Solo en `Preparando`: el instante en que sale.
@@ -313,6 +315,7 @@ impl Caravana {
             costes: Vec::new(),
             plan: None,
             peajes: Vec::new(),
+            escalas: Vec::new(),
             origen_acuerdo: None,
             prepara_hasta: None,
             escolta: Vec::new(),
@@ -495,7 +498,7 @@ impl Caravana {
 
     /// `prepararCaravana`. Validaciones, en este orden (si falla una no se cambia nada): comercial, `disponible`, de este origen;
     /// capacidad > 0; carga > 0, ≤ capacidad y con stock; cupo de escolta; ruta por tierra; `salirEn` en `(ahora, ahora + máx]`. No se
-    /// comprueba nada del destino. Efecto: la carga se reserva **ya** del almacén; `saleEn = max(ahora + kPorCarro × (carros − 1), salirEn)`;
+    /// comprueba nada del destino. Efecto: la carga se reserva **ya** del almacén; `saleEn = max(ahora + max(minimoMinutos, kPorCarro × (carros − 1)), salirEn)`;
     /// con `saleEn > ahora` queda `Preparando` (el evento a `prepara_hasta` la pasa a `EnTransito` con [`Caravana::salir`]); si no,
     /// `EnTransito` y el núcleo le pone el plan con [`Caravana::poner_plan`] (sin evento `caravana_sale`).
     pub fn preparar(&mut self, r: &ReglasFlota, p: Lanzamiento, almacen: &mut Almacen, ahora: Instante) -> Result<Preparacion, ErrorCaravana> {
@@ -524,7 +527,7 @@ impl Caravana {
                 return Err(ErrorCaravana::SalidaInvalida);
             }
         }
-        let prep = r.k_preparacion_por_carro * (self.carros.len() as i64 - 1).max(0);
+        let prep = (r.k_preparacion_por_carro * (self.carros.len() as i64 - 1).max(0)).max(r.preparacion_minima);
         let sale_en = (ahora + prep).max(p.salir_en.unwrap_or(0));
         let estado = if sale_en > ahora { EstadoCaravana::Preparando } else { EstadoCaravana::EnTransito };
         // Solo unidades enteras (C3b): una línea con fracción carga su parte entera.
@@ -573,21 +576,22 @@ impl Caravana {
         Ok(())
     }
 
-    /// Comercio_Caravanas §5.8.4: una `Esperando` con encargo sale hacia la otra punta. Desde el origen pasa a `EnTransito` (`punta = Destino`); desde el destino
-    /// a `Retornando` (`punta = Origen`). Pone el destino del encargo, la posición en el primer punto de la ruta, la ruta, los costes, los peajes y el plan, y
-    /// el encargo queda en `Fase::Descarga` (lo primero que hará al llegar) y sin `fin_paso`. No toca la carga ni la escolta.
-    pub fn salir_de_parada(&mut self, ruta: Vec<Punto>, costes: Vec<i64>, peajes: Vec<Peaje>, plan: Plan) -> Result<(), ErrorCaravana> {
-        let (nuevo, punta) = match (self.estado, self.encargo.as_ref().map(|e| e.punta)) {
-            (EstadoCaravana::Esperando, Some(Punta::Origen)) => (EstadoCaravana::EnTransito, Punta::Destino),
-            (EstadoCaravana::Esperando, Some(Punta::Destino)) => (EstadoCaravana::Retornando, Punta::Origen),
-            _ => return Err(ErrorCaravana::EstadoInvalido),
-        };
-        self.pasar(nuevo)?;
+    /// Comercio_Caravanas §5.8.4: una `Esperando` con encargo sale hacia la parada `hacia` (la punta y el tramo; el núcleo la elige con [`Encargo::siguiente`], saltando
+    /// las que ya no valen). Hacia una parada de fuera pasa a `EnTransito`, y hacia el origen a `Retornando`. El destino de la caravana es la parada a la que va o, de
+    /// vuelta, la de la que viene. Pone la posición en el primer punto de la ruta, la ruta, los costes, los peajes y el plan, y el encargo queda en `Fase::Descarga`
+    /// (lo primero que hará al llegar) y sin `fin_paso`. No toca la carga ni la escolta.
+    pub fn salir_de_parada(&mut self, hacia: (Punta, u8), ruta: Vec<Punto>, costes: Vec<i64>, peajes: Vec<Peaje>, plan: Plan) -> Result<(), ErrorCaravana> {
+        if self.estado != EstadoCaravana::Esperando || self.encargo.is_none() {
+            return Err(ErrorCaravana::EstadoInvalido);
+        }
+        let (punta, tramo) = hacia;
+        self.pasar(if punta == Punta::Origen { EstadoCaravana::Retornando } else { EstadoCaravana::EnTransito })?;
         let e = self.encargo.as_mut().expect("comprobado arriba");
-        e.punta = punta;
+        let de_donde = e.plaza_fuera();
+        (e.punta, e.tramo) = (punta, if punta == Punta::Origen { 0 } else { tramo });
         e.fase = Fase::Descarga;
         (e.fin_paso, e.inicio_paso) = (None, None);
-        self.destino = Some(e.destino);
+        self.destino = Some(if punta == Punta::Origen { de_donde } else { e.plaza_fuera() });
         self.posicion = ruta.first().copied().unwrap_or(self.posicion);
         self.ruta = ruta;
         self.costes = costes;
@@ -615,6 +619,7 @@ impl Caravana {
         self.ruta.clear();
         self.costes.clear();
         self.peajes.clear();
+        self.escalas.clear();
         self.plan = None;
         self.anfitriona = None;
     }
@@ -694,6 +699,41 @@ impl Caravana {
         self.peajes.first().and_then(|p| instante_de_progreso(plan, p.progreso))
     }
 
+    /// La escala en la que está en `t`, si está dentro de una plaza de paso.
+    pub fn en_escala(&self, t: Instante) -> Option<&Escala> {
+        self.escalas.iter().find(|e| e.entra <= t && t < e.sale)
+    }
+
+    /// La próxima escala en la que entra después de `t`.
+    pub fn proxima_escala(&self, t: Instante) -> Option<&Escala> {
+        self.escalas.iter().find(|e| e.entra > t)
+    }
+
+    /// Cobra el peaje de la ciudad `ciudad` al entrar en ella (bloque E, 2026-11-23), con la regla de [`Caravana::cobrar_peajes`]: lo quita de los pendientes
+    /// y devuelve lo cobrado. `None` si no le debía peaje (una plaza propia, una vuelta sin encargo) o no había nada que cobrar.
+    pub fn cobrar_peaje_de(&mut self, ciudad: AsentamientoId, tasa: i64, precios: &TablaPrecios, oro: &mut Mil) -> Option<CobroPeaje> {
+        if !self.cruza_peajes() {
+            return None;
+        }
+        let i = self.peajes.iter().position(|p| p.ciudad == ciudad)?;
+        self.peajes.remove(i);
+        let cobro = self.cobrar_uno(ciudad, tasa, precios, oro);
+        self.contenido.retain(|_, n| *n > 0);
+        cobro
+    }
+
+    /// Un peaje: el 2 % del valor de lo que lleva, en oro hasta donde llegue `oro` y en especie lo que falte.
+    fn cobrar_uno(&mut self, ciudad: AsentamientoId, tasa: i64, precios: &TablaPrecios, oro: &mut Mil) -> Option<CobroPeaje> {
+        // El oro se mueve en unidades enteras (el almacén no guarda fracciones): se debe hacia arriba, como el oro de una compra en el mostrador.
+        let debido = entero_arriba(por(precios.valor(&self.contenido), tasa));
+        let pagado = entero(debido.min(*oro).max(0));
+        *oro -= pagado;
+        // Sin deuda en oro (carga sin valor) la fracción sin pagar es toda la tasa, como siempre.
+        let tasa_especie = if debido > 0 { (tasa as i128 * (debido - pagado) as i128 / debido as i128) as i64 } else { tasa };
+        let cobrado = cobrar_en_especie(&mut self.contenido, tasa_especie);
+        (pagado > 0 || !cobrado.is_empty()).then_some(CobroPeaje { ciudad, oro: pagado, cobrado })
+    }
+
     /// Cobra los peajes alcanzados en `ahora` (§7.3, solo a la ida; con encargo, también a la vuelta): para cada uno se debe en **oro** `PEAJE_PASO.tasa` del
     /// **valor** de lo que lleva en ese momento (ya reducido por los anteriores), a los precios de `precios`. El pagador es la capital de la Facción dueña y
     /// `oro` es lo que tiene: se paga hasta donde llegue y baja en lo pagado. Lo que falta se paga en **especie de la carga** con la regla de siempre
@@ -709,16 +749,7 @@ impl Caravana {
         self.peajes = pendientes;
         let mut cobros = Vec::new();
         for pj in alcanzados {
-            // El oro se mueve en unidades enteras (el almacén no guarda fracciones): se debe hacia arriba, como el oro de una compra en el mostrador.
-            let debido = entero_arriba(por(precios.valor(&self.contenido), tasa));
-            let pagado = entero(debido.min(*oro).max(0));
-            *oro -= pagado;
-            // Sin deuda en oro (carga sin valor) la fracción sin pagar es toda la tasa, como siempre.
-            let tasa_especie = if debido > 0 { (tasa as i128 * (debido - pagado) as i128 / debido as i128) as i64 } else { tasa };
-            let cobrado = cobrar_en_especie(&mut self.contenido, tasa_especie);
-            if pagado > 0 || !cobrado.is_empty() {
-                cobros.push(CobroPeaje { ciudad: pj.ciudad, oro: pagado, cobrado });
-            }
+            cobros.extend(self.cobrar_uno(pj.ciudad, tasa, precios, oro));
         }
         self.contenido.retain(|_, n| *n > 0);
         cobros
@@ -753,6 +784,7 @@ impl Caravana {
             self.ruta.clear();
             self.costes.clear();
             self.peajes.clear();
+            self.escalas.clear();
             self.plan = None;
             return Ok(Llegada::Parada { punta });
         }
@@ -777,6 +809,7 @@ impl Caravana {
         self.ruta = invertir_ruta(&self.ruta);
         self.costes.reverse();
         self.peajes.clear();
+        self.escalas.clear();
         Ok(if self.tipo == TipoCaravana::Acarreo { Llegada::Acarreo { destino, contenido } } else { Llegada::Entrega { destino, contenido, origen_acuerdo } })
     }
 
@@ -793,11 +826,12 @@ impl Caravana {
     pub fn regresar_a_origen(&mut self, ruina: AsentamientoId, plan: Plan) -> Result<(), ErrorCaravana> {
         self.pasar(EstadoCaravana::Retornando)?;
         if let Some(e) = self.encargo.as_mut() {
-            (e.punta, e.cancelado) = (Punta::Origen, true);
+            (e.punta, e.tramo, e.cancelado) = (Punta::Origen, 0, true);
         }
         self.destino = Some(ruina);
         self.origen_acuerdo = None;
         self.peajes.clear();
+        self.escalas.clear();
         self.prepara_hasta = None;
         self.plan = Some(plan);
         Ok(())
@@ -900,6 +934,7 @@ impl Caravana {
         self.pasar(EstadoCaravana::Retornando)?;
         self.destino = self.anfitriona.take();
         self.peajes.clear();
+        self.escalas.clear();
         self.plan = Some(plan);
         Ok(())
     }
@@ -1320,13 +1355,18 @@ mod pruebas {
     // ---- lanzar a mano ----
 
     #[test]
-    fn lanzar_una_caravana_de_un_carro_sale_al_instante_y_reserva_la_carga() {
+    fn lanzar_una_caravana_de_un_carro_sale_a_los_dos_minutos_y_reserva_la_carga() {
         let r = r();
+        assert_eq!(r.preparacion_minima, 2 * 60_000, "CARAVANA_PREPARACION.minimoMinutos es 2");
         let mut c = buey();
         let mut alm = almacen(&[(Recurso::Madera, 300_000)]);
+        // Ninguna caravana sale antes de 2 min, aunque lleve un solo carro (2026-11-23); sin ese mínimo saldría en el acto.
         let p = c.preparar(&r, lanz(20, &[(Recurso::Madera, 200_000)]), &mut alm, 1_000).unwrap();
+        assert_eq!(p, Preparacion { estado: Preparando, sale_en: 121_000 });
+        assert_eq!((c.estado, c.destino, c.prepara_hasta), (Preparando, Some(20), Some(121_000)));
+        let mut d = buey();
+        let p = d.preparar(&ReglasFlota { preparacion_minima: 0, ..r.clone() }, lanz(20, &[(Recurso::Madera, 50_000)]), &mut almacen(&[(Recurso::Madera, 50_000)]), 1_000).unwrap();
         assert_eq!(p, Preparacion { estado: EnTransito, sale_en: 1_000 });
-        assert_eq!((c.estado, c.destino, c.prepara_hasta), (EnTransito, Some(20), None));
         assert_eq!((alm.cantidad(Recurso::Madera), c.contenido[&Recurso::Madera]), (100_000, 200_000), "la carga se reserva ya");
         assert_eq!(c.ruta.len(), 3);
         assert!(c.plan.is_none(), "el núcleo le pone el plan desde `sale_en`");
@@ -1455,7 +1495,8 @@ mod pruebas {
         let mut alm = almacen(contenido);
         let mut p = lanz(20, contenido);
         p.peajes = peajes;
-        c.preparar(r, p, &mut alm, 0).unwrap();
+        // Sin la preparación mínima, para que salga en el acto y el viaje empiece en 0.
+        c.preparar(&ReglasFlota { preparacion_minima: 0, ..r.clone() }, p, &mut alm, 0).unwrap();
         c.poner_plan(plan_uniforme(&ruta(), 0, c.velocidad(r), 1).unwrap()).unwrap();
         c
     }
@@ -1735,7 +1776,8 @@ mod pruebas {
 
     fn sale(c: &mut Caravana, r: &ReglasFlota, peajes: Vec<Peaje>) {
         let plan = plan_de(c, r, 0);
-        c.salir_de_parada(ruta(), vec![1, 2], peajes, plan).unwrap();
+        let hacia = c.encargo.as_ref().unwrap().siguiente();
+        c.salir_de_parada(hacia, ruta(), vec![1, 2], peajes, plan).unwrap();
     }
 
     #[test]
@@ -1772,13 +1814,13 @@ mod pruebas {
         let r = r();
         let plan = plan_de(&buey(), &r, 0);
         let mut sin_encargo = Caravana { estado: Esperando, ..buey() };
-        assert_eq!(sin_encargo.salir_de_parada(ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
+        assert_eq!(sin_encargo.salir_de_parada((Punta::Destino, 0), ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
         let mut disponible = buey();
-        assert_eq!(disponible.salir_de_parada(ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
+        assert_eq!(disponible.salir_de_parada((Punta::Destino, 0), ruta(), vec![], vec![], plan.clone()), Err(ErrorCaravana::EstadoInvalido));
         assert_eq!(disponible.estado, Disponible);
         let mut c = con_encargo();
         c.estado = EnTransito;
-        assert_eq!(c.salir_de_parada(ruta(), vec![], vec![], plan), Err(ErrorCaravana::EstadoInvalido));
+        assert_eq!(c.salir_de_parada((Punta::Destino, 0), ruta(), vec![], vec![], plan), Err(ErrorCaravana::EstadoInvalido));
     }
 
     #[test]

@@ -658,6 +658,8 @@ fn una_caravana_que_llega_da_el_renombre_de_la_escolta_y_cuenta_buen_camino_a_qu
         assert_eq!(antes, d.plazo(7).unwrap().renombre);
 
         mc::ok(&mut e.n, "admin", Comando::PrepararCaravana { caravana: k, destino: ajena, carga: vec![(Recurso::Cobre, 10_000)], salir_en: None, escolta: None });
+        let sale = e.n.ahora() + 2 * MIN; // la preparación mínima, aunque sea de un carro (bloque E, 2026-11-23)
+        e.n.avanzar_hasta(sale);
         let llegada = e.n.caravana(k).and_then(|c| c.plan.as_ref()?.fin()).expect("sale y viaja");
         e.n.avanzar_hasta(llegada - 1);
         assert_eq!(e.del_contrato(bot), antes, "mientras viaja no ha ganado nada");

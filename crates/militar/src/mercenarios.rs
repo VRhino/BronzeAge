@@ -428,7 +428,7 @@ mod pruebas {
         m.h.escuadra_mut(50).unwrap().cantidad = 10;
         m.h.escuadra_mut(50).unwrap().contenedor = Contenedor::Ejercito(8);
         assert_eq!(recluta(&mut m, Tropa::Arqueros, 0), Err(ErrorMercenarios::YaLaTienesFuera(Contenedor::Ejercito(8))));
-        m.columnas = vec![(8, 1_999)];
+        m.columnas = vec![(8, 999)];
         assert_eq!(recluta(&mut m, Tropa::Arqueros, 0).map(|x| x.cantidad), Ok(10));
         m.h.escuadra_mut(50).unwrap().cantidad = 1;
         m.h.escuadra_mut(50).unwrap().contenedor = Contenedor::Escolta(2);
@@ -518,7 +518,7 @@ mod pruebas {
         h.escuadras[1].contenedor = Contenedor::Ejercito(8); // en una columna lejos
         h.escuadras[2].cantidad = 9;
         h.escuadras[2].contenedor = Contenedor::Ejercito(9); // en una columna a la puerta
-        let busca = |c: ColumnaId| if c == 9 { Some(2_000) } else { Some(2_001) };
+        let busca = |c: ColumnaId| if c == 9 { Some(1_000) } else { Some(1_001) };
         assert_eq!(reponer_prestamo(&r, &mut h, 3, &busca), Ok(2));
         assert_eq!((h.escuadras[0].cantidad, h.escuadras[1].cantidad, h.escuadras[2].cantidad), (30, 6, 25));
         assert_eq!(reponer_prestamo(&r, &mut h, 3, &busca), Err(ErrorMercenarios::NadaQueReponer));

@@ -773,6 +773,8 @@ message OrdenEncargarCaravana {
   optional sint64 salir_en_ms = 4;  // solo el envío: hora de mundo, hasta `maxProgramacionDias` vista; sin ella sale ya
   ParadaEncargo parada_origen = 5;
   ParadaEncargo parada_destino = 6;
+  // La ruta compuesta (2026-11-23): hasta tres paradas más después del destino, en orden; tras la última vuelve al origen (A → B → C → A). Vacío, el encargo de dos paradas.
+  repeated ParadaEncargoEn mas_paradas = 7;
 }
 
 // Desde el Mercado de la plaza `asentamiento_id`, toma `cantidad` de la orden de mercado `orden_id` de otra plaza (tanda 69 §7). Los mismos cargos que `encargar_caravana`. Hace falta un informe
@@ -792,6 +794,8 @@ message OrdenCambiarEncargo {
   optional sint64 salir_en_ms = 3;
   ParadaEncargo parada_origen = 4;
   ParadaEncargo parada_destino = 5;
+  // Las paradas después del destino (la ruta compuesta, 2026-11-23). Las plazas solo cambian con la caravana esperando en su origen; las líneas, siempre.
+  repeated ParadaEncargoEn mas_paradas = 6;
 }
 
 // Cancela el encargo de una caravana (los mismos que pueden darlo). Esperando en su origen, queda `disponible` allí y lo que llevara vuelve al almacén; si no,

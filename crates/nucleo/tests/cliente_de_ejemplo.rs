@@ -212,7 +212,8 @@ async fn un_cliente_que_solo_habla_el_contrato_nace_comercia_explora_funda_const
     assert!(tebas.nombre == "Tebas" && tebas.liga.is_some() && tebas.capital_id.is_none());
 
     // 9. Ataca a unos bandidos fuera de toda zona (los pone la administración): con servidores de batalla, la batalla se abre y llega por su ámbito `BATALLA`.
-    let lejos = Punto::new(sitio.x + (sitio.x - camp0.x).signum() * 45 * U, sitio.y);
+    // Al otro lado de la plaza que el campamento, a 45 u (fuera de su zona); si la plaza está justo al norte o al sur del campamento, en ese eje.
+    let lejos = if sitio.x != camp0.x { Punto::new(sitio.x + (sitio.x - camp0.x).signum() * 45 * U, sitio.y) } else { Punto::new(sitio.x, sitio.y + (sitio.y - camp0.y).signum() * 45 * U) };
     let destino = en_tierra(&m.0, lejos, 0, 0);
     ana.aceptada(marcha(destino)).await;
     llegar(&mut adm, &mut ana, &heroe, &col).await;

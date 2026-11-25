@@ -140,6 +140,9 @@ pub struct ReglasMovimiento {
     pub factor_velocidad_forzada: i64,
     /// Cuánto más come una columna en marcha forzada mientras marcha (ppm; `MOVIMIENTO.factorConsumoMarchaForzada`).
     pub factor_consumo_forzada: i64,
+    /// Cuántas veces cuesta, al trazar la ruta de una columna, un tramo que se mete en una plaza (`MOVIMIENTO.factorPasoPorPlaza`, entero; Tamaños y
+    /// distancias del mapa, bloque E, 2026-11-23): las columnas rodean las plazas y solo las cruzan si no hay otro camino.
+    pub factor_paso_por_plaza: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -325,6 +328,7 @@ impl Reglas {
                 radio_inspeccion: mil(num(&mv, "radioInspeccion")),
                 factor_velocidad_forzada: ppm(num(&mv, "factorVelocidadMarchaForzada")),
                 factor_consumo_forzada: ppm(num(&mv, "factorConsumoMarchaForzada")),
+                factor_paso_por_plaza: entero(&mv, "factorPasoPorPlaza"),
             },
             formacion: ReglasFormacion { minimo: entero(&fm, "minimo") as usize, plazo: entero(&fm, "plazoMinutos") * MS_POR_MINUTO },
             vision: ReglasVision { ejercito: mil(num(&vs, "ejercito")), jugador_solo: mil(num(&vs, "jugadorSolo")), avanzada: mil(num(&vs, "avanzada")), tamano_celda: mil(num(&bloque(NIEBLA, "EXPLORACION"), "tamanoCelda")) },
@@ -458,7 +462,7 @@ mod pruebas {
         assert_eq!((r.logistica.umbral_narrar_reposte, r.logistica.factor_repostaje_en_zona), (500_000, 1_250_000));
         assert_eq!((r.logistica.factor_marcha, r.logistica.factor_estacionado), (250_000, 100_000));
         assert_eq!(r.logistica.bonus_viveres, BonusViveres { tecnologia: "logistica_campana".into(), factor: 1_500_000 });
-        assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (66_000, 500, 2_000));
+        assert_eq!((r.movimiento.velocidad_jugador, r.movimiento.consumo_por_participante, r.movimiento.radio_puerta), (66_000, 500, 1_000));
         assert_eq!((r.movimiento.vida_peticion_union, r.movimiento.radio_inspeccion, r.inspeccion.informe), (10_000, 8_000, 10 * MS_POR_MINUTO));
         assert_eq!((r.formacion.minimo, r.formacion.plazo), (3, 10 * MS_POR_MINUTO));
         assert_eq!((r.vision.ejercito, r.vision.jugador_solo), (30_000, 15_000));

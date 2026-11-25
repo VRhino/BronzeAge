@@ -454,12 +454,12 @@ mod pruebas {
         let mut m = mundo();
         reclutar_de(&mut m, Tropa::MiliciaLanceros).unwrap();
         m.heroe.escuadra_mut(77).unwrap().cantidad = 5;
-        // En una columna: solo con la columna a la puerta (≤ 2).
+        // En una columna: solo con la columna a la puerta (a 1 o menos del borde del campamento).
         m.heroe.escuadra_mut(77).unwrap().contenedor = Contenedor::Ejercito(9);
         assert_eq!(reclutar_de(&mut m, Tropa::MiliciaLanceros), Err(ErrorReclutamiento::YaLaTienesFuera(Contenedor::Ejercito(9))), "la columna ni existe");
-        m.columnas = vec![(9, 2_001)];
+        m.columnas = vec![(9, 1_001)];
         assert!(matches!(reclutar_de(&mut m, Tropa::MiliciaLanceros), Err(ErrorReclutamiento::YaLaTienesFuera(_))));
-        m.columnas = vec![(9, 2_000)];
+        m.columnas = vec![(9, 1_000)];
         assert_eq!(reclutar_de(&mut m, Tropa::MiliciaLanceros).map(|x| x.cantidad), Ok(20), "con la columna a la puerta sí");
         // En escolta o fuera del mundo: nunca. En el campamento de otra residencia: tampoco.
         m.heroe.escuadra_mut(77).unwrap().cantidad = 5;

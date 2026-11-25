@@ -105,6 +105,12 @@ message ParadaEncargo {
   bool desechar_sobrante = 4;
 }
 
+// Una parada de la ruta compuesta después del destino (2026-11-23): la plaza y lo que hace en ella.
+message ParadaEncargoEn {
+  string asentamiento_id = 1;
+  ParadaEncargo parada = 2;
+}
+
 message LineaRecoger {
   string recurso = 1;  // id de catálogo
   sint64 cantidad = 2;  // milésimas (unidades enteras)

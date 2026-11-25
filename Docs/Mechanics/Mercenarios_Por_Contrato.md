@@ -2,7 +2,7 @@
 
 > **Implementado en Rust el 2026-11-01 (entrada 48).** Reglas puras en el crate `crates/mercenarios` (`tipos.rs`, `datos.rs`, `contrato.rs`, `orden.rs`, `progresion.rs`); la marca de
 > ciudadanía en `crates/politica`; el mundo en `crates/nucleo/src/nucleo/contratos/` (`firma`, `mando`, `fin`, `guardas`, `tropa`, `renombre`); lo que ve cada uno en
-> `crates/nucleo/src/proyeccion/mercenarios.rs` y `audiencia.rs`. Foto **BAN54** (hoy BAN60; las fotos anteriores a BAN60 ya no se leen). El canon está en [`Docs/Game/7_Bots_Mercenarios.md`](../Game/7_Bots_Mercenarios.md).
+> `crates/nucleo/src/proyeccion/mercenarios.rs` y `audiencia.rs`. Foto **BAN54** (hoy BAN69; solo se lee el formato vigente). El canon está en [`Docs/Game/7_Bots_Mercenarios.md`](../Game/7_Bots_Mercenarios.md).
 > Todas las cifras son borradores que se calibran con bots (fase 7).
 
 ## 1. Qué es
@@ -173,7 +173,7 @@ caducan si la convocatoria se cancela. Hechos `mercenarios.orden_cumplida` y `me
 ### 6.4 Qué admite cada trabajo
 
 La tabla `TRABAJOS_MERCENARIOS` (§17) da a cada trabajo sus clases de objetivo, su orden inicial y las órdenes que admite después (`mercenario.orden_fuera_de_contrato` si no):
-`guardar_objetivo` es `guardar` del objetivo del contrato y `atacar_en_radio`, `atacar` de algo que esté a ≤ `radioDefensa` del objetivo del contrato. La orden inicial es la de su
+`guardar_objetivo` es `guardar` del objetivo del contrato y `atacar_en_radio`, `atacar` de algo que esté a ≤ `radioDefensa` del objetivo del contrato (si el objetivo es una plaza, **desde el borde de su zona**, decisión del autor del 2026-11-23: con la zona de 24 a 90 u, medido desde el centro no alcanzaba nunca a unos bandidos, que no se levantan dentro de una zona; de otro objetivo, desde su punto). La orden inicial es la de su
 fila sobre el objetivo del contrato, salvo en el permanente, que es `guardar` de la plaza donde reside.
 
 ### 6.5 Quién ordena qué y el rango

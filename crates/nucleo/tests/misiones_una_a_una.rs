@@ -618,7 +618,7 @@ fn a8_completar_una_avanzada() {
     for _ in 0..9 {
         x.ok("admin", Comando::AgrandarZona { asentamiento: a });
     }
-    let sitio = real::en_tierra(&m.0, x.posicion(a), 8_000, 0);
+    let sitio = real::en_tierra(&m.0, x.posicion(a), 16_000, 0);
     let (col, h) = x.columna("ana", 1, sitio, 100_000);
     comun::coloca_avanzadas(&mut x.n, a, h);
     // La coloca la administración (desde el 2026-11-04 se coloca desde dentro de la madre; esta prueba mide la misión, no quién la coloca).

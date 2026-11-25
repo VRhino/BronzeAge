@@ -238,7 +238,7 @@ fn salir_al_mundo_valida_en_orden_carga_el_carro_llena_los_viveres_y_un_rechazo_
     let c = &e.ejercito(col).columna;
     assert_eq!((c.tipo, c.lider, c.politica, c.estado, c.faccion), (TipoColumna::Personal, h, Politica::Rechazar, Marcha::Estacionada, Some(1)));
     assert_eq!((c.participantes.len(), c.escuadras.clone(), c.carga[&Madera]), (1, vec![milicia], 30_000));
-    assert_eq!(e.ejercito(col).posicion, e.plaza());
+    assert_eq!(e.ejercito(col).posicion, e.n.al_borde(e.plaza()), "nace en el contorno de la plaza");
     assert!(!e.ejercito(col).marchando());
     assert_eq!(madera0 - e.almacen(Madera), 30_000, "la carga sale del almacén");
     let llenado = trigo0 - e.almacen(Trigo);
@@ -359,7 +359,7 @@ fn movilizar_exige_una_escuadra_y_el_ejercito_nace_quieto_con_su_politica() {
     let col = e.ok("ana", movilizar(&[milicia], Politica::Preguntar)).creadas[0];
     let c = &e.ejercito(col).columna;
     assert_eq!((c.tipo, c.politica, c.estado, c.lider), (TipoColumna::Ejercito, Politica::Preguntar, Marcha::Estacionada, h));
-    assert_eq!(e.ejercito(col).posicion, e.plaza(), "sale quieto en la puerta: su Líder lo dirige con marcharA");
+    assert_eq!(e.ejercito(col).posicion, e.n.al_borde(e.plaza()), "sale quieto en la puerta, en su contorno: su Líder lo dirige con marcharA");
     assert_eq!(hechos(&e.n, "ejercito.movilizado").len(), 1);
 }
 
@@ -438,7 +438,8 @@ fn marchar_come_un_cuarto_de_racion_la_velocidad_es_la_de_la_tropa_mas_lenta_y_a
     let fin = e.ejercito(col).plan.fin().unwrap();
     e.n.avanzar_hasta(fin);
     assert!(!e.ejercito(col).marchando());
-    assert_eq!(e.ejercito(col).posicion, destino);
+    // A una plaza se llega a su contorno, por donde entra la ruta (2026-11-23).
+    assert!((e.ejercito(col).posicion.dist(destino) - e.n.radio_en(destino)).abs() <= 1, "acampa en el contorno de la plaza");
     assert_eq!(e.n.consumo_de_columna(col), Some(racion::racion_columna(&mr(), 60, 1, Marcha::Estacionada)), "al llegar acampa y come una décima parte");
     // Estacionar a mitad de camino es del Líder y deja la columna donde está.
     e.ok("ana", Comando::MarcharA { ejercito: col, destino: campamento(&m.0, 0) });
@@ -488,7 +489,7 @@ fn la_marcha_forzada_va_un_cincuenta_por_ciento_mas_deprisa_come_el_doble_solo_m
     assert!(e.ejercito(col).plan.fin().unwrap() < fin_normal);
     // Va en la foto.
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN69");
     let vuelta = nucleo::Estado::deserializar(&bytes, &Reglas::default(), &e.n.estado().mundo_hash).unwrap();
     assert!(vuelta.ejercitos[&col].columna.forzada, "la marcha forzada va en la foto");
     assert_eq!(vuelta.serializar(), bytes);
@@ -583,7 +584,7 @@ fn salir_del_campamento_da_la_racion_gratis_cada_media_hora_y_entrar_en_el_deja_
     // Con política distinta de rechazar sale como ejército; el almacén personal pierde lo cargado.
     assert_eq!((e.ejercito(col).columna.tipo, e.ejercito(col).columna.politica), (TipoColumna::Ejercito, Politica::Aceptar));
     assert_eq!(e.n.heroe(h).unwrap().almacen_personal[&Oro], 30_000);
-    assert_eq!((e.viveres(col), e.ejercito(col).posicion), (350_000, campamento(&m.0, 0)));
+    assert_eq!((e.viveres(col), e.ejercito(col).posicion), (350_000, e.n.al_borde(campamento(&m.0, 0))));
     assert_eq!(hechos(&e.n, "jugador.sale_de_campamento").len(), 1);
 
     // Entrar de nuevo en su campamento: la tropa vuelve a él y los víveres siguen con el héroe, pero el carro NO se vuelca en el almacén personal: se queda con él
@@ -1303,4 +1304,42 @@ fn recuperar_desde_foto_con_una_convocatoria_ya_partida_y_una_peticion_viva_da_e
     assert_eq!(e.n.hash_estado(), sin_parar.0);
     assert_eq!(e.n.estado().serializar(), sin_parar.1, "el estado recuperado sigue igual que el que no se interrumpió");
     e.n.apagar().unwrap();
+}
+
+// ───────────────────────────── Las columnas rodean las plazas (bloque E) ─────────────────────────────
+
+/// ¿Se mete el plan en el disco de `centro` y `radio`? Muestreado cada cuarto de unidad, con una décima de holgura.
+fn se_mete(plan: &base::Plan, centro: Punto, radio: i64) -> bool {
+    plan.vertices.windows(2).any(|w| {
+        let (a, b) = (w[0].p, w[1].p);
+        let n = (a.dist(b) / 250).max(1);
+        (0..=n).any(|k| Punto::new(a.x + (b.x - a.x) * k / n, a.y + (b.y - a.y) * k / n).dist(centro) < radio - 100)
+    })
+}
+
+#[test]
+fn una_columna_que_pasa_junto_a_una_plaza_la_rodea_en_vez_de_cruzarla() {
+    let m = con_mundo!();
+    let mut e = escenario(m, 7);
+    let a = e.a;
+    e.ok("admin", Comando::FijarNivelAsentamiento { asentamiento: a, nivel: 5 });
+    let (plaza, radio) = (e.plaza(), e.n.radio_en(e.plaza()));
+    assert!(radio > 5_000, "la plaza de nivel 5 mide más de 5 u de radio: {radio}");
+    // Dos puntos a lados opuestos de la plaza, a 6 u de su borde, entre los que la ruta sin estorbos la cruza.
+    let lejos = radio + 6_000;
+    let par = (0..16).map(|k| {
+        let ang = k as f64 * std::f64::consts::PI / 8.0;
+        let (dx, dy) = ((ang.cos() * lejos as f64) as i64, (ang.sin() * lejos as f64) as i64);
+        (Punto::new(plaza.x - dx, plaza.y - dy), Punto::new(plaza.x + dx, plaza.y + dy))
+    }).find(|&(o, d)| {
+        let recta = e.n.rutas().ruta(o, d, &rutas::Opciones::de_columna());
+        recta.is_some_and(|c| se_mete(&c.a_plan(0, 1_000, 0), plaza, radio))
+    });
+    let Some((origen, destino)) = par else { panic!("no hay dos puntos opuestos con una ruta que cruce la plaza") };
+    let col = e.n.crear_ejercito(e.n.ahora(), "ana", 1, origen, 5_000, 100_000).unwrap();
+    e.ok("ana", Comando::MarcharA { ejercito: col, destino });
+    let plan = e.ejercito(col).plan.clone();
+    assert!(!se_mete(&plan, plaza, radio), "la columna rodea la plaza: {:?}", plan.vertices.iter().map(|v| v.p).collect::<Vec<_>>());
+    e.n.avanzar_hasta(plan.fin().unwrap());
+    assert!(e.ejercito(col).posicion.dist(destino) <= 1, "y llega a donde iba");
 }

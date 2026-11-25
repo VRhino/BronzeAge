@@ -254,7 +254,8 @@ impl Nucleo {
             hn.heroe.racion_en = Some(t);
         }
         let comida = if *racion_gratis { mr.logistica.capacidad_viveres } else { propios + trigo };
-        let posicion = self.puerta_de(*lugar).expect("el lugar existe");
+        // Nace en el contorno (2026-11-23), no en el centro.
+        let posicion = self.salida_de(*lugar).expect("el lugar existe");
         let columna = match (retoma, destino) {
             (Some(c0), Destino::Columna { tipo, politica }) => {
                 // Sale con la columna que trajo: tal cual (de visita) o con lo que se le suma (si la conservaba en su residencia).
@@ -512,7 +513,8 @@ impl Nucleo {
                 self.salir_con_fundacion(t, p, *heroe, Lugar::Campamento(*campamento), escuadras, carga, false, *politica, *caravana_fundacion)
             }
             Comando::EntrarEnAsentamiento { asentamiento, heroe } => {
-                let plaza = self.plaza_o_rechazo(*asentamiento)?.posicion;
+                let plaza = self.plaza_o_rechazo(*asentamiento)?;
+                let (plaza, radio) = (plaza.posicion, self.radio_de_plaza(plaza));
                 self.autorizar_heroe(p, *heroe, false)?;
                 let (_, e) = self.columna_a_bordo(*heroe)?;
                 if e.columna.tipo != TipoColumna::Personal {
@@ -521,7 +523,7 @@ impl Nucleo {
                 if e.columna.es_formacion() {
                     return Err(rechazo(rechazos::COLUMNA_EN_FORMACION, "cancela antes la formación".into()));
                 }
-                if !p.admin && e.posicion_en(t).dist(plaza) > self.radio_puerta() {
+                if !p.admin && !self.a_la_puerta(plaza, radio, e.posicion_en(t)) {
                     return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
                 }
                 if !self.puede_entrar_en_plaza(*heroe, *asentamiento) {
@@ -660,13 +662,14 @@ impl Nucleo {
     fn guarnecer(&mut self, t: Instante, p: &Peticion, asentamiento: u64, heroe: u64) -> Result<Vec<u64>, Respuesta> {
         let v = self.estado.version;
         let rechazo = |c: &'static str, m: String| Respuesta::rechazo(c, m, v);
-        let posicion = self.plaza_o_rechazo(asentamiento)?.posicion;
+        let plaza = self.plaza_o_rechazo(asentamiento)?;
+        let (posicion, radio) = (plaza.posicion, self.radio_de_plaza(plaza));
         self.autorizar_heroe(p, heroe, false)?;
         let (id, e) = self.columna_a_bordo(heroe)?;
         if !Self::es_ejercito(e) {
             return Err(rechazo(rechazos::COLUMNA_NO_ES_EJERCITO, "solo un ejército guarnece: una columna personal entra con `entrarEnAsentamiento`".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(posicion) > self.radio_puerta() {
+        if !p.admin && !self.a_la_puerta(posicion, radio, e.posicion_en(t)) {
             return Err(rechazo(rechazos::ASENTAMIENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta de la plaza".into()));
         }
         if e.columna.lider != heroe {
@@ -701,7 +704,7 @@ impl Nucleo {
         if !solo && e.columna.lider != heroe {
             return Err(rechazo(rechazos::COLUMNA_SOLO_EL_LIDER, "solo el Líder hace entrar al ejército".into()));
         }
-        if !p.admin && e.posicion_en(t).dist(puerta) > self.radio_puerta() {
+        if !p.admin && !self.a_la_puerta(puerta, self.radio_de_campamento(), e.posicion_en(t)) {
             return Err(rechazo(rechazos::CAMPAMENTO_FUERA_DE_LA_PUERTA, "la columna no está a la puerta del campamento".into()));
         }
         if solo {

@@ -1028,7 +1028,7 @@ fn la_foto_a_mitad_de_una_batalla_recupera_lo_mismo_y_cada_campo_cambia_el_hash(
     let (n, id) = a_mitad();
     let reglas = reglas_unity();
     let bytes = n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN65");
+    assert_eq!(&bytes[..5], b"BAN69");
     let vuelta = nucleo::Estado::deserializar(&bytes, &reglas, "hash-de-prueba").unwrap();
     assert_eq!(vuelta.serializar(), bytes, "serializar → deserializar → serializar es idéntico");
     assert_eq!(vuelta.batallas, n.estado().batallas);
@@ -2191,7 +2191,7 @@ fn los_bandidos_que_acosan_una_columna_con_dos_caravanas_juegan_las_dos_en_la_mi
 
         // La foto a mitad de la batalla lleva las dos caravanas y vuelve idéntica; la del formato anterior (una sola caravana) se rechaza con su motivo.
         let bytes = e.n.estado().serializar();
-        assert_eq!(&bytes[..5], b"BAN65");
+        assert_eq!(&bytes[..5], b"BAN69");
         let vuelta = nucleo::Estado::deserializar(&bytes, &arranque_mundo(m, 7).reglas, &m.0.hash().to_string()).unwrap();
         assert_eq!((vuelta.serializar(), vuelta.batallas.clone()), (bytes.clone(), e.n.estado().batallas.clone()));
 
@@ -2296,7 +2296,7 @@ fn con_pueblo(m: &M) -> (Esc, u64, u64, Punto) {
     ricos.sort_by_key(|&i| std::cmp::Reverse(mapa.nodos[i].inicial));
     let (cobre, sitio) = ricos
         .into_iter()
-        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 6_000).map(|p| (i as u32, p)))
+        .find_map(|i| sitio_junto_a(&n, &m.0, mapa.nodos[i].pos, 13_000).map(|p| (i as u32, p)))
         .expect("hay un nodo de cobre junto a un sitio rico");
     let madre = fundar(&mut n, 0, "m", "ana", 1, sitio);
     let mut e = Esc { n, a: madre, b: 0, cuenta: 0 };
