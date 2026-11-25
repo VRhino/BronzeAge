@@ -59,7 +59,7 @@ export interface DetalleRelieve {
   modulacion: CampoRuido;
   colinas: CampoRuido;
   lomas: CampoRuido;
-  /** Tramos de río aplanados: ax, ay, bx, by. */
+  /** Tramos de río aplanados: ax, ay, bx, by y el medio ancho del cauce (el mayor de sus dos puntos; 0 sin anchos). */
   tramos: number[];
   indice: Record<string, number[]>;
   /** Pasos de las barreras aplanados: cx, cy, tx, ty, radio, ancho de la barrera. */
@@ -83,8 +83,8 @@ export function crearDetalleRelieve(seed: number, rios: readonly RioZona[], barr
   const lomas = generarCampoRuido(rng, { octavas: 2, frecuenciaBase: onda(C.ondaLomas), lacunaridad: 2.03, persistencia: 0.5 });
   const tramos: number[] = [], indice: Record<string, number[]> = {};
   for (const rio of rios) for (let i = 1; i < rio.puntos.length; i++) {
-    const a = rio.puntos[i - 1]!, b = rio.puntos[i]!, k = tramos.length / 4;
-    tramos.push(a.x, a.y, b.x, b.y);
+    const a = rio.puntos[i - 1]!, b = rio.puntos[i]!, k = tramos.length / 5;
+    tramos.push(a.x, a.y, b.x, b.y, Math.max(rio.anchos?.[i - 1] ?? 0, rio.anchos?.[i] ?? 0) / 2);
     for (let y = Math.floor(Math.min(a.y, b.y) / C.celdaRios); y <= Math.floor(Math.max(a.y, b.y) / C.celdaRios); y++)
       for (let x = Math.floor(Math.min(a.x, b.x) / C.celdaRios); x <= Math.floor(Math.max(a.x, b.x) / C.celdaRios); x++) (indice[`${x},${y}`] ??= []).push(k);
   }
@@ -120,15 +120,16 @@ function crestas(r: CampoRuido, p: Point): number {
   return s / t;
 }
 
-/** Cuánto se hunde un valle de río en `p` (0-1): campana de semiancho que crece del llano al macizo. */
+/** Cuánto se hunde un valle de río en `p` (0-1): 1 en todo el cauce (su ancho) y, desde la orilla, una campana de semiancho que crece
+ * del llano al macizo. Así el detalle no asoma dentro del cauce: su fondo queda plano de orilla a orilla. */
 function valle(d: DetalleRelieve, p: Point, macizo: number): number {
   const C = RELIEVE_DETALLE, semiancho = (C.valleLlano + (C.valleMacizo - C.valleLlano) * macizo) * C.escala * FACTOR;
   const alcance = 2.5 * semiancho, r = Math.ceil(alcance / C.celdaRios), cx = Math.floor(p.x / C.celdaRios), cy = Math.floor(p.y / C.celdaRios);
   let d2 = alcance * alcance;
   for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) for (const k of d.indice[`${x},${y}`] ?? []) {
-    const ax = d.tramos[4 * k]!, ay = d.tramos[4 * k + 1]!, bx = d.tramos[4 * k + 2]!, by = d.tramos[4 * k + 3]!, dx = bx - ax, dy = by - ay;
+    const ax = d.tramos[5 * k]!, ay = d.tramos[5 * k + 1]!, bx = d.tramos[5 * k + 2]!, by = d.tramos[5 * k + 3]!, dx = bx - ax, dy = by - ay;
     const l = dx * dx + dy * dy, t = l ? Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.y - ay) * dy) / l)) : 0;
-    const ex = p.x - ax - t * dx, ey = p.y - ay - t * dy, e2 = ex * ex + ey * ey;
+    const fuera = Math.max(0, Math.hypot(p.x - ax - t * dx, p.y - ay - t * dy) - d.tramos[5 * k + 4]!), e2 = fuera * fuera;
     if (e2 < d2) d2 = e2;
   }
   return Math.exp(-d2 / (semiancho * semiancho));

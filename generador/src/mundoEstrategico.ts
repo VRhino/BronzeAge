@@ -42,6 +42,8 @@ export function sitiosDeMetal(r: Relieve, paso = 120): Sitio[] {
   const sitios: Sitio[] = [];
   for (let y = paso / 2; y < r.config.alto; y += paso) for (let x = paso / 2; x < r.config.ancho; x += paso) {
     const p = { x: x + (rng() - 0.5) * paso * 0.7, y: y + (rng() - 0.5) * paso * 0.7 };
+    // el desvío puede sacar del mapa un sitio de la última fila o columna
+    if (p.x < 0 || p.y < 0 || p.x > r.config.ancho || p.y > r.config.alto) continue;
     const altura = evaluarElevacion(r.elevacion, p);
     const terreno = evaluarTerreno(r.elevacion, p, altura);
     if (terreno !== 'colina' && terreno !== 'montana' && terreno !== 'cima') continue;

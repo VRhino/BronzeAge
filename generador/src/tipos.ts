@@ -18,6 +18,10 @@ export interface RioZona {
   terminaEnLago: boolean;
   /** Siempre false hoy: no hay navegación fluvial. */
   navegable: boolean;
+  /** Área drenada en cada punto, en hectáreas (el caudal relativo). */
+  caudal?: number[];
+  /** Ancho del cauce en cada punto, en unidades del generador (por el caudal). */
+  anchos?: number[];
 }
 
 /** Depresión terminal de un río, tallada en el campo continuo de elevación. */

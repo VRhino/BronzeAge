@@ -4,6 +4,8 @@ import { evaluarRelieveRegional, type RelieveRegional } from './regional';
 import { puntoEnLago } from './aguaRegional';
 import { aplicarCostaRegional, type CampoCostero } from './costasRegional';
 import { aplicarDetalle, type DetalleRelieve } from './relieveDetalle';
+import { alturaFluvial, aplicarCauces, type CaucesFinos, type RejillaFluvial } from './rejillaFluvial';
+import { aplicarErosion, type CampoErosion } from './erosion';
 
 /** Cauce principal autorado que talla un valle en el relieve. */
 export interface CauceTroncal { puntos: { x: number; y: number }[]; cotas: number[]; radio: number;
@@ -15,6 +17,13 @@ export interface CampoElevacion {
   costas?: CampoCostero;
   lagos?: LagoZona[];
   caucesTroncales?: CauceTroncal[];
+  /** El relieve de los ríos (`rejillaFluvial.ts`): el regional con los troncales, erosionado y con los cauces tallados, en una rejilla.
+   * Cuando está, manda sobre el regional (que ya lleva dentro); la pone la hidrografía. */
+  fluvial?: RejillaFluvial;
+  /** El lecho de cada río publicado, encima de la rejilla fluvial (`rejillaFluvial.ts`); lo pone la hidrografía. */
+  cauces?: CaucesFinos;
+  /** Lo que cambió la erosión por gotas (`erosion.ts`), encima del detalle y antes de la costa. */
+  erosion?: CampoErosion;
   /** Formas a escala de pantalla encima del relieve regional (se añade al final, con ríos, lagos y costas ya hechos). */
   detalle?: DetalleRelieve;
 }
@@ -27,6 +36,20 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 
 /** Elevación en un punto cualquiera, normalizada 0-1. Función pura, definida en todo el plano. */
 export function evaluarElevacion(campo: CampoElevacion, p: Point): number {
+  let e = campo.fluvial ? alturaFluvial(campo.fluvial, p) : relieveDeBase(campo, p);
+  if (campo.cauces) e = aplicarCauces(campo.cauces, p, e);
+  for (const lago of campo.lagos ?? []) {
+    if (lago.contorno) { if (puntoEnLago(lago, p)) return lago.elevacionCentro; continue; }
+    const d = Math.hypot(p.x - lago.centro.x, p.y - lago.centro.y);
+    if (d < lago.radio) e = Math.min(e, e + (lago.elevacionCentro - e) * smoothstep(0, 1, 1 - d / lago.radio));
+  }
+  if (campo.detalle) e = aplicarDetalle(campo.detalle, p, e);
+  if (campo.erosion) e = aplicarErosion(campo.erosion, p, e);
+  return campo.costas ? aplicarCostaRegional(campo.costas, p, e) : e;
+}
+
+/** El relieve regional con los valles troncales: lo que muestrea la rejilla fluvial antes de erosionarlo. */
+function relieveDeBase(campo: CampoElevacion, p: Point): number {
   let e = evaluarRelieveRegional(campo.regional, p);
   for (const valle of campo.caucesTroncales ?? []) {
     if (p.x < valle.caja.minX - valle.radio || p.x > valle.caja.maxX + valle.radio
@@ -40,13 +63,7 @@ export function evaluarElevacion(campo: CampoElevacion, p: Point): number {
     }
     if (e >= 0.375 && distancia < valle.radio) e += (cota - e) * smoothstep(0, 1, 1 - distancia / valle.radio);
   }
-  for (const lago of campo.lagos ?? []) {
-    if (lago.contorno) { if (puntoEnLago(lago, p)) return lago.elevacionCentro; continue; }
-    const d = Math.hypot(p.x - lago.centro.x, p.y - lago.centro.y);
-    if (d < lago.radio) e = Math.min(e, e + (lago.elevacionCentro - e) * smoothstep(0, 1, 1 - d / lago.radio));
-  }
-  if (campo.detalle) e = aplicarDetalle(campo.detalle, p, e);
-  return campo.costas ? aplicarCostaRegional(campo.costas, p, e) : e;
+  return e;
 }
 
 /**

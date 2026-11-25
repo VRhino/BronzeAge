@@ -55,6 +55,12 @@ message Rio {
   bool termina_en_lago = 3;
   bool navegable = 4;
   repeated Punto vados = 5;
+  // Área drenada en cada punto de `puntos`, en hectáreas: el caudal relativo del río (vacío en artefactos antiguos).
+  repeated uint32 caudal = 6;
+  // Ancho del cauce en cada punto de `puntos`, en milésimas de unidad estratégica (vacío en artefactos antiguos).
+  repeated uint32 anchos = 7;
+  // Orden de Strahler del tramo (0 en artefactos antiguos).
+  uint32 orden = 8;
 }
 
 // Veta de estaño (y oro): 3-6 nodos en un radio de ~20-30, con su campamento de bandidos y su alijo lejano.

@@ -68,7 +68,11 @@ export interface MuestrasRelieve {
   coste(p: Point): number;
 }
 
-export interface RioMundo { id: string; puntos: Point[]; terminaEnLago: boolean; navegable: boolean; vados: Point[] }
+export interface RioMundo {
+  id: string; puntos: Point[]; terminaEnLago: boolean; navegable: boolean; vados: Point[];
+  /** Por punto: área drenada (ha) y ancho del cauce (unidades del generador); orden de Strahler del tramo. */
+  caudal?: number[]; anchos?: number[]; orden?: number;
+}
 
 export interface MundoGenerado {
   seed: number;

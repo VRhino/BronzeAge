@@ -65,7 +65,8 @@ const colocados = medir('bandidos y alijos', () => colocarBandidosYAlijos(seed, 
 const bandidos = colocados.bandidos.map(b => ({ ...b, posicion: aCeldaTransitable(b.posicion) }));
 const alijos = colocados.alijos.map(a => ({ ...a, posicion: aCeldaTransitable(a.posicion) }));
 
-const rios: RioMundo[] = r.rios.map(rio => ({ id: rio.id, puntos: rio.puntos, terminaEnLago: rio.terminaEnLago, navegable: rio.navegable, vados: vadosPorRio.get(rio.id) ?? [] }));
+const rios: RioMundo[] = r.rios.map(rio => ({ id: rio.id, puntos: rio.puntos, terminaEnLago: rio.terminaEnLago, navegable: rio.navegable, vados: vadosPorRio.get(rio.id) ?? [],
+  caudal: rio.caudal, anchos: rio.anchos, orden: rio.orden }));
 // Coste de movimiento por celda, una sola vez: lo usan el grafo (sus nodos son los centros de las celdas) y la capa `coste`.
 const costeCelda = medir('coste por celda', () => {
   const c = new Float64Array(nx * ny);
@@ -109,7 +110,7 @@ const trigoEn = (p: Point): number => {
     { altura: celdas.altura[i]!, pendiente: celdas.pendiente[i]!, humedad: celdas.humedad[i]! });
 };
 const mundo: MundoGenerado = {
-  seed, ancho, alto, generador: 'regional-20-costas-2+estrategico-3+cauce-2',
+  seed, ancho, alto, generador: 'regional-20-costas-2+estrategico-3+cauce-2+rios-rejilla-10',
   campamentos: e.campamentos, recursos, vetas: e.vetas, masas: e.masas, parcelas: e.parcelas, bandidos, alijos, rios, grafo,
   regiones: r.elevacion.regional.areas.map(a => ({ id: a.id, nombre: a.nombre })),
   muestras: {

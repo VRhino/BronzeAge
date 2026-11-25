@@ -72,6 +72,7 @@ export interface RegionAlpina {
   sendas: Senda[];
   /** Índice de celdas: altiplanos y tramos de senda (senda, vértice) que tocan cada celda. */
   indice: Record<string, { a: number[]; s: number[] }>;
+  /** Tramos de río aplanados: ax, ay, bx, by y el medio ancho del cauce. */
   rios: number[];
   indiceRios: Record<string, number[]>;
   lagos: { x: number; y: number; r: number }[];
@@ -184,7 +185,8 @@ export function crearRegionAlpina(seed: number, regional: RelieveRegional, rios:
   for (const rio of rios) for (let i = 1; i < rio.puntos.length; i++) {
     const a = rio.puntos[i - 1]!, b = rio.puntos[i]!;
     if (Math.min(Math.hypot(a.x - centro.x, a.y - centro.y), Math.hypot(b.x - centro.x, b.y - centro.y)) > R * C.borde * 1.1) continue;
-    const k = tramosRios.length / 4; tramosRios.push(a.x, a.y, b.x, b.y);
+    // con el medio ancho del cauce: el valle y el dique se miden desde la orilla, con el fondo plano de orilla a orilla
+    const k = tramosRios.length / 5; tramosRios.push(a.x, a.y, b.x, b.y, Math.max(rio.anchos?.[i - 1] ?? 0, rio.anchos?.[i] ?? 0) / 2);
     for (let y = Math.floor((Math.min(a.y, b.y) - alcanceRio) / celda); y <= Math.floor((Math.max(a.y, b.y) + alcanceRio) / celda); y++)
       for (let x = Math.floor((Math.min(a.x, b.x) - alcanceRio) / celda); x <= Math.floor((Math.max(a.x, b.x) + alcanceRio) / celda); x++) (indiceRios[`${x},${y}`] ??= []).push(k);
   }
@@ -254,9 +256,9 @@ export function aplicarAlpina(r: RegionAlpina, p: Point, e: number): number {
   let valle = 0, cauce = Infinity;
   const semiancho = C.valleRio * U, cx = Math.floor(p.x / celda), cy = Math.floor(p.y / celda);
   for (const k of r.indiceRios[`${cx},${cy}`] ?? []) {
-    const ax = r.rios[4 * k]!, ay = r.rios[4 * k + 1]!, bx = r.rios[4 * k + 2]!, by = r.rios[4 * k + 3]!, dx = bx - ax, dy = by - ay;
+    const ax = r.rios[5 * k]!, ay = r.rios[5 * k + 1]!, bx = r.rios[5 * k + 2]!, by = r.rios[5 * k + 3]!, dx = bx - ax, dy = by - ay;
     const l = dx * dx + dy * dy, t = l ? Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.y - ay) * dy) / l)) : 0;
-    const d2 = (p.x - ax - t * dx) ** 2 + (p.y - ay - t * dy) ** 2;
+    const d2 = Math.max(0, Math.hypot(p.x - ax - t * dx, p.y - ay - t * dy) - r.rios[5 * k + 4]!) ** 2;
     valle = Math.max(valle, Math.exp(-d2 / (semiancho * semiancho)));
     cauce = Math.min(cauce, d2);
   }

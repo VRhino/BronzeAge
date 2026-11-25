@@ -181,6 +181,7 @@ function construirMensaje(m: MundoGenerado): ArtefactoDeMundo {
     regiones: [...m.regiones].sort((x, y) => x.id - y.id),
     rios: porId(m.rios).map(r => ({
       id: r.id, puntos: r.puntos.map(punto), terminaEnLago: r.terminaEnLago, navegable: r.navegable, vados: r.vados.map(punto),
+      caudal: (r.caudal ?? []).map(q => Math.round(q)), anchos: (r.anchos ?? []).map(a => Number(mil(a))), orden: r.orden ?? 0,
     })),
     bosques: porId(m.masas).map(b => ({
       id: b.id, centro: punto(b.centro), radio: mil(b.radio), densidadMilesimas: milesimas01(b.densidad), area: milArea(b.area),
