@@ -1396,7 +1396,17 @@ impl Esc {
 }
 
 fn montar(m: &M, semilla: u64) -> Esc {
-    let mut n = Nucleo::nuevo(arranque_mundo(m, semilla));
+    montar_con(Nucleo::nuevo(arranque_mundo(m, semilla)), m)
+}
+
+/// Como [`montar`], sin los bandidos que aparecen solos ([`comun::sin_bandidos_que_aparecen`]).
+fn montar_sin_bandidos_que_aparecen(m: &M, semilla: u64) -> Esc {
+    let mut a = arranque_mundo(m, semilla);
+    a.reglas = comun::sin_bandidos_que_aparecen(a.reglas);
+    montar_con(Nucleo::nuevo(a), m)
+}
+
+fn montar_con(mut n: Nucleo, m: &M) -> Esc {
     let (pa, pb) = (sitio_rico(&n, &m.0, 0, 1), sitio_rico(&n, &m.0, 3, 2));
     let (a, b) = (fundar(&mut n, 0, "a", "ana", 1, pa), fundar(&mut n, 0, "b", "beto", 2, pb));
     let mut e = Esc { n, a, b, cuenta: 0 };
@@ -1964,12 +1974,17 @@ fn si_la_caravana_resiste_en_unity_conserva_sus_carros_su_escolta_sus_supervivie
 #[test]
 fn si_unity_da_por_perdidos_todos_los_carros_la_caravana_desaparece() {
     let m = con_mundo!();
-    // Semilla 10: en ella los bandidos de la partida no acosan a la caravana antes del escenario.
-    let mut e = montar(m, 10);
-    let (a, b) = (e.a, e.b);
-    let ca = e.caravana("ana", a, 1);
-    let t0 = e.lanzar(ca);
-    let fin = e.n.caravana(ca).unwrap().plan.as_ref().unwrap().fin().unwrap();
+    // Sin los bandidos que aparecen solos, y con una semilla en la que los del artefacto no acosan a la caravana antes del escenario.
+    let (mut e, ca, t0, fin) = (10..20)
+        .find_map(|semilla| {
+            let mut e = montar_sin_bandidos_que_aparecen(m, semilla);
+            let ca = e.caravana("ana", e.a, 1);
+            let t0 = e.lanzar(ca);
+            let fin = e.n.caravana(ca).unwrap().plan.as_ref().unwrap().fin().unwrap();
+            comun::sin_acoso_de_bandidos(&e.n, ca, fin).then_some((e, ca, t0, fin))
+        })
+        .expect("alguna semilla sin bandidos en el camino");
+    let b = e.b;
     // A mitad de camino no hay zona de nadie: disputa de carros.
     e.n.avanzar_hasta(t0 + (fin - t0) / 2);
     let donde = e.n.posicion_de_caravana(ca, e.n.ahora()).unwrap();
@@ -2112,16 +2127,21 @@ fn los_bandidos_que_acosan_una_caravana_adjunta_a_una_columna_con_heroes_la_jueg
 fn los_bandidos_que_acosan_una_caravana_sin_heroes_la_resuelven_con_numeros_aunque_haya_servidores_de_batalla() {
     let m = con_mundo!();
     // Suelta, con una escolta de tropa cedida pero sin héroe a bordo.
-    // Semilla 10: en ella los bandidos de la partida no acosan a la caravana antes del escenario.
-    let mut e = montar(m, 10);
-    let a = e.a;
-    let ca = e.caravana("ana", a, 2);
-    let carla = e.heroe_en(&m.0, "carla", 1, a);
-    let milicia = e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
-    e.ok("carla", Comando::AsignarEscolta { caravana: ca, heroe: carla, escuadras: vec![milicia] });
-    let t0 = e.lanzar(ca);
-    let plan = e.n.caravana(ca).unwrap().plan.clone().unwrap();
-    let fin = plan.fin().unwrap();
+    // Sin los bandidos que aparecen solos, y con una semilla en la que los del artefacto no acosan a la caravana antes del escenario.
+    let (mut e, _, t0, plan, fin) = (10..20)
+        .find_map(|semilla| {
+            let mut e = montar_sin_bandidos_que_aparecen(m, semilla);
+            let a = e.a;
+            let ca = e.caravana("ana", a, 2);
+            let carla = e.heroe_en(&m.0, "carla", 1, a);
+            let milicia = e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
+            e.ok("carla", Comando::AsignarEscolta { caravana: ca, heroe: carla, escuadras: vec![milicia] });
+            let t0 = e.lanzar(ca);
+            let plan = e.n.caravana(ca).unwrap().plan.clone().unwrap();
+            let fin = plan.fin().unwrap();
+            comun::sin_acoso_de_bandidos(&e.n, ca, fin).then_some((e, ca, t0, plan, fin))
+        })
+        .expect("alguna semilla sin bandidos en el camino");
     let donde = plan.posicion_en(t0 + (fin - t0) * 4 / 10).unwrap();
     let camp = e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel: 3 }).creadas[0];
     let llegada = llegada_al_radio(&plan, donde, e.n.ahora());

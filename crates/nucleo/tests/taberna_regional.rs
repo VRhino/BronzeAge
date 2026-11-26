@@ -486,12 +486,21 @@ fn tomar_una_orden_de_compra_lleva_la_mercancia_de_la_plaza_la_vende_y_el_oro_en
 
 // ───────────────────────────── 4. Los mercenarios de la región ─────────────────────────────
 
-/// Tres bots ofrecidos: uno en el campamento 0 y otro en el 6 (de la región de `p1`), y otro en el 1 (de otra).
+/// Los campamentos de los bots de [`tres_bots`]: el 0, el siguiente que cae en la región de `p1` y el primero de otra región (el mundo los reparte; no se fijan a mano).
+fn campamentos_de_los_bots(e: &E) -> (u32, u32, u32) {
+    let m = comun::real::mundo().expect("hay mundo");
+    let region_de = |c: usize| m.0.region_en(comun::real::campamento(&m.0, c).x, comun::real::campamento(&m.0, c).y);
+    assert_eq!(region_de(0), Some(e.region), "el campamento 0 cae en la región de la plaza");
+    let total = m.0.campamentos().len();
+    let otro = (1..total).find(|&c| region_de(c) == Some(e.region)).expect("otro campamento en la región de la plaza");
+    let fuera = (1..total).find(|&c| region_de(c) != Some(e.region)).expect("un campamento de otra región");
+    (0, otro as u32, fuera as u32)
+}
+
+/// Tres bots ofrecidos: uno en el campamento 0 y otro en el siguiente de la región de `p1`, y otro en uno de otra región ([`campamentos_de_los_bots`]).
 fn tres_bots(e: &mut E) -> (u64, u64, u64) {
-    let region_de = |c: usize| comun::real::mundo().and_then(|m| m.0.region_en(comun::real::campamento(&m.0, c).x, comun::real::campamento(&m.0, c).y));
-    assert_eq!((region_de(0), region_de(6)), (Some(e.region), Some(e.region)), "los campamentos 0 y 6 caen en la región de la plaza");
-    assert_ne!(region_de(1), Some(e.region), "el 1, en otra");
-    (mc::bot_ofrecido(&mut e.n, "bot-a", 0), mc::bot_ofrecido(&mut e.n, "bot-b", 6), mc::bot_ofrecido(&mut e.n, "bot-c", 1))
+    let (ca, cb, cc) = campamentos_de_los_bots(e);
+    (mc::bot_ofrecido(&mut e.n, "bot-a", ca), mc::bot_ofrecido(&mut e.n, "bot-b", cb), mc::bot_ofrecido(&mut e.n, "bot-c", cc))
 }
 
 #[test]
@@ -499,9 +508,10 @@ fn la_taberna_enseña_gratis_el_tablon_de_los_campamentos_de_su_region_y_una_pla
     let m = con_mundo!();
     let mut e = escenario(m, true);
     let (a, b, c) = tres_bots(&mut e);
+    let (_, cb, _) = campamentos_de_los_bots(&e);
     let plaza = interior::asentamiento(&e.n, e.p1).expect("la plaza existe");
     let ofertas: Vec<(&str, &str)> = plaza.mercenarios_region.iter().map(|o| (o.heroe_id.as_str(), o.campamento_id.as_str())).collect();
-    assert_eq!(ofertas, vec![(ids::heroe(a).as_str(), ids::campamento(0).as_str()), (ids::heroe(b).as_str(), ids::campamento(6).as_str())], "los de su región, por héroe; no el de otra");
+    assert_eq!(ofertas, vec![(ids::heroe(a).as_str(), ids::campamento(0).as_str()), (ids::heroe(b).as_str(), ids::campamento(cb).as_str())], "los de su región, por héroe; no el de otra");
     assert!(!ofertas.iter().any(|(h, _)| *h == ids::heroe(c)));
     assert!(plaza.mercenarios_region.iter().all(|o| !o.tarifas.is_empty() && o.ficha.is_some()), "con la forma del tablón del campamento");
     let del_campamento = interior::campamento_por_dentro(&e.n, 0, propios::Espectador::Admin).unwrap();
@@ -549,7 +559,7 @@ fn desde_la_taberna_un_campamento_de_otra_region_un_pago_que_no_es_de_la_plaza_o
     let (a, _, c) = tres_bots(&mut e);
     let (p1, eva, civ, gob) = (e.p1, e.eva, e.civ, e.gob);
     let firma = |heroe, mercenario, pagar_con| Comando::ContratarMercenario { heroe, mercenario, trabajo: mercenarios::Trabajo::Defender, objetivo: Objetivo::Plaza(p1), plazo: Some(1), residencia: None, pagar_con };
-    assert_eq!(mc::rechazo(&mut e.n, "eva", firma(eva, c, None)), rechazos::MERCENARIO_FUERA_DE_LA_REGION, "el campamento 1 cae en otra región");
+    assert_eq!(mc::rechazo(&mut e.n, "eva", firma(eva, c, None)), rechazos::MERCENARIO_FUERA_DE_LA_REGION, "el campamento de `c` cae en otra región");
     assert_eq!(mc::rechazo(&mut e.n, "eva", firma(eva, c, Some(PagarCon::Monedas))), rechazos::MERCENARIO_FUERA_DE_LA_REGION);
     // Fuera del campamento solo valen el almacén de la plaza y las monedas.
     for forma in [PagarCon::AlmacenPersonal, PagarCon::Carro] {
@@ -561,7 +571,8 @@ fn desde_la_taberna_un_campamento_de_otra_region_un_pago_que_no_es_de_la_plaza_o
     let r = mc::dar(&mut e.n, "gob", firma(gob, a, None));
     assert!(!r.aceptada() || mc::contrato(&e.n, a).is_some_and(|c| c.firmado_por == gob), "el Gobernador de la plaza también firma con su almacén: {r:?}");
     // En el campamento el almacén de la plaza no paga, y quien no está en el campamento ni en una plaza suya con Taberna no llega a la puerta.
-    mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: civ, ubicacion: Ubicacion::Mercenarios(1) });
+    let (_, _, de_c) = campamentos_de_los_bots(&e);
+    mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: civ, ubicacion: Ubicacion::Mercenarios(de_c) });
     assert_eq!(mc::rechazo(&mut e.n, "civ", firma(civ, c, Some(PagarCon::AlmacenPlaza))), rechazos::ORDEN_FORMA_INVALIDA);
     let mut sin = escenario(m, false);
     let (a, _, _) = tres_bots(&mut sin);
@@ -621,7 +632,8 @@ fn el_fondo_de_la_plaza_corto_quien_no_firma_por_la_plaza_el_campamento_y_la_pro
     assert_eq!((fondo(&e.n, p1), e.n.heroe(a).unwrap().heroe.monedas, mc::ofrecido(&e.n, a)), (monedas - 1, del_bot, true), "y no cambia nada");
     assert_eq!(mc::rechazo(&mut e.n, "civ", firma(civ, a)), rechazos::NO_AUTORIZADO, "con el fondo firman el Rey, el Embajador o el Gobernador");
 
-    mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: civ, ubicacion: Ubicacion::Mercenarios(1) });
+    let (_, _, de_c) = campamentos_de_los_bots(&e);
+    mc::ok(&mut e.n, "admin", Comando::ColocarHeroe { heroe: civ, ubicacion: Ubicacion::Mercenarios(de_c) });
     assert_eq!(mc::rechazo(&mut e.n, "civ", firma(civ, c)), rechazos::ORDEN_FORMA_INVALIDA, "en el campamento el fondo de la plaza no paga");
 
     // Contratado con el almacén de la plaza, la prórroga es en persona, en su campamento base, y allí el fondo no la paga.

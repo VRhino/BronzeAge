@@ -1061,12 +1061,19 @@ fn una_columna_con_caballeria_que_ataca_una_caravana_cuenta_una_persecucion() {
 #[test]
 fn una_caravana_atacada_fuera_de_toda_zona_es_una_disputa_de_carros_y_sin_carros_que_quedar_se_destruye() {
     let m = con_mundo!();
-    // Semilla 10: en ella los bandidos de la partida no acosan a la caravana a mitad de camino.
-    let mut e = montar_lejos(m, 10, true);
+    // Sin los bandidos que aparecen solos, y con una semilla en la que los del artefacto no acosan a la caravana antes de mitad de camino.
+    let (mut e, ca, t0, fin) = (10..20)
+        .find_map(|semilla| {
+            let mut a = arranque(m, semilla);
+            a.reglas = comun::sin_bandidos_que_aparecen(a.reglas);
+            let mut e = montar_en(Nucleo::nuevo(a), m, true, 3);
+            let ca = e.caravana("ana", e.a, 2);
+            let t0 = e.lanzar(ca);
+            let fin = e.n.caravana(ca).unwrap().plan.as_ref().unwrap().fin().unwrap();
+            comun::sin_acoso_de_bandidos(&e.n, ca, fin).then_some((e, ca, t0, fin))
+        })
+        .expect("alguna semilla sin bandidos en el camino");
     let (a, b) = (e.a, e.b);
-    let ca = e.caravana("ana", a, 2);
-    let t0 = e.lanzar(ca);
-    let fin = e.n.caravana(ca).unwrap().plan.as_ref().unwrap().fin().unwrap();
     // A mitad de camino, lejos de las dos plazas, no hay zona de nadie.
     e.n.avanzar_hasta(t0 + (fin - t0) / 2);
     let t = e.n.ahora();

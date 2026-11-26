@@ -374,3 +374,23 @@ pub fn fundador_sale(n: &mut Nucleo, plaza: u64) {
         assert!(r.aceptada(), "el fundador {heroe} sale de as-{plaza}: {r:?}");
     }
 }
+
+/// ¿Recorre la caravana su plan hasta `hasta` sin pasar a ≤ `radioAtaqueCaravana` (más 1 u de margen) de ningún campamento de bandidos de la partida? Las pruebas que miden
+/// otra cosa en mitad de un viaje buscan con esto una semilla en la que los bandidos que aparecen al arrancar no la acosan antes (dependen del mundo y de la semilla).
+pub fn sin_acoso_de_bandidos(n: &Nucleo, caravana: u64, hasta: Instante) -> bool {
+    let radio = n.estado().reglas.economia.combate.bandidos.radio_ataque_caravana + 1_000;
+    let Some(plan) = n.caravana(caravana).and_then(|k| k.plan.clone()) else { return false };
+    let campamentos: Vec<Punto> = n.campamentos_de_bandidos().map(|b| b.posicion).collect();
+    let desde = plan.inicio().unwrap_or(hasta);
+    (desde..=hasta).step_by(5_000).all(|t| plan.posicion_en(t).is_none_or(|p| campamentos.iter().all(|b| b.dist(p) > radio)))
+}
+
+
+/// Las reglas `r` sin los bandidos que aparecen solos (los de cada plaza, `porPlaza`, y los de los anillos de los campamentos de mercenarios); siguen los del
+/// artefacto (junto a las vetas) y los que coloque la administración, y el acoso con su radio. Para las pruebas de una caravana a mitad de camino: el campamento de
+/// la plaza cae en su bosque libre más cercano, que según el mundo queda junto a la salida de la caravana.
+pub fn sin_bandidos_que_aparecen(mut r: Reglas) -> Reglas {
+    let b = &mut Arc::make_mut(&mut r.economia.combate).bandidos;
+    (b.por_plaza, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
+    r
+}

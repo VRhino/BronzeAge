@@ -846,10 +846,11 @@ fn guarnecer_desarma_el_ejercito_en_la_puerta_el_residente_entra_con_su_carro_y_
     let (a, milicia) = e.con_milicia("ana");
     let pl = e.a;
     let ej = e.ok("ana", Comando::MovilizarEjercito { asentamiento: pl, heroe: a, escuadras: vec![milicia], carga: vec![(Madera, 20_000)], politica: Politica::Aceptar, caravana_fundacion: None }).creadas[0];
-    // «beto», de la misma Facción pero residente de un campamento, llega a la plaza y se une en campo.
+    // «beto», de la misma Facción pero residente de un campamento, llega a la puerta por la que salió el ejército y se une en campo.
     let (b, ib) = e.con_prestamo("beto", 0);
     let cb = e.ok("beto", Comando::SalirDelCampamento { campamento: 0, heroe: b, escuadras: ib.clone(), carga: vec![], politica: Politica::Rechazar, caravana_fundacion: None }).creadas[0];
-    e.ok("beto", Comando::MarcharA { ejercito: cb, destino: e.plaza() });
+    let puerta = e.ejercito(ej).posicion;
+    e.ok("beto", Comando::MarcharA { ejercito: cb, destino: puerta });
     let fin = e.ejercito(cb).plan.fin().unwrap();
     e.n.avanzar_hasta(fin);
     e.ok("beto", Comando::UnirseEnCampo { heroe: b, ejercito: ej });

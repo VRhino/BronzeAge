@@ -236,10 +236,10 @@ fn de_b_a_a(e: &mut Escenario, car: u64, modo: Modo, en_destino: Parada) {
 #[test]
 fn la_plaza_destino_cae_en_ruinas_con_la_caravana_esperando_dentro_y_se_destruye_con_todo() {
     let m = con_mundo!();
-    let (mut e, ruina, ca, car) = antes_de_la_ruina(m, 3 * HORA);
+    let (mut e, ruina, ca, car) = antes_de_la_ruina(m, 5 * HORA);
     let (a, b) = (e.a, e.b);
     assert!(cantidad(&e.n, a, Estano) < 1_000, "A no tiene el estaño que la caravana espera");
-    // Llega a A, deja su cobre y espera allí un estaño que no hay (el viaje dura menos de dos horas).
+    // Llega a A, deja su cobre y espera allí un estaño que no hay (el viaje dura menos de cuatro horas: unas tres con las plazas del 2026-11-23).
     de_b_a_a(&mut e, car, Modo::Ruta, Parada { dejar: dejar(&[Cobre]).dejar, ..recoger(&[(Estano, 10_000)], true) });
     let (h, escuadra) = e.escoltar("carla", b, car);
     e.avanzar_hasta(ruina - 30 * MIN);
