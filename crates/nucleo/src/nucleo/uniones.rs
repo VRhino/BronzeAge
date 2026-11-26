@@ -26,10 +26,17 @@ impl Nucleo {
     /// La columna `otra` entra en `base` con lo que lleva (escuadras, carro y víveres), `unidoEn = t`: sus héroes pasan a ir en `base` y `otra`
     /// desaparece. Devuelve si una formación llegó con esto al mínimo y pasó a ser un ejército. No toca nada si no se puede (§10.2).
     pub(super) fn fusionar_columna(&mut self, t: Instante, base: u64, otra: u64) -> Result<bool, ErrorColumna> {
+        self.fusionar_columna_desde(t, base, otra, false)
+    }
+
+    /// Como [`Nucleo::fusionar_columna`]; con `mismo_lugar`, `otra` sale del lugar del que sale `base` (la columna que el héroe trajo de visita o conservaba en su
+    /// residencia, al partir con el ejército) y no se mide la distancia: no está en el mapa, y su última posición es la puerta por la que entró, que en una plaza
+    /// grande puede quedar lejos de la salida del ejército (Tamaños y distancias del mapa, 2026-11-23).
+    pub(super) fn fusionar_columna_desde(&mut self, t: Instante, base: u64, otra: u64, mismo_lugar: bool) -> Result<bool, ErrorColumna> {
         let antes = self.velocidad_de_ejercito(base).unwrap_or(0);
         let oe = self.estado.ejercitos.get(&otra).ok_or(ErrorColumna::NoVaDentro)?;
         let mr = self.militar_de(oe.columna.faccion);
-        let distancia = oe.posicion_en(t).dist(self.estado.ejercitos[&base].posicion_en(t));
+        let distancia = if mismo_lugar { 0 } else { oe.posicion_en(t).dist(self.estado.ejercitos[&base].posicion_en(t)) };
         let (heroes_otra, escuadras_otra, columna_otra) = (Self::participantes_de(oe), oe.columna.escuadras.clone(), oe.columna.clone());
         let Estado { ejercitos, militar, .. } = &mut self.estado;
         let b = ejercitos.get_mut(&base).ok_or(ErrorColumna::NoVaDentro)?;

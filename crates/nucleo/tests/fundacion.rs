@@ -1024,9 +1024,9 @@ fn no_se_funda_donde_la_ciudad_mas_grande_que_puede_tener_entraria_en_el_cauce()
     let m = con_mundo!();
     let mut n = Nucleo::nuevo(arranque(m));
     let orilla = n.estado().reglas.economia.datos.orilla;
-    // Alrededor de los nodos que el generador dejó encima del agua dibujada: cerca del trazo, sea la celda de al lado o el hueco de un vado.
+    // Alrededor de los primeros nodos que el generador dejó cerca del trazo: donde la ciudad más grande entraría en el cauce.
     let mut junto = None;
-    for i in comun::real::nodos_encima_del_rio(&m.0) {
+    for i in comun::real::nodos_junto_al_rio(&m.0, &orilla, orilla.plaza).into_iter().take(12) {
         let c = m.0.nodos()[i].posicion.unwrap();
         for d in (0..=8_000).step_by(1_000) {
             for g in 0..24 {

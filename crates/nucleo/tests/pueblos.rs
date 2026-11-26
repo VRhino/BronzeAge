@@ -1995,9 +1995,12 @@ fn el_gobernador_o_el_maestro_de_obras_de_la_madre_mejora_la_aldea_desde_dentro_
 /// Un nodo de pueblo del artefacto real encima del agua dibujada (en una celda transitable a menos de 0,5 u del trazo de un río: la celda de al
 /// lado del cauce o el hueco de un vado) y un sitio fundable a 7-13 u con ruta hasta él.
 fn nodo_encima_del_rio(n: &Nucleo, m: &M, mapa: &Mapa) -> (u32, Punto) {
+    // Tan cerca del trazo que la maqueta del pueblo entraría en el cauce (con los ríos de cauce fino ya no hay nodos encima del agua dibujada).
+    let orilla = n.estado().reglas.economia.datos.orilla;
     let encima = |i: &usize| {
         let p = mapa.nodos[*i].pos;
-        mapa.nodos[*i].tipo.es_de_pueblo() && m.0.transitable_en(p.x, p.y) && comun::real::distancia_al_rio(&m.0, p).0 < 500.0
+        let (d, navegable) = comun::real::distancia_al_rio(&m.0, p);
+        mapa.nodos[*i].tipo.es_de_pueblo() && m.0.transitable_en(p.x, p.y) && d < (if navegable { orilla.media_anchura_navegable } else { orilla.media_anchura } + orilla.pueblo) as f64
     };
     let sitio_cerca = |i: usize| {
         let nodo = mapa.nodos[i].pos;

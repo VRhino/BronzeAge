@@ -2277,7 +2277,13 @@ fn la_avanzada_operativa_ve_24_explora_su_disco_y_deja_de_ver_al_destruirla() {
     let pos = e.avanzada(av).posicion;
     assert!(e.n.estado().memoria.exploracion[&1].explorado_en(Punto::new(pos.x + 22_000, pos.y)), "la avanzada explora su disco al quedar operativa");
     // La columna de Ana se va lejos: solo la plaza (su zona, 50 alrededor de su centro) y la avanzada (24, `VISION.avanzada` desde el 2026-11-05) ven por F1.
-    e.ok("ana", Comando::MarcharA { ejercito: col, destino: Punto::new(e.centro.x - 80_000, e.centro.y) });
+    // A 80 u de la plaza, hacia el oeste o lo más cerca de él que el mapa deje llegar por tierra.
+    let (cx, cy) = (e.centro.x as f64, e.centro.y as f64);
+    let llega = [180, 160, 200, 140, 220, 120, 240, 100, 260].into_iter().map(|g| (g as f64).to_radians()).any(|a| {
+        let destino = Punto::new((cx + 80_000.0 * a.cos()) as i64, (cy + 80_000.0 * a.sin()) as i64);
+        e.ord("ana", Comando::MarcharA { ejercito: col, destino }).aceptada()
+    });
+    assert!(llega, "algún sitio a 80 u de la plaza, al otro lado de la avanzada, al que se llega por tierra");
     let fin = e.n.ejercito(col).unwrap().plan.fin().unwrap();
     e.hasta(fin + MIN);
     let (cerca, lejos) = (e.columna("beto", 2, Punto::new(pos.x + 23_500, pos.y)).0, e.columna("gus", 3, Punto::new(pos.x + 25_000, pos.y)).0);
@@ -2307,9 +2313,10 @@ fn la_avanzada_no_se_coloca_donde_quedaria_dentro_del_cauce() {
     let m = con_mundo!();
     let mut e = montar(m, 7, 2);
     let plaza = e.plaza;
-    // Un punto de tierra firme encima del agua dibujada (la celda de al lado del cauce o el hueco de un vado). La orilla se mira justo después de
-    // la tierra firme, antes que la zona.
-    let i = comun::real::nodos_encima_del_rio(&m.0)[0];
+    // Un punto de tierra firme tan cerca del trazo que la avanzada más grande entraría en el cauce. La orilla se mira justo después de la tierra firme,
+    // antes que la zona.
+    let orilla = e.n.estado().reglas.economia.datos.orilla;
+    let i = comun::real::nodos_junto_al_rio(&m.0, &orilla, orilla.avanzada)[0];
     let q = m.0.nodos()[i].posicion.unwrap();
     let pos = Punto::new(q.x, q.y);
     let (_, heroe) = e.colocador(e.sitio());
