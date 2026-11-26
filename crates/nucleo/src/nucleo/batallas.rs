@@ -597,7 +597,9 @@ impl Nucleo {
             bando.sin_heroe = sin_heroe.into_iter().map(|e| self.con_formaciones(e)).collect();
         }
         let ticket = Ticket { plaza: ap.plaza, ..Ticket::nuevo(&cr, ap.contexto, ap.atacante, ap.defensor) };
-        let b = Batalla::abrir(&cr, id, ap.iniciada_por, ap.punto, ticket, ap.bloqueo, t);
+        let mut b = Batalla::abrir(&cr, id, ap.iniciada_por, ap.punto, ticket, ap.bloqueo, t);
+        // Antes de apartar las columnas, que pierden su plan.
+        b.procedencias = self.procedencias_de(t, &b);
         self.reservar(&b.escuadras_con_candado(), Some(id));
         for c in &b.bloqueo.ejercitos {
             self.apartar_columna(t, *c);
@@ -611,6 +613,31 @@ impl Nucleo {
         self.programar_batalla(id);
         self.hecho_de_batalla(t, id, Hecho::Abierta, None);
         id
+    }
+
+    /// De dónde llegaba cada bando (atacante, defensor) al abrir, para el recorte del lugar (entrada 78). Solo campo abierto y caravana; lo que no se mueve
+    /// sobre un plan (un campamento de bandidos, una caravana parada) no tiene procedencia.
+    fn procedencias_de(&self, t: Instante, b: &Batalla) -> [Option<Punto>; 2] {
+        let columna = |id: Option<&u64>| id.and_then(|id| self.estado.ejercitos.get(id)).and_then(|e| super::lugar::procedencia_en(&e.plan, t));
+        let caravana = |id: Option<&u64>| {
+            let id = *id?;
+            match self.estado.comercio.caravana(id) {
+                Some(k) if k.estado == comercio::caravana::EstadoCaravana::Adjunta => self.estado.ejercitos.values().find(|e| e.caravanas_adjuntas.contains(&id)).and_then(|e| super::lugar::procedencia_en(&e.plan, t)),
+                Some(k) => k.plan.as_ref().and_then(|p| super::lugar::procedencia_en(p, t)),
+                None => match &self.estado.fundacion.caravanas.get(&id)?.situacion {
+                    crate::estado_fundacion::Situacion::Retornando(p) => super::lugar::procedencia_en(p, t),
+                    _ => None,
+                },
+            }
+        };
+        let (ej, ka) = (&b.bloqueo.ejercitos, &b.bloqueo.caravanas);
+        match b.ticket.contexto {
+            Contexto::CampoAbierto { .. } => [columna(ej.first()), columna(ej.get(1))],
+            // El acoso: atacan los bandidos de un campamento y defiende la columna.
+            Contexto::Caravana { .. } if b.bloqueo.campamento.is_some() => [None, columna(ej.first())],
+            Contexto::Caravana { .. } => [columna(ej.first()), caravana(ka.first())],
+            _ => [None, None],
+        }
     }
 
     /// La orden de atacar abre la batalla en lugar de resolver el combate: declara la guerra, si hacía falta y todo lo demás ya valía, y la abre.

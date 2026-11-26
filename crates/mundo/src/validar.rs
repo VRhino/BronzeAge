@@ -78,7 +78,7 @@ pub(crate) fn validar(mut a: ArtefactoDeMundo, op: &OpcionesValidacion) -> R<Mun
     }
     let mundo = Mundo {
         artefacto: a, columnas, filas, altura, terreno, fertilidad, fertilidad_vid, fertilidad_oliva, fertilidad_cebada, fertilidad_sesamo, region, humedad, densidad_bosque, anillos,
-        transitable, coste, vados,
+        transitable, coste, vados, relieve: Default::default(), mar: Default::default(),
     };
 
     // 4. Regiones y vectoriales.

@@ -94,6 +94,7 @@ mod rios;
 mod salidas;
 mod taberna;
 mod logros;
+mod lugar;
 mod misiones;
 mod participacion;
 pub use participacion::Miembro;

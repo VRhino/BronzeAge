@@ -341,7 +341,9 @@ pub fn entidad_contrato(mercenario: u64) -> u64 {
 /// BAN68: BAN67 con las escalas de cada caravana (2026-11-23, bloque E: las plazas que atraviesa), tras sus peajes, y el suceso `EntradaEnPlaza`. BAN67 y
 /// anteriores ya no se leen.
 /// BAN69: BAN68 con las paradas de la ruta compuesta en cada encargo (2026-11-23): `mas` y `tramo` tras `llego_en`. BAN68 y anteriores ya no se leen.
-const MAGIA: &[u8; 5] = b"BAN69";
+/// BAN70: BAN69 con las procedencias de cada batalla (2026-11-26, entrada 78: el recorte del lugar), al final de cada batalla (`codec_batallas`). BAN69 y
+/// anteriores ya no se leen.
+const MAGIA: &[u8; 5] = b"BAN70";
 
 /// Reglas de juego mínimas del núcleo genérico. Entran en el hash y en las fotos: dos mundos con reglas distintas no se
 /// pueden confundir (recuperar con otras reglas es un error).
@@ -1563,10 +1565,10 @@ impl Estado {
     /// Inversa de [`Estado::serializar`]. Falla si las reglas o el mundo de la foto no son los que se piden.
     pub fn deserializar(bytes: &[u8], reglas: &Reglas, mundo_hash: &str) -> Result<Estado, ErrorFormato> {
         let mut r = Lector::nuevo(bytes);
-        // La cabecera es de 5 bytes (`BAN69`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
+        // La cabecera es de 5 bytes (`BAN70`). Solo se lee el formato vigente: una foto de un formato anterior no se migra (la partida es nueva).
         let (magia, formato) = (r.magia()?, r.u8()?);
         if magia != MAGIA[..4] || formato != MAGIA[4] {
-            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN69): ya no se admite" } else { "no es un estado del núcleo" }));
+            return Err(ErrorFormato(if magia.starts_with(b"BAN") { "foto de un formato que no es el vigente (BAN70): ya no se admite" } else { "no es un estado del núcleo" }));
         }
         if r.texto()? != mundo_hash {
             return Err(ErrorFormato("la foto es de otro mundo (hash del artefacto distinto)"));

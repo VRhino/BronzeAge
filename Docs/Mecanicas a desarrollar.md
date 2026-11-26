@@ -264,6 +264,15 @@ Desde el 2026-11-12 `crear_heroe` rechaza un héroe sin clase o con una que no e
 
 Diseño: `Docs/Design/Campo_De_Batalla_Del_Lugar.md` del repositorio de Conquest. Casi todo es de Conquest. El ticket lleva solo lo que la batalla necesita (decisión del autor, 2026-11-23): nadie descarga el artefacto para la batalla.
 
+**En el motor desde el 2026-11-26** (contrato 0.34.0, núcleo 0.62.0, BAN70; `crates/nucleo/src/nucleo/lugar.rs`, `crates/mundo/src/fino.rs`), tras revisar con el autor dato a dato qué se deduce de otros (2026-11-26):
+
+- **Va:** el recorte (alturas cada 0,5 u con el agua en 2 bits: tierra, lago o mar; bosque, humedad y fertilidad por celda de 4 u; ríos con sus vados y anchos), el `centro` apartado del agua y de un río sin vado, y la procedencia de cada bando (guardada al abrir la batalla, a 2 u hacia atrás sobre su plan).
+- **No va, porque se deduce:** `punto` (el defensor quieto lleva su posición en su procedencia), la clase de terreno (es la altura por los umbrales del mundo) y `solitarios` en la caravana. El tamaño sale de lo que trae cada bando: grande con 6 héroes o más en un bando, o con un defensor sin héroes y una caravana de 5 carros o más. El motor lo usa para saber cuánto recortar, y Conquest, con la misma regla, para el campo.
+- **El mar no se deduce de la altura:** en el mundo de prueba, el 37 % de las muestras de lago están por debajo del nivel del mar.
+- **Falta:** los caminos (van vacíos, como en la mesa) y los asedios.
+
+Unos 8 KB el recorte de la pequeña y 11 KB la grande. Sin paquete de relieve, el ticket va sin recorte. `cargo run -p nucleo --example ticket_del_lugar -- <x> <y> [grande]` saca el recorte en el JSON de la mesa para cargarlo allí.
+
 Lo que toca al motor:
 
 - `BattleMapReference` gana un `RecorteDelLugar` alrededor de `centro` (unas 27 u de lado la batalla pequeña y 32 u la grande, abajo): alturas del relieve cada 0,5 u (el u16 del paquete de relieve tal cual, sin zoom) con su agua, las celdas de terreno, bosque y humedad, los trozos de río con sus vados, los tramos de camino con su escalón y la `procedencia` de cada bando.

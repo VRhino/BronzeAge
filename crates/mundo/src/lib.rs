@@ -31,10 +31,12 @@
 //! El paquete de relieve de los clientes 3D (`PaqueteRelieve`) va aparte: [`validar_relieve`] lo comprueba contra el artefacto.
 
 mod error;
+mod fino;
 mod relieve;
 mod validar;
 
 pub use error::ErrorMundo;
+pub use fino::{RelieveFino, TeselaFina};
 pub use relieve::{validar_relieve, ErrorRelieve};
 
 use contrato::v1::*;
@@ -85,6 +87,10 @@ pub struct Mundo {
     coste: Vec<u16>,      // vacío si el artefacto no trae la capa
     /// Los puntos de los vados de todos los ríos, por la celda en la que caen ([`Mundo::en_vado`]).
     vados: HashMap<usize, Vec<(i64, i64)>>,
+    /// El relieve fino, si el servidor tiene el paquete ([`Mundo::poner_relieve`]).
+    relieve: std::sync::OnceLock<RelieveFino>,
+    /// Qué celdas de agua son mar ([`Mundo::mar_en`]), calculado la primera vez.
+    mar: std::sync::OnceLock<Vec<bool>>,
 }
 
 /// Lo que se pisa alrededor del punto de un vado, en milésimas (0,75 u: la media anchura del río dibujado). Desde el 2026-11-18 (decisión
