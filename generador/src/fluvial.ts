@@ -1,5 +1,6 @@
 // Formas del río de la fase 5 (experimento/rios): meandros que migran y dejan brazos muertos, y ríos trenzados.
 import type { LagoZona, Point } from './tipos';
+import { potencia } from './potencia';
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const suave = (t: number) => { const x = Math.min(1, Math.max(0, t)); return x * x * (3 - 2 * x); };
@@ -154,7 +155,7 @@ export function lagoDeBrazo(id: string, brazo: BrazoMuerto, nivel: number): Lago
   const lado = (i: number, signo: number) => {
     const a = ps[Math.max(0, i - 1)]!, b = ps[Math.min(ps.length - 1, i + 1)]!, l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     // las puntas se afinan: el brazo muerto se ciega por los extremos
-    const w = (brazo.ancho / 2) * Math.sin((Math.PI * (i + 0.5)) / ps.length) ** 0.5;
+    const w = (brazo.ancho / 2) * Math.sqrt(Math.sin((Math.PI * (i + 0.5)) / ps.length));
     return { x: ps[i]!.x - ((b.y - a.y) / l) * w * signo, y: ps[i]!.y + ((b.x - a.x) / l) * w * signo };
   };
   const contorno = [...ps.map((_, i) => lado(i, 1)), ...ps.map((_, i) => lado(ps.length - 1 - i, -1))];
@@ -214,7 +215,7 @@ export function brazosTrenzados(puntos: readonly Point[], ancho: readonly number
       const brazo: Point[] = [puntos[k]!], d0 = s[k]!, total = s[fin]! - d0;
       for (let d = T.paso; d < total - T.paso / 2; d += T.paso) {
         const at = d0 + d, a = leer(s, xs, at - 15), c = leer(s, xs, at + 15), ay = leer(s, ys, at - 15), cy = leer(s, ys, at + 15);
-        const l = Math.hypot(c - a, cy - ay) || 1, aparte = signo * Math.max(T.aparte * leer(s, ancho, at), aparteMinimo) * Math.sin(Math.PI * d / total) ** 0.7;
+        const l = Math.hypot(c - a, cy - ay) || 1, aparte = signo * Math.max(T.aparte * leer(s, ancho, at), aparteMinimo) * potencia(Math.sin(Math.PI * d / total), 0.7);
         brazo.push({ x: leer(s, xs, at) - ((cy - ay) / l) * aparte, y: leer(s, ys, at) + ((c - a) / l) * aparte });
       }
       brazo.push(puntos[fin]!);

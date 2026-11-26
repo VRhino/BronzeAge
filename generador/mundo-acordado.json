@@ -1,0 +1,5 @@
+{
+  "semilla": 42,
+  "hash": "df603e9d61830d8ccea6f1be4d5a38512e2446dc3337061ce465f7efbb00a8dd",
+  "porque": "El mundo con el que pasan las pruebas del motor y que se publica. Ha de salir igual en cualquier máquina y con cualquier Node; si un cambio del generador lo cambia a propósito, el hash nuevo va aquí en el mismo commit (2026-11-26)."
+}

@@ -2,6 +2,7 @@ import type { Point } from './tipos';
 import { FACTOR } from './campamentos';
 import type { Limites } from './geometria';
 import type { AristaGrafo, GrafoMundo, NodoGrafo } from './mundoTipos';
+import { potencia } from './potencia';
 
 /** Espaciado de la retícula: 8 unidades estratégicas (Doc 1, contrato de mundo §2). En unidades del generador. */
 export const ESPACIADO_NAVEGACION = 4 * FACTOR;
@@ -182,6 +183,6 @@ export function nodoMasCercano(grafo: GrafoMundo, p: Point): NodoGrafo | undefin
   for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) candidatos.push(...indice.get(claveCelda(x, y)) ?? []);
   candidatos.sort((a, b) => a - b);
   let mejor: NodoGrafo | undefined, d2 = grafo.espaciado * grafo.espaciado;
-  for (const k of candidatos) { const n = grafo.nodos[k]!, d = (n.x - p.x) ** 2 + (n.y - p.y) ** 2; if (d <= d2) { d2 = d; mejor = n; } }
+  for (const k of candidatos) { const n = grafo.nodos[k]!, d = potencia(n.x - p.x, 2) + potencia(n.y - p.y, 2); if (d <= d2) { d2 = d; mejor = n; } }
   return mejor;
 }

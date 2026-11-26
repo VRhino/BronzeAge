@@ -47,8 +47,16 @@ const min = (ms) => (ms < 90_000 ? seg(ms) : `${Math.floor(ms / 60_000)} min ${M
     console.error('  Genéralo con:  cd generador && npm ci && npm run generar && npx tsx scripts/generar-mundo.ts 42 salida/mundo   (unos 3 min)');
     process.exit(2);
   }
-  if (mundos.length > 1) console.warn(`— aviso: hay ${mundos.length} artefactos de mundo en ${path.relative(RAIZ, carpeta)}; deja solo el actual: ${mundos.join(', ')}`);
-  else console.log(`— mundo: ${mundos[0]}`);
+  // Y ha de ser el acordado (2026-11-26): las pruebas sobre el mundo real solo prueban algo si todas las máquinas usan el mismo.
+  const acordado = JSON.parse(readFileSync(path.join(RAIZ, 'generador', 'mundo-acordado.json'), 'utf8'));
+  const bueno = `mundo-${acordado.hash}.bin`;
+  if (!mundos.includes(bueno)) {
+    console.error(`— el artefacto de mundo no es el acordado (${acordado.hash.slice(0, 8)}, generador/mundo-acordado.json): hay ${mundos.join(', ')}.`);
+    console.error('  Regenéralo (ver arriba). Si con la semilla acordada sale otro hash, tu máquina no da el mismo mundo: avisa en vez de cambiar el acordado.');
+    process.exit(2);
+  }
+  if (mundos.length > 1) console.warn(`— aviso: hay ${mundos.length} artefactos de mundo en ${path.relative(RAIZ, carpeta)}; deja solo el acordado: ${bueno}`);
+  else console.log(`— mundo: ${mundos[0]} (el acordado)`);
 }
 
 // 1. Compilar y recoger los binarios de prueba.

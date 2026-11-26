@@ -18,6 +18,7 @@ import { muestrearRelieve, type MuestraRelieve } from '../src/muestras';
 import { FACTOR } from '../src/campamentos';
 import type { MundoGenerado, RioMundo } from '../src/mundoTipos';
 import type { Point } from '../src/tipos';
+import { readFileSync } from 'node:fs';
 
 const seed = Number(process.argv[2] ?? 42), carpeta = process.argv[3] ?? 'salida';
 const ancho = 2667 * FACTOR, alto = 2000 * FACTOR;
@@ -133,6 +134,14 @@ const mundo: MundoGenerado = {
 };
 const salida = medir('artefacto', () => escribirArtefacto(mundo, carpeta));
 console.log(`escrito ${salida.ruta}\nhash ${salida.hash}`);
+// El mundo acordado (2026-11-26): con la misma semilla ha de salir el mismo mundo en cualquier máquina y con cualquier Node. Si sale otro, o el
+// generador cambió a propósito (y el hash nuevo va a `mundo-acordado.json` en el mismo commit) o esta máquina no da el mismo mundo: hay que avisar.
+const acordado = JSON.parse(readFileSync(new URL('../mundo-acordado.json', import.meta.url), 'utf8')) as { semilla: number; hash: string };
+if (seed === acordado.semilla && salida.hash !== acordado.hash) {
+  console.error(`\nEL MUNDO NO ES EL ACORDADO: con la semilla ${seed} sale ${salida.hash.slice(0, 8)} y el acordado es ${acordado.hash.slice(0, 8)} (generador/mundo-acordado.json).`);
+  console.error('Si cambiaste el generador a propósito, pon el hash nuevo en mundo-acordado.json en el mismo commit. Si no, esta máquina (o este Node) no da el mismo mundo: no lo uses y avisa.');
+  process.exitCode = 1;
+}
 // El paquete de relieve de los clientes 3D (altura cada 0,5 u, contrato 06 §8), junto al artefacto y con su hash en el nombre.
 const t0 = Date.now();
 const relieve = await escribirPaqueteRelieve(r.elevacion, ancho / FACTOR, alto / FACTOR, salida.hash, carpeta);

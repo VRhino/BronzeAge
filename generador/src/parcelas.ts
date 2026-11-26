@@ -1,5 +1,6 @@
 import type { Point } from './tipos';
 import { anilloEn, FACTOR, type Anillo, type Campamento } from './campamentos';
+import { potencia } from './potencia';
 
 /**
  * Masas explotables de bosque y sus parcelas de explotación (Doc 1.9c, decidido el 2026-10-13).
@@ -105,7 +106,7 @@ export function generarParcelas(
       if (enCelda) enCelda.push(parcela); else hash.set(k, [parcela]);
     }
     if (!propias.length) continue; // pegada a otra masa y sin sitio propio
-    const area = c.length * lado ** 2; // unidades del generador²
+    const area = c.length * potencia(lado, 2); // unidades del generador²
     const centro = c.reduce((s, i) => { const q = centroDe(i); return { x: s.x + q.x / c.length, y: s.y + q.y / c.length }; }, { x: 0, y: 0 });
     masas.push({ id: masaId, centro, radio: Math.sqrt(area / Math.PI), densidad: c.reduce((s, i) => s + dens[i]!, 0) / c.length, area,
       anillo: anilloEn(campamentos, centro).anillo, parcelasIds: propias.map(q => q.id) });

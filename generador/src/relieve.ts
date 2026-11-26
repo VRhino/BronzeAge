@@ -15,6 +15,7 @@ import { muestrearCeldas } from './celdas';
 import { FACTOR } from './campamentos';
 import { crearDetalleRelieve } from './relieveDetalle';
 import { crearRegionAlpina } from './regionAlpina';
+import { potencia } from './potencia';
 
 export function generarRelieve(seed: number, ancho: number, alto: number) {
   const config = { ancho, alto, seed };
@@ -139,7 +140,7 @@ function desembocadura(rio: RioRegional, elevacion: CampoElevacion): RioRegional
   const pendiente = Math.max(0, (e(puntos[k0]!) - e(puntos[n - 1]!)) * 1000 / (hasta[k0]! || 1));
   const tendida = pendiente < BOCA.pendienteDelta;
   const ensanche = tendida ? BOCA.ensanche : BOCA.ensancheEmpinado;
-  for (let i = 0; i < n; i++) if (hasta[i]! < BOCA.estuario) anchos[i] = anchos[i]! * (1 + (ensanche - 1) * (1 - hasta[i]! / BOCA.estuario) ** 2);
+  for (let i = 0; i < n; i++) if (hasta[i]! < BOCA.estuario) anchos[i] = anchos[i]! * (1 + (ensanche - 1) * potencia(1 - hasta[i]! / BOCA.estuario, 2));
   const salida: RioRegional[] = [{ ...rio, puntos, caudal, anchos }];
   if (!tendida || anchoDeCaudal(caudal[n - 1]!) < BOCA.anchoDelta) return salida;
   // el delta: cada brazo nace en el punto a `desde` m de la boca y baja recto al mar; se queda si llega bajando siempre
