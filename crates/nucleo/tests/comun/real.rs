@@ -13,12 +13,27 @@ pub fn mundo() -> Option<&'static M> {
     static M: OnceLock<Option<M>> = OnceLock::new();
     M.get_or_init(|| {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../generador/salida/mundo");
-        let f = std::fs::read_dir(dir).ok()?.flatten().find(|e| e.file_name().to_string_lossy().starts_with("mundo-"))?;
-        let m = Mundo::cargar(&std::fs::read(f.path()).ok()?, &OpcionesValidacion::default()).expect("artefacto válido");
+        let hay: Vec<String> = std::fs::read_dir(&dir).ok()?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|f| f.starts_with("mundo-")).collect();
+        if hay.is_empty() {
+            return None;
+        }
+        // Solo el mundo acordado (2026-11-26): con otro, las pruebas sobre el mundo real dirían cosas distintas en cada máquina.
+        let bueno = format!("mundo-{}.bin", hash_acordado());
+        assert!(hay.contains(&bueno), "el artefacto de mundo no es el acordado ({bueno}, generador/mundo-acordado.json): hay {hay:?}. Regenéralo con la semilla acordada; si sale otro hash, esta máquina no da el mismo mundo");
+        let m = Mundo::cargar(&std::fs::read(dir.join(&bueno)).ok()?, &OpcionesValidacion::default()).expect("artefacto válido");
         let r = Arc::new(Rutas::desde_mundo(&m));
         Some((Arc::new(m), r))
     })
     .as_ref()
+}
+
+/// El hash del mundo acordado (`generador/mundo-acordado.json`).
+fn hash_acordado() -> String {
+    let texto = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../generador/mundo-acordado.json")).expect("generador/mundo-acordado.json");
+    let tras = &texto[texto.find("\"hash\"").expect("el acordado lleva «hash»") + 6..];
+    let inicio = tras.find('"').expect("hash entre comillas") + 1;
+    let fin = inicio + tras[inicio..].find('"').expect("hash entre comillas");
+    tras[inicio..fin].to_string()
 }
 
 /// La puerta del campamento de mercenarios `i`.

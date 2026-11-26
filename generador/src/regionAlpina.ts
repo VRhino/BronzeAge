@@ -9,6 +9,7 @@ import { evaluarRelieveRegional } from './regional';
 import { FACTOR } from './campamentos';
 import { createRng, derivarSeed, type RandomFn } from './rng';
 import { evaluarRuido, generarCampoRuido, ruidoGradiente, type CampoRuido } from './ruido';
+import { potencia } from './potencia';
 
 /** Longitudes en unidades estratégicas (u); alturas en elevación (0-1, 1 = 1.000 m). */
 export const REGION_ALPINA = {
@@ -131,7 +132,7 @@ export function crearRegionAlpina(seed: number, regional: RelieveRegional, rios:
     const m = { x: (a.x + b.x) / 2 - (b.y - a.y) / l * desvio, y: (a.y + b.y) / 2 + (b.x - a.x) / l * desvio };
     const puntos = bezier(a, m, b, rng, Math.min(6 * U, l * 0.05));
     const collado = C.colladoMin + rng() * (C.colladoMax - C.colladoMin);
-    const cotas = puntos.map((_, k) => { const t = k / (puntos.length - 1); return a.piso + (b.piso - a.piso) * t + collado * Math.sin(Math.PI * t) ** 2; });
+    const cotas = puntos.map((_, k) => { const t = k / (puntos.length - 1); return a.piso + (b.piso - a.piso) * t + collado * potencia(Math.sin(Math.PI * t), 2); });
     sendas.push({ puntos: puntos.flatMap(p => [p.x, p.y]), cotas, fondo: C.fondoPaso * U, ladera: C.laderaPaso * U, entrada: false });
   };
   const enArbol = new Set<number>([0]);
@@ -227,7 +228,7 @@ export function aplicarAlpina(r: RegionAlpina, p: Point, e: number): number {
   // Montaña: un suelo que sube hacia el centro y crestas encima, con la subida desde fuera en el borde.
   const hacia = 1 - Math.min(1, Math.hypot(p.x - r.centro.x, p.y - r.centro.y) / (r.radio * C.nucleo));
   const q = Math.min(1, Math.max(0, (crestas(r.crestas, p) - 0.15) / 0.75));
-  let h = C.sueloBorde + (C.sueloCentro - C.sueloBorde) * hacia + C.alturaCrestas * q ** C.afilado;
+  let h = C.sueloBorde + (C.sueloCentro - C.sueloBorde) * hacia + C.alturaCrestas * potencia(q, C.afilado);
   // Pasos y valles de entrada: fondo casi plano con su perfil y laderas hasta la montaña.
   let entrada = 0;
   for (let k = 0; en && k < en.s.length; k += 2) {
@@ -236,7 +237,7 @@ export function aplicarAlpina(r: RegionAlpina, p: Point, e: number): number {
     const l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.y - ay) * dy) / l2)) : 0;
     const d = Math.hypot(p.x - ax - t * dx, p.y - ay - t * dy);
     if (d >= s.fondo + s.ladera) continue;
-    const g = (1 - suave((d - s.fondo) / s.ladera)) ** 1.6;
+    const g = potencia(1 - suave((d - s.fondo) / s.ladera), 1.6);
     let fondo = s.cotas[v - 1]! * (1 - t) + s.cotas[v]! * t;
     // Valle de entrada: el fondo baja del altiplano al terreno de fuera a la vez que la región se apaga, y corta lo que
     // haya en la subida (también una cordillera vieja).
@@ -258,7 +259,7 @@ export function aplicarAlpina(r: RegionAlpina, p: Point, e: number): number {
   for (const k of r.indiceRios[`${cx},${cy}`] ?? []) {
     const ax = r.rios[5 * k]!, ay = r.rios[5 * k + 1]!, bx = r.rios[5 * k + 2]!, by = r.rios[5 * k + 3]!, dx = bx - ax, dy = by - ay;
     const l = dx * dx + dy * dy, t = l ? Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.y - ay) * dy) / l)) : 0;
-    const d2 = Math.max(0, Math.hypot(p.x - ax - t * dx, p.y - ay - t * dy) - r.rios[5 * k + 4]!) ** 2;
+    const d2 = potencia(Math.max(0, Math.hypot(p.x - ax - t * dx, p.y - ay - t * dy) - r.rios[5 * k + 4]!), 2);
     valle = Math.max(valle, Math.exp(-d2 / (semiancho * semiancho)));
     cauce = Math.min(cauce, d2);
   }
@@ -268,6 +269,6 @@ export function aplicarAlpina(r: RegionAlpina, p: Point, e: number): number {
   }
   if (valle > 0 && e < h) h += (e - h) * valle;
   // Si un altiplano o un paso queda por debajo de un río, el cauce conserva su cota (el río sigue bajando): un dique estrecho.
-  else if (cauce < Infinity && e > h) h += (e - h) * Math.exp(-cauce / (REGION_ALPINA.cauce * U) ** 2);
+  else if (cauce < Infinity && e > h) h += (e - h) * Math.exp(-cauce / potencia(REGION_ALPINA.cauce * U, 2));
   return e + (h - e) * Math.max(peso, entrada * Math.min(1, 3 * peso));
 }

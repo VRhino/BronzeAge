@@ -375,14 +375,23 @@ pub fn fundador_sale(n: &mut Nucleo, plaza: u64) {
     }
 }
 
-/// ¿Recorre la caravana su plan hasta `hasta` sin pasar a ≤ `radioAtaqueCaravana` (más 1 u de margen) de ningún campamento de bandidos de la partida? Las pruebas que miden
-/// otra cosa en mitad de un viaje buscan con esto una semilla en la que los bandidos que aparecen al arrancar no la acosan antes (dependen del mundo y de la semilla).
-pub fn sin_acoso_de_bandidos(n: &Nucleo, caravana: u64, hasta: Instante) -> bool {
+/// El tramo de un `plan` fuera de toda zona de plaza y antes de pasar a ≤ `radioAtaqueCaravana` (más 1 u de margen) de ningún campamento de bandidos de
+/// los que hay: su primer instante y el último, a pasos de 10 s. Las pruebas que atacan o emboscan algo «a mitad de camino» lo hacen dentro de él: dónde caen
+/// las zonas y los bandidos depende del mundo, y así no se fija a mano. `None` si el plan no sale de las zonas antes de pasar junto a unos bandidos.
+pub fn tramo_libre(n: &Nucleo, plan: &base::Plan) -> Option<(Instante, Instante)> {
     let radio = n.estado().reglas.economia.combate.bandidos.radio_ataque_caravana + 1_000;
-    let Some(plan) = n.caravana(caravana).and_then(|k| k.plan.clone()) else { return false };
     let campamentos: Vec<Punto> = n.campamentos_de_bandidos().map(|b| b.posicion).collect();
-    let desde = plan.inicio().unwrap_or(hasta);
-    (desde..=hasta).step_by(5_000).all(|t| plan.posicion_en(t).is_none_or(|p| campamentos.iter().all(|b| b.dist(p) > radio)))
+    let (desde, hasta) = (plan.inicio()?, plan.fin()?);
+    let acosado = |t: Instante| plan.posicion_en(t).is_some_and(|p| campamentos.iter().any(|b| b.dist(p) <= radio));
+    let fuera = |t: Instante| plan.posicion_en(t).is_some_and(|p| n.estado().asentamientos.values().all(|a| a.posicion.dist(p) > a.radio));
+    let fin = (desde..=hasta).step_by(10_000).find(|&t| acosado(t)).unwrap_or(hasta) - 10_000;
+    let inicio = (desde..fin).step_by(10_000).find(|&t| fuera(t))?;
+    (inicio < fin).then_some((inicio, fin))
+}
+
+/// [`tramo_libre`] del plan de la caravana.
+pub fn tramo_libre_de_la_caravana(n: &Nucleo, caravana: u64) -> Option<(Instante, Instante)> {
+    tramo_libre(n, n.caravana(caravana)?.plan.as_ref()?)
 }
 
 
@@ -394,3 +403,4 @@ pub fn sin_bandidos_que_aparecen(mut r: Reglas) -> Reglas {
     (b.por_plaza, b.anillo_minimo, b.anillo_maximo) = (0, 0, 0);
     r
 }
+

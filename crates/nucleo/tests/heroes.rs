@@ -497,10 +497,9 @@ fn un_ciudadano_de_visita_recluta_escuadras_nuevas_a_su_columna_salvo_que_la_pla
 
 // ───────────────────────────── 3. Reclutar en un campamento de mercenarios ─────────────────────────────
 
-/// La huella del campamento (Generacion_Del_Mundo §11) y, con ella, su edificio militar: 0 Barracón, 1 Galería de tiro, 2 Caballerizas.
-fn edificio_militar(m: &Mundo, c: usize) -> i64 {
-    let p = campamento(m, c);
-    (p.x.div_euclid(1_000) * 31 + p.y.div_euclid(1_000) * 17 + c as i64).abs() % 3
+/// El edificio militar del campamento por su índice (Generacion_Del_Mundo §11, desde el 2026-11-26): 0 Barracón, 1 Galería de tiro, 2 Caballerizas.
+fn edificio_militar(_m: &Mundo, c: usize) -> i64 {
+    c as i64 % 3
 }
 
 #[test]

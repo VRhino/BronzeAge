@@ -486,18 +486,19 @@ fn tomar_una_orden_de_compra_lleva_la_mercancia_de_la_plaza_la_vende_y_el_oro_en
 
 // ───────────────────────────── 4. Los mercenarios de la región ─────────────────────────────
 
-/// Los campamentos de los bots de [`tres_bots`]: el 0, el siguiente que cae en la región de `p1` y el primero de otra región (el mundo los reparte; no se fijan a mano).
+/// Los campamentos de los bots de [`tres_bots`]: el 0, otro de la región de `p1` si el mundo tiene alguno (si no, el 0 otra vez: dos bots en el mismo campamento) y el
+/// primero de otra región. Se buscan en el mundo acordado, no se fijan a mano.
 fn campamentos_de_los_bots(e: &E) -> (u32, u32, u32) {
     let m = comun::real::mundo().expect("hay mundo");
     let region_de = |c: usize| m.0.region_en(comun::real::campamento(&m.0, c).x, comun::real::campamento(&m.0, c).y);
     assert_eq!(region_de(0), Some(e.region), "el campamento 0 cae en la región de la plaza");
     let total = m.0.campamentos().len();
-    let otro = (1..total).find(|&c| region_de(c) == Some(e.region)).expect("otro campamento en la región de la plaza");
+    let otro = (1..total).find(|&c| region_de(c) == Some(e.region)).unwrap_or(0);
     let fuera = (1..total).find(|&c| region_de(c) != Some(e.region)).expect("un campamento de otra región");
     (0, otro as u32, fuera as u32)
 }
 
-/// Tres bots ofrecidos: uno en el campamento 0 y otro en el siguiente de la región de `p1`, y otro en uno de otra región ([`campamentos_de_los_bots`]).
+/// Tres bots ofrecidos: dos en campamentos de la región de `p1` y otro en uno de otra región ([`campamentos_de_los_bots`]).
 fn tres_bots(e: &mut E) -> (u64, u64, u64) {
     let (ca, cb, cc) = campamentos_de_los_bots(e);
     (mc::bot_ofrecido(&mut e.n, "bot-a", ca), mc::bot_ofrecido(&mut e.n, "bot-b", cb), mc::bot_ofrecido(&mut e.n, "bot-c", cc))

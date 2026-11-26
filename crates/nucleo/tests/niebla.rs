@@ -122,11 +122,21 @@ impl Esc {
     }
 }
 
-/// De dónde sale y adónde va la columna que pasa junto a la plaza de `sitio`: sale a 18 u al oeste (fuera de su vista de 15; en el primer punto en tierra),
-/// pasa a la vista y se va a 70 u al este. Con el mundo del 2026-11-23 la plaza de estas pruebas es otra y la ruta de 60 u al oeste a 70 u al este, como antes, la rodea a 21 u:
-/// ya no pasa a la vista.
+/// De dónde sale y adónde va la columna que pasa junto a la plaza de `sitio`: sale a 18 u (fuera de su vista de 15; en el primer punto en tierra), pasa a la
+/// vista y se va a 70 u al otro lado. El lado se busca (oeste primero) con la ruta por tierra hasta que pase a 10 u o menos de la plaza: según el mundo, el
+/// relieve puede hacer que la ruta la rodee lejos (con el del 2026-11-26, de 60 u al oeste a 70 al este pasaba a 24 u).
 fn de_paso(m: &M, sitio: Punto) -> (Punto, Punto) {
-    (en_tierra(&m.0, sitio, -18 * U, 0), en_tierra(&m.0, sitio, 70 * U, 10 * U))
+    let a_10 = |a: Punto, b: Punto| {
+        let (dx, dy) = ((b.x - a.x) as f64, (b.y - a.y) as f64);
+        let l = dx * dx + dy * dy;
+        let t = if l == 0.0 { 0.0 } else { (((sitio.x - a.x) as f64 * dx + (sitio.y - a.y) as f64 * dy) / l).clamp(0.0, 1.0) };
+        ((sitio.x - a.x) as f64 - t * dx).hypot((sitio.y - a.y) as f64 - t * dy) <= 10_000.0
+    };
+    (0..24)
+        .map(|k| ((180 + k * 15) as f64).to_radians())
+        .map(|a| (en_tierra(&m.0, sitio, (-18.0 * U as f64 * -a.cos()) as i64, (18.0 * U as f64 * a.sin()) as i64), en_tierra(&m.0, sitio, (70.0 * U as f64 * -a.cos()) as i64, (-70.0 * U as f64 * a.sin()) as i64)))
+        .find(|&(desde, hasta)| desde.dist(sitio) > 16 * U && m.1.ruta(desde, hasta, &rutas::Opciones::de_columna()).is_some_and(|c| c.puntos.windows(2).any(|w| a_10(w[0], w[1]))))
+        .expect("algún lado por el que la ruta pasa a la vista de la plaza")
 }
 
 fn ultimo_visto(plan: &Plan, quieto: Punto, desde: Instante, hasta: Instante, p: Punto, radio: Mil) -> Option<Instante> {
@@ -407,11 +417,13 @@ fn partida(m: &M, sesiones: bool, trozos: i64) -> Nucleo {
     }
     let sitio = sitio_rico(&e.n, &m.0, 1, 2);
     e.plaza("gus", 2, sitio);
-    let col = e.columna("ana", 1, en_tierra(&m.0, sitio, -60 * U, 10 * U));
+    // Sale de un lado de la plaza y la primera marcha pasa a su vista ([`de_paso`]).
+    let (desde, hasta) = de_paso(m, sitio);
+    let col = e.columna("ana", 1, desde);
     let h = e.ok("eva", Comando::CrearHeroe { cuenta: "eva".into(), campamento: 0, controlador: Controlador::Humano, nombre: None, clase: "espada_escudo_mediano".into(), aspecto: Default::default() }).creadas[0];
     let sola = e.ok("eva", Comando::SalirDelCampamento { campamento: 0, heroe: h, escuadras: vec![], carga: vec![], politica: militar::columna::Politica::Rechazar, caravana_fundacion: None }).creadas[0];
     let p = e.n.ejercito(sola).unwrap().posicion;
-    for (k, destino) in [(0, en_tierra(&m.0, sitio, 70 * U, 10 * U)), (1, en_tierra(&m.0, sitio, 0, -40 * U)), (2, en_tierra(&m.0, sitio, -60 * U, 0))].into_iter() {
+    for (k, destino) in [(0, hasta), (1, en_tierra(&m.0, sitio, 0, -40 * U)), (2, en_tierra(&m.0, sitio, -60 * U, 0))].into_iter() {
         e.marchar("ana", col, destino);
         e.marchar("eva", sola, en_tierra(&m.0, p, (k + 1) * 20 * U, 0));
         let fin = e.n.ahora() + 10 * MIN;

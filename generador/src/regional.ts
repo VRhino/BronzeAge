@@ -1,6 +1,7 @@
 import type { Point } from './tipos';
 import type { Limites } from './geometria';
 import { createRng, derivarSeed } from './rng';
+import { potencia } from './potencia';
 
 export interface AreaRegional {
   id: number; centro: Point; radio: number; altura: number; humedad: number;
@@ -30,7 +31,7 @@ function elipse(x: number, y: number, ancho: number, alto: number, cx: number, c
 }
 
 function campana(x: number, centro: number, radio: number): number {
-  return Math.exp(-(((x - centro) / radio) ** 2));
+  return Math.exp(-(potencia((x - centro) / radio, 2)));
 }
 
 export function distanciaCostaRegional(campo: RelieveRegional, p: Point): number {
@@ -71,8 +72,8 @@ function pesoArea(campo: RelieveRegional, area: AreaRegional, p: Point): number 
   const escala = Math.min(campo.limites.ancho, campo.limites.alto) / 24000;
   const x = p.x + 330 * escala * Math.sin(p.y / (1800 * escala) + campo.fase);
   const y = p.y + 290 * escala * Math.sin(p.x / (2200 * escala) - campo.fase);
-  const d2 = ((x - area.centro.x) ** 2 + (y - area.centro.y) ** 2) / (area.radio ** 2);
-  return 1 / (0.03 + d2 ** 3);
+  const d2 = (potencia(x - area.centro.x, 2) + potencia(y - area.centro.y, 2)) / potencia(area.radio, 2);
+  return 1 / (0.03 + potencia(d2, 3));
 }
 
 /** La región (el área de `campo.areas`) que más pesa en `p`: su `id`. Las regiones son las del análisis de metales por región. */
@@ -244,7 +245,7 @@ export function crearRelieveRegional(seed: number, limites: Limites): RelieveReg
 }
 
 /** Un tramo que pesa menos que esto respecto al mayor de su cordillera no cambia la media ponderada en doble precisión. */
-const PESO_DESPRECIABLE = 2 ** -60;
+const PESO_DESPRECIABLE = potencia(2, -60);
 // Pesos y proyecciones de los tramos de la cordillera en curso (ninguna tiene más de 256).
 const T_TRAMO = new Float64Array(256), D_TRAMO = new Float64Array(256), PESO_TRAMO = new Float64Array(256);
 
@@ -257,8 +258,8 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
   const ondulacion = Math.sin(x / 1100 + campo.fase) * Math.cos(y / 1430 - campo.fase)
     + 0.3 * Math.sin((x + y) / 490 + campo.fase);
   for (const area of campo.areas) {
-    const peso = 1 / (0.03 + (((xa - area.centro.x) ** 2 + (ya - area.centro.y) ** 2) / (area.radio ** 2)) ** 3);
-    const d2 = (p.x - area.centro.x) ** 2 + (p.y - area.centro.y) ** 2;
+    const peso = 1 / (0.03 + potencia((potencia(xa - area.centro.x, 2) + potencia(ya - area.centro.y, 2)) / potencia(area.radio, 2), 3));
+    const d2 = potencia(p.x - area.centro.x, 2) + potencia(p.y - area.centro.y, 2);
     suma += peso * (area.altura + area.ondulacion * ondulacion
       + Math.min(0.026, d2 / (area.radio * area.radio) * 0.018));
     pesos += peso;
@@ -273,13 +274,13 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
     for (let k = 0; k < b.tramos.length; k++) {
       const tramo = b.tramos[k]!;
       const dx = tramo.b.x - tramo.a.x, dy = tramo.b.y - tramo.a.y;
-      const t = Math.max(0, Math.min(1, ((p.x - tramo.a.x) * dx + (p.y - tramo.a.y) * dy) / (tramo.longitud ** 2)));
+      const t = Math.max(0, Math.min(1, ((p.x - tramo.a.x) * dx + (p.y - tramo.a.y) * dy) / potencia(tramo.longitud, 2)));
       const d = Math.hypot(p.x - tramo.a.x - t * dx, p.y - tramo.a.y - t * dy);
       // Mezclar tramos evita saltos de altura en el interior de curvas cerradas.
       // Cresta estrecha, piedemonte amplio: un kernel estrecho a gran distancia
       // cambia demasiado deprisa de tramo en curvas y vuelve a cortar los accesos.
       const anchoMezcla = b.ancho * (0.18 + 0.42 * suave(d / (b.ancho * 1.3)));
-      const peso = Math.exp(-(d * d) / (anchoMezcla ** 2)) * tramo.longitud;
+      const peso = Math.exp(-(d * d) / potencia(anchoMezcla, 2)) * tramo.longitud;
       T_TRAMO[k] = t; D_TRAMO[k] = d; PESO_TRAMO[k] = peso;
       if (peso > pesoMaximo) pesoMaximo = peso;
     }
@@ -313,14 +314,14 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
           + 0.28 * (1 - suave((q - 0.60) / 0.14))
           + 0.16 * (1 - suave((q - 0.82) / 0.18));
       } else {
-        perfilCresta = Math.pow(1 - q, 1.75) * (1 - suave((q - 0.80) / 0.20));
+        perfilCresta = potencia(1 - q, 1.75) * (1 - suave((q - 0.80) / 0.20));
       }
       // Large crowns and smaller shoulders combine at different wavelengths.
       // Floors remain connected barriers; peaks no longer share one height.
       const grandes = ruidoCresta(posicion / (perfil === 'macizos' ? 950 : 1250) / escala, f + 71);
       const hombros = ruidoCresta(posicion / (310 * escala), f + 113);
       const cumbres = perfil === 'meseta' ? .90 + .10 * grandes : perfil === 'escarpe' ? 0.78 + 0.22 * grandes
-        : 0.38 + 0.82 * Math.pow(grandes, 1.2) + 0.20 * hombros;
+        : 0.38 + 0.82 * potencia(grandes, 1.2) + 0.20 * hombros;
       const cresta = b.altura * perfilCresta * cumbres * (perfil === 'escarpe' ? 1 : perfil === 'meseta' ? .7 : 0.48);
       sumaCresta += peso * (estribacion + cresta) * (0.10 + 0.90 * silla) * terminacion;
       pesoCresta += peso;
@@ -336,7 +337,7 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
         const avance = (i - 1 + t) / (ramal.puntos.length - 1);
         const peso = Math.exp(-d * d / (ramal.ancho * ramal.ancho * 0.36));
         const pie = Math.max(0, 1 - d / ramal.ancho);
-        alturaMezclada += peso * ramal.altura * Math.pow(pie, 1.65)
+        alturaMezclada += peso * ramal.altura * potencia(pie, 1.65)
           * (1 - suave(avance)) * (0.75 + 0.25 * ruidoCresta(avance * 4, b.fase ?? 0));
         pesoRamal += peso;
       }
@@ -365,13 +366,13 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
       const u=Math.max(0,(q-tapa)/(1-tapa));
       const perfilCima=b.morfologia==='meseta'
         ? .68*(1-suave(u/.62))+.32*(1-suave((u-.45)/.55))
-        : Math.pow(1-u,b.morfologia==='longitudinal'?1.05:1.35);
+        : potencia(1-u,b.morfologia==='longitudinal'?1.05:1.35);
       const erosion=b.morfologia==='meseta'?1-.065*(.5+.5*Math.sin(angulo*7+c.fase))*suave(u/.5):1;
       let cuerpo=perfilCima;
       if(c.diseccion){
         // Curved radial gullies, with no angular singularity at the summit.
         // Their finite wavelength survives the 15.625 m heightfield sampling.
-        const barranco=Math.pow(.5+.5*Math.sin(angulo*6+c.fase+q*2.8
+        const barranco=potencia(.5+.5*Math.sin(angulo*6+c.fase+q*2.8
           +.45*Math.sin(angulo*3-c.fase)),4);
         const flanco=suave((q-.10)/.25)*(1-suave((q-.72)/.22));
         cuerpo*=1-c.diseccion*barranco*flanco;
@@ -380,7 +381,7 @@ export function evaluarRelieveRegional(campo: RelieveRegional, p: Point): number
         for(const [a,l,h,r] of [[-.33,.18,.77,.42],[.27,-.23,.64,.34]]){
           const dist=Math.hypot((axial/c.longitud!-a!)/r!,
             (lateral/c.radio-l!)/(r!*.82));
-          const hombro=h!*Math.pow(Math.max(0,1-dist),1.35);
+          const hombro=h!*potencia(Math.max(0,1-dist),1.35);
           const fusion=.06,mezcla=Math.max(0,1-Math.abs(cuerpo-hombro)/fusion);
           cuerpo=Math.max(cuerpo,hombro)+fusion*mezcla*mezcla/4;
         }

@@ -8,6 +8,7 @@ import { FACTOR } from './campamentos';
 import { createRng, derivarSeed } from './rng';
 import { evaluarRuido, generarCampoRuido, ruidoGradiente, type CampoRuido } from './ruido';
 import { aplicarAlpina, type RegionAlpina } from './regionAlpina';
+import { potencia } from './potencia';
 
 export const RELIEVE_DETALLE = {
   revision: 'detalle-1',
@@ -150,7 +151,7 @@ export function aplicarDetalle(d: DetalleRelieve, p: Point, base: number): numbe
     // Crestas y vaguadas con relieve propio en todo el macizo; la modulación hace unas sierras más altas que otras.
     const k = 0.6 + 0.4 * suave((evaluarRuido(d.modulacion, p) - 0.3) / 0.4);
     const q = Math.min(1, Math.max(0, (crestas(d.crestas, p) - C.crestaMin) / (C.crestaMax - C.crestaMin)));
-    e += d.fuerza * macizo * (C.amplitudMinima + C.realce * (base - C.suelo)) * q ** C.afilado * k * seco;
+    e += d.fuerza * macizo * (C.amplitudMinima + C.realce * (base - C.suelo)) * potencia(q, C.afilado) * k * seco;
   }
   if (pie > 0) e += d.fuerza * C.alturaColinas * pie * Math.max(0, (evaluarRuido(d.colinas, p) - 0.5) * 1.8 + 0.35) * seco;
   if (llano > 0) e += d.fuerza * C.alturaLomas * (evaluarRuido(d.lomas, p) - 0.5) * 2 * llano * seco;

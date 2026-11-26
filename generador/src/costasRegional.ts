@@ -4,6 +4,7 @@ import { createRng, derivarSeed } from './rng';
 import { evaluarRuido, generarCampoRuido, type CampoRuido } from './ruido';
 import { FACTOR } from './campamentos';
 import { enPaso } from './relieveDetalle';
+import { potencia } from './potencia';
 
 /**
  * Costas (revisión 2, decidida por el autor el 2026-11-01 sobre el «Boceto de costa» de la mesa de escalas 3D: «si el generador
@@ -361,14 +362,14 @@ export function aplicarCostaRegional(campo: CampoCostero, p: Point, base: number
     const d = s, mar = c.nivelMar, tierra = Math.max(base, mar + 0.002);
     if (enFarallon) return mar + c.farallones.altura * suave(d / 3 / 0.9) / 1000;
     // Acantilado y roca: su perfil, que vuelve al relieve de dentro.
-    const hA = mar + (alto * suave(d / c.acantilado.ancho) ** 0.7 + 0.15 * d) / 1000;
-    const hR = mar + (bajo * (1 - (1 - Math.min(1, d / c.roca.ancho)) ** 2)
+    const hA = mar + (alto * potencia(suave(d / c.acantilado.ancho), 0.7) + 0.15 * d) / 1000;
+    const hR = mar + (bajo * (1 - potencia(1 - Math.min(1, d / c.roca.ancho), 2))
       + 1.6 * (0.5 + 0.5 * centrado(campo.ruido.fina, { x: p.x * 1.7, y: p.y * 1.7 })) * Math.min(1, d) + 0.2 * d) / 1000;
     // Playa: berma, dunas y una llanura que sube despacio; la ladera de dentro se aparta (sin pasar de `retiro`) y vuelve.
     const P = c.playa, duna = libre * lerp(P.dunas[0], P.dunas[1], evaluarRuido(campo.ruido.dunas, p));
     // La llanura (berma y lo que sube detrás) nunca pasa del relieve de dentro: allana, no levanta. Las dunas van encima.
     const llano = mar + (d < P.anchoBerma ? P.berma * d / P.anchoBerma : P.berma + P.subida * Math.max(0, d - P.finDunas)) / 1000;
-    const dunas = d > P.anchoBerma && d < P.finDunas ? duna * Math.sin(Math.PI * (d - P.anchoBerma) / (P.finDunas - P.anchoBerma)) ** 2 / 1000 : 0;
+    const dunas = d > P.anchoBerma && d < P.finDunas ? duna * potencia(Math.sin(Math.PI * (d - P.anchoBerma) / (P.finDunas - P.anchoBerma)), 2) / 1000 : 0;
     const franja = lerp(P.franja[0], P.franja[1], evaluarRuido(campo.ruido.playa, { x: p.y, y: p.x })), finRetiro = V.playa[0];
     const retiro = libre * Math.min(G * franja, P.retiro) / 1000 * (1 - suave((d - franja - 4) / Math.max(1, finRetiro - franja - 4)));
     // La ladera de dentro, apartada, y nunca más alta que una rampa desde el agua: donde el agua entra en tierra alta (un
