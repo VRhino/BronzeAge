@@ -1061,24 +1061,19 @@ fn una_columna_con_caballeria_que_ataca_una_caravana_cuenta_una_persecucion() {
 #[test]
 fn una_caravana_atacada_fuera_de_toda_zona_es_una_disputa_de_carros_y_sin_carros_que_quedar_se_destruye() {
     let m = con_mundo!();
-    // Sin los bandidos que aparecen solos, y con una semilla en la que los del artefacto no acosan a la caravana antes de mitad de camino.
-    let (mut e, ca, t0, fin) = (10..20)
-        .find_map(|semilla| {
-            let mut a = arranque(m, semilla);
-            a.reglas = comun::sin_bandidos_que_aparecen(a.reglas);
-            let mut e = montar_en(Nucleo::nuevo(a), m, true, 3);
-            let ca = e.caravana("ana", e.a, 2);
-            let t0 = e.lanzar(ca);
-            let fin = e.n.caravana(ca).unwrap().plan.as_ref().unwrap().fin().unwrap();
-            comun::sin_acoso_de_bandidos(&e.n, ca, fin).then_some((e, ca, t0, fin))
-        })
-        .expect("alguna semilla sin bandidos en el camino");
+    // Sin los bandidos que aparecen solos; los del artefacto pueden caer en el camino, así que se ataca en el tramo fuera de toda zona y antes de ellos.
+    let mut ar = arranque(m, 10);
+    ar.reglas = comun::sin_bandidos_que_aparecen(ar.reglas);
+    let mut e = montar_en(Nucleo::nuevo(ar), m, true, 3);
     let (a, b) = (e.a, e.b);
-    // A mitad de camino, lejos de las dos plazas, no hay zona de nadie.
-    e.n.avanzar_hasta(t0 + (fin - t0) / 2);
+    let ca = e.caravana("ana", a, 2);
+    e.lanzar(ca);
+    let (desde, hasta) = comun::tramo_libre_de_la_caravana(&e.n, ca).expect("un tramo del viaje fuera de toda zona y sin bandidos");
+    // Lejos de las dos plazas, no hay zona de nadie.
+    e.n.avanzar_hasta((desde + hasta) / 2);
     let t = e.n.ahora();
     let donde = e.n.posicion_de_caravana(ca, t).unwrap();
-    assert_eq!(e.n.zona_de_caravana(ca, t), Some(combate::caravana::Zona::Ninguna), "a mitad de camino no hay zona de nadie");
+    assert_eq!(e.n.zona_de_caravana(ca, t), Some(combate::caravana::Zona::Ninguna), "fuera de las plazas no hay zona de nadie");
     let atacante = e.ejercito("beto", 2, donde, &[Tropa::ArquerosCompuesto]);
     let r = e.atacar("beto", atacante.1, ObjetivoAtaque::Caravana(ca), true);
     assert!(r.aceptada(), "{r:?}");
@@ -1088,18 +1083,17 @@ fn una_caravana_atacada_fuera_de_toda_zona_es_una_disputa_de_carros_y_sin_carros
     assert_eq!(k.carros.len(), 1, "pierde la mitad de los carros, con su animal");
     assert_eq!(k.contenido[&Cobre], 50_000, "y la carga que llevaba ese carro");
     assert_eq!(e.carga_de_columna(atacante.0, Cobre), 50_000);
-    // Una caravana de un solo carro lo pierde entero: desaparece (sin aguante no se salva nada) con un hecho de pérdida.
+    // Una caravana de un solo carro lo pierde entero: desaparece (sin aguante no se salva nada) con un hecho de pérdida. La plaza espera su `cooldownMinutos` para
+    // construir otra.
+    e.avanzar(e.n.estado().reglas.economia.comercio.flota.cooldown_creacion);
     let cb = e.caravana("ana", a, 1);
     e.dar(a, Cobre, 100_000);
     e.ok("ana", Comando::PrepararCaravana { caravana: cb, destino: b, carga: vec![(Cobre, 50_000)], salir_en: None, escolta: None });
-    let t1 = loop {
+    while e.n.caravana(cb).unwrap().estado != EstadoCaravana::EnTransito {
         e.avanzar(MIN);
-        if e.n.caravana(cb).unwrap().estado == EstadoCaravana::EnTransito {
-            break e.n.ahora();
-        }
-    };
-    let fin = e.n.caravana(cb).unwrap().plan.as_ref().unwrap().fin().unwrap();
-    e.n.avanzar_hasta(t1 + (fin - t1) / 2);
+    }
+    let (desde, hasta) = comun::tramo_libre_de_la_caravana(&e.n, cb).expect("un tramo del viaje fuera de toda zona y sin bandidos");
+    e.n.avanzar_hasta((desde + hasta) / 2);
     let donde = e.n.posicion_de_caravana(cb, e.n.ahora()).unwrap();
     let otro = e.ejercito("beto", 2, donde, &[Tropa::ArquerosCompuesto]);
     assert!(e.atacar("beto", otro.1, ObjetivoAtaque::Caravana(cb), false).aceptada(), "ya hay guerra");
@@ -1596,14 +1590,12 @@ fn nadie_inicia_un_combate_junto_a_un_campamento_de_mercenarios() {
     assert_eq!(e.rechazada("admin", Comando::ColocarBandidos { posicion: e.pos(a), nivel: 1 }), rechazos::BANDIDOS_SOBRE_UNA_ZONA);
 }
 
-/// Un campamento de bandidos de ese nivel en la ruta de la caravana, al 40 %, fuera de toda zona. Devuelve su id y el instante exacto en que el plan de la
+/// Un campamento de bandidos de ese nivel en la ruta de la caravana, fuera de toda zona y antes de los que ya había ([`comun::tramo_libre`]). Devuelve su id y el instante exacto en que el plan de la
 /// caravana entra por primera vez a ≤ 7 u de él.
 fn bandidos_en_la_ruta(e: &mut Esc, caravana: u64, nivel: u8) -> (u64, Instante) {
-    let (t0, fin) = {
-        let p = e.n.caravana(caravana).unwrap().plan.as_ref().unwrap();
-        (p.inicio().unwrap(), p.fin().unwrap())
-    };
-    let donde = e.n.caravana(caravana).unwrap().plan.as_ref().unwrap().posicion_en(t0 + (fin - t0) * 4 / 10).unwrap();
+    // En el tramo del viaje fuera de toda zona y antes de los bandidos que ya hay (dónde caen depende del mundo).
+    let (desde, hasta) = comun::tramo_libre_de_la_caravana(&e.n, caravana).expect("un tramo del viaje fuera de toda zona y sin bandidos");
+    let donde = e.n.caravana(caravana).unwrap().plan.as_ref().unwrap().posicion_en(desde + (hasta - desde) * 6 / 10).unwrap();
     let id = e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel }).creadas[0];
     let radio = mc().bandidos.radio_ataque_caravana;
     let mut t = e.n.ahora();
@@ -1710,13 +1702,12 @@ fn una_caravana_adjunta_a_un_ejercito_se_defiende_en_una_emboscada_con_bajas_y_s
         e.ok("admin", Comando::DarSuministro { ejercito: col.0, recurso: Madera, cantidad: lleno });
         let soldados0 = e.n.soldados_de_columna(col.0).unwrap();
         e.ok("ana", Comando::MarcharA { ejercito: col.0, destino: e.pos(b) });
-        let (t0, fin) = {
-            let p = &e.n.ejercito(col.0).unwrap().plan;
-            (p.inicio().unwrap(), p.fin().unwrap())
-        };
-        let donde = e.n.ejercito(col.0).unwrap().plan.posicion_en(t0 + (fin - t0) * 4 / 10).unwrap();
+        // En el tramo de la marcha fuera de toda zona y antes de los bandidos del artefacto (dónde caen depende del mundo).
+        let (desde, hasta) = comun::tramo_libre(&e.n, &e.n.ejercito(col.0).unwrap().plan).expect("un tramo de la marcha fuera de toda zona y sin bandidos");
+        let donde = e.n.ejercito(col.0).unwrap().plan.posicion_en(desde + (hasta - desde) * 6 / 10).unwrap();
         let mio = e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel: 3 }).creadas[0];
-        e.n.avanzar_hasta(fin);
+        // Hasta el final de ese tramo: pasado el suyo y antes de los demás.
+        e.n.avanzar_hasta(hasta);
         let suyos = |codigo: &str| -> Vec<Hecho> { hechos(&e.n, codigo).into_iter().filter(|h| dato(h, "campamento") == mio as i64).collect() };
         let (perdida, escapa) = (suyos("bandidos.caravana_interceptada"), suyos("bandidos.caravana_escapa"));
         assert_eq!((perdida.len(), escapa.len()), (cae as usize, !cae as usize), "{tropas:?}: {perdida:?} {escapa:?}");

@@ -12,7 +12,7 @@
 //! # Los campamentos y los héroes
 //! Quien compra, reposta o recluta es un héroe, que debe estar dentro del campamento o con su columna a la puerta. El residente (el héroe cuya
 //! residencia es ese campamento) paga de su almacén personal y compra con cupo diario; el visitante, con el oro del carro de su columna. El
-//! edificio militar de un campamento sale de su posición (`edificiosMilitares[huella mod 3]`, Generacion_Del_Mundo §11) y sus viviendas,
+//! edificio militar de un campamento sale de su índice (`edificiosMilitares[índice mod 3]`, Generacion_Del_Mundo §11) y sus viviendas,
 //! de `edificiosFijos`: ninguno se guarda.
 //!
 //! # Las tecnologías del campamento
@@ -152,12 +152,12 @@ impl Nucleo {
         self.geografia.as_ref()?.campamentos_del_artefacto().get(campamento as usize).map(|&(_, origen)| origen)
     }
 
-    /// El edificio militar del campamento, elegido por su posición: `huella = |⌊x⌋·31 + ⌊y⌋·17 + índice|`.
+    /// El edificio militar del campamento, por su índice en el artefacto: `edificiosMilitares[índice mod 3]` (2026-11-26; antes por la huella de su posición, que en
+    /// el mundo df603e9d no dejaba ninguna Galería de tiro). Así todo mundo tiene de los tres.
     pub fn edificio_militar(&self, campamento: u32) -> Option<asentamiento::Tipo> {
-        let p = self.puerta_de_campamento(campamento)?;
+        self.puerta_de_campamento(campamento)?;
         let lista = &self.estado.reglas.economia.militar.mercenarios.edificios_militares;
-        let huella = (p.x.div_euclid(1_000) * 31 + p.y.div_euclid(1_000) * 17 + campamento as i64).unsigned_abs();
-        Some(lista[huella as usize % lista.len()])
+        Some(lista[campamento as usize % lista.len()])
     }
 
     /// Los reclutas del campamento: los guardados, o el campamento lleno si nadie lo ha tocado.

@@ -1974,19 +1974,14 @@ fn si_la_caravana_resiste_en_unity_conserva_sus_carros_su_escolta_sus_supervivie
 #[test]
 fn si_unity_da_por_perdidos_todos_los_carros_la_caravana_desaparece() {
     let m = con_mundo!();
-    // Sin los bandidos que aparecen solos, y con una semilla en la que los del artefacto no acosan a la caravana antes del escenario.
-    let (mut e, ca, t0, fin) = (10..20)
-        .find_map(|semilla| {
-            let mut e = montar_sin_bandidos_que_aparecen(m, semilla);
-            let ca = e.caravana("ana", e.a, 1);
-            let t0 = e.lanzar(ca);
-            let fin = e.n.caravana(ca).unwrap().plan.as_ref().unwrap().fin().unwrap();
-            comun::sin_acoso_de_bandidos(&e.n, ca, fin).then_some((e, ca, t0, fin))
-        })
-        .expect("alguna semilla sin bandidos en el camino");
+    // Sin los bandidos que aparecen solos; los del artefacto pueden caer en el camino, así que se ataca en el tramo fuera de toda zona y antes de ellos.
+    let mut e = montar_sin_bandidos_que_aparecen(m, 10);
     let b = e.b;
-    // A mitad de camino no hay zona de nadie: disputa de carros.
-    e.n.avanzar_hasta(t0 + (fin - t0) / 2);
+    let ca = e.caravana("ana", e.a, 1);
+    e.lanzar(ca);
+    let (desde, hasta) = comun::tramo_libre_de_la_caravana(&e.n, ca).expect("un tramo del viaje fuera de toda zona y sin bandidos");
+    // Fuera de las plazas no hay zona de nadie: disputa de carros.
+    e.n.avanzar_hasta((desde + hasta) / 2);
     let donde = e.n.posicion_de_caravana(ca, e.n.ahora()).unwrap();
     let atacante = e.ejercito("beto", 2, donde, &[Tropa::ArquerosCompuesto]);
     assert!(e.atacar("beto", atacante.1, ObjetivoAtaque::Caravana(ca), true).aceptada());
@@ -2127,22 +2122,17 @@ fn los_bandidos_que_acosan_una_caravana_adjunta_a_una_columna_con_heroes_la_jueg
 fn los_bandidos_que_acosan_una_caravana_sin_heroes_la_resuelven_con_numeros_aunque_haya_servidores_de_batalla() {
     let m = con_mundo!();
     // Suelta, con una escolta de tropa cedida pero sin héroe a bordo.
-    // Sin los bandidos que aparecen solos, y con una semilla en la que los del artefacto no acosan a la caravana antes del escenario.
-    let (mut e, _, t0, plan, fin) = (10..20)
-        .find_map(|semilla| {
-            let mut e = montar_sin_bandidos_que_aparecen(m, semilla);
-            let a = e.a;
-            let ca = e.caravana("ana", a, 2);
-            let carla = e.heroe_en(&m.0, "carla", 1, a);
-            let milicia = e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
-            e.ok("carla", Comando::AsignarEscolta { caravana: ca, heroe: carla, escuadras: vec![milicia] });
-            let t0 = e.lanzar(ca);
-            let plan = e.n.caravana(ca).unwrap().plan.clone().unwrap();
-            let fin = plan.fin().unwrap();
-            comun::sin_acoso_de_bandidos(&e.n, ca, fin).then_some((e, ca, t0, plan, fin))
-        })
-        .expect("alguna semilla sin bandidos en el camino");
-    let donde = plan.posicion_en(t0 + (fin - t0) * 4 / 10).unwrap();
+    // Sin los bandidos que aparecen solos; el suyo va en el tramo del viaje fuera de toda zona y antes de los del artefacto.
+    let mut e = montar_sin_bandidos_que_aparecen(m, 10);
+    let a = e.a;
+    let ca = e.caravana("ana", a, 2);
+    let carla = e.heroe_en(&m.0, "carla", 1, a);
+    let milicia = e.ok("admin", Comando::DarEscuadra { heroe: carla, tropa: Tropa::MiliciaLanceros, cantidad: 25 }).creadas[0];
+    e.ok("carla", Comando::AsignarEscolta { caravana: ca, heroe: carla, escuadras: vec![milicia] });
+    e.lanzar(ca);
+    let plan = e.n.caravana(ca).unwrap().plan.clone().unwrap();
+    let (desde, hasta) = comun::tramo_libre_de_la_caravana(&e.n, ca).expect("un tramo del viaje fuera de toda zona y sin bandidos");
+    let donde = plan.posicion_en(desde + (hasta - desde) * 6 / 10).unwrap();
     let camp = e.ok("admin", Comando::ColocarBandidos { posicion: donde, nivel: 3 }).creadas[0];
     let llegada = llegada_al_radio(&plan, donde, e.n.ahora());
     e.n.avanzar_hasta(llegada - 1_000);

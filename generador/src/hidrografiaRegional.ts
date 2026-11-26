@@ -7,6 +7,7 @@ import { enPaso } from './relieveDetalle';
 import { ELEVACION } from './config';
 import { brazosTrenzados, lagoDeBrazo, migrar, MIGRACION, TRENZAS, zonasTrenzadas, type BrazoMuerto } from './fluvial';
 import { alturaFluvial, aplanarFranja, aplicarCauces, celdasDeLinea, crearCaucesFinos, desaguar, erosionarCorriente, EROSION_CORRIENTE, type RejillaFluvial } from './rejillaFluvial';
+import { potencia } from './potencia';
 
 export interface RioRegional extends RioZona { orden: number; caudal: number[]; anchos: number[] }
 
@@ -142,7 +143,7 @@ const KINOSHITA = (() => {
   const n = 256, { theta: t0, Js, Jf } = MEANDROS, y: number[] = [0];
   for (let k = 1; k <= n; k++) {
     const f = ((k - 0.5) / n) * 2 * Math.PI;
-    y.push(y[k - 1]! + Math.sin(t0 * Math.sin(f) + t0 ** 3 * (Js * Math.cos(3 * f) - Jf * Math.sin(3 * f))));
+    y.push(y[k - 1]! + Math.sin(t0 * Math.sin(f) + potencia(t0, 3) * (Js * Math.cos(3 * f) - Jf * Math.sin(3 * f))));
   }
   const media = y.reduce((s, v) => s + v, 0) / y.length, max = Math.max(...y.map(v => Math.abs(v - media)));
   return y.map(v => (v - media) / max);
