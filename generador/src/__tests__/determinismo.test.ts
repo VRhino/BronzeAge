@@ -47,7 +47,7 @@ describe('determinismo del generador', () => {
     const ficheros = [...readdirSync(src).filter(f => f.endsWith('.ts')).map(f => path.join(src, f)), path.join(src, '..', 'scripts', 'generar-mundo.ts')];
     const fuera: string[] = [];
     for (const f of ficheros) {
-      readFileSync(f, 'utf8').split('\n').forEach((linea, i) => {
+      readFileSync(f, 'utf8').split(/\r?\n/).forEach((linea, i) => {
         const codigo = linea.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');
         if (/Math\.pow\s*\(|[^*/]\*\*[^*/]/.test(codigo)) fuera.push(`${path.basename(f)}:${i + 1}`);
       });
