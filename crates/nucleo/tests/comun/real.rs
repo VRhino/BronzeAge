@@ -123,16 +123,18 @@ pub fn distancia_al_rio(m: &Mundo, p: Punto) -> (f64, bool) {
     mejor
 }
 
-/// Los nodos de recurso que el artefacto puso a menos de 0,5 u del trazo de un río y en una celda transitable (encima del agua dibujada): los que
-/// la orilla (`ORILLA_RIO`) deja sin explotar. Índices en `m.nodos()`.
+/// Los nodos de recurso en una celda transitable que quedan a menos de la media anchura del cauce más `radio` del trazo de un río (`ORILLA_RIO`): donde algo de
+/// ese radio quedaría dentro del cauce. Índices en `m.nodos()`. Con los ríos de cauce fino (generador, 2026-11-25) ningún nodo cae ya encima del agua dibujada,
+/// pero sí a un par de unidades del trazo.
 #[allow(dead_code)]
-pub fn nodos_encima_del_rio(m: &Mundo) -> Vec<usize> {
+pub fn nodos_junto_al_rio(m: &Mundo, orilla: &asentamiento::datos::OrillaRio, radio: Mil) -> Vec<usize> {
     m.nodos()
         .iter()
         .enumerate()
         .filter(|(_, n)| {
             let p = n.posicion.unwrap();
-            m.transitable_en(p.x, p.y) && distancia_al_rio(m, Punto::new(p.x, p.y)).0 < 500.0
+            let (d, navegable) = distancia_al_rio(m, Punto::new(p.x, p.y));
+            m.transitable_en(p.x, p.y) && d < (if navegable { orilla.media_anchura_navegable } else { orilla.media_anchura } + radio) as f64
         })
         .map(|(i, _)| i)
         .collect()

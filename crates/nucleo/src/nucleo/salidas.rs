@@ -276,7 +276,7 @@ impl Nucleo {
                 if !escuadras.is_empty() || !carga.is_empty() || comida > 0 {
                     self.tras_retomar(t, *c0, escuadras, carga, comida, TipoColumna::Personal, Politica::Rechazar);
                 }
-                self.fusionar_columna(t, base, *c0).expect("la convocatoria comprobó que se puede fundir");
+                self.fusionar_columna_desde(t, base, *c0, true).expect("la convocatoria comprobó que se puede fundir");
                 base
             }
             (None, Destino::Unirse(base)) => {
