@@ -6,7 +6,7 @@
 //! - Batalla: `id u64 · estado u8 (0 convocando, 1 asignada, 2 en curso, 3 aplicada, 4 cancelada, 5 fallida) · iniciada_por u64 · punto · ticket ·
 //!   incorporaciones{n u64 · n × (secuencia u32, lado u8, participante)} · salidas{n u64 · n × (héroe u64, motivo u8, derrotado bool, en i64)} · bloqueo ·
 //!   expira_en i64 · convocatoria_hasta opt_i64 · iniciada_en opt_i64 · aplicada_en opt_i64 · cerrada_en opt_i64 · asignación opt{bool · asignación} ·
-//!   resultado opt{bool · resultado}`.
+//!   resultado opt{bool · resultado} · procedencias 2 × opt{bool · punto}` (BAN70: de dónde llegaba el atacante y el defensor, para el recorte del lugar).
 //! - Ticket: `revisión u32 · contexto · duración_máxima i64 · atacante bando · defensor bando · plaza opt{bool · plaza}`. Plaza congelada (un asedio): `layout_version u32 · unidades_por_celda u32 ·
 //!   edificios{n u64 · n × (id u32, tipo texto, centro punto, ancho u32, alto u32, nivel_interno u8, estado u8: 0 en cola, 1 en construcción, 2 activo, dañado bool)} ·
 //!   recintos{n u64 · n × (id u32, nivel u8, celdas{n u64 · n × (col i32, fila i32, clase u8)})}`. Lado: 0 atacante, 1 defensor.
@@ -441,7 +441,7 @@ pub(crate) fn resultado_leer(r: &mut Lector) -> Result<Resultado, ErrorFormato> 
 // ───────────────────────────── Batalla ─────────────────────────────
 
 fn batalla_escribir(w: &mut Escritor, b: &Batalla) {
-    let Batalla { id, estado, iniciada_por, punto, ticket, incorporaciones, salidas, bloqueo, expira_en, convocatoria_hasta, iniciada_en, aplicada_en, cerrada_en, asignacion, resultado } = b;
+    let Batalla { id, estado, iniciada_por, punto, ticket, incorporaciones, salidas, bloqueo, expira_en, convocatoria_hasta, iniciada_en, aplicada_en, cerrada_en, asignacion, resultado, procedencias } = b;
     w.u64(*id);
     w.u8(estado_a_u8(*estado));
     w.u64(*iniciada_por);
@@ -477,6 +477,12 @@ fn batalla_escribir(w: &mut Escritor, b: &Batalla) {
     if let Some(res) = resultado {
         resultado_escribir(w, res);
     }
+    for p in procedencias {
+        w.bool(p.is_some());
+        if let Some(p) = p {
+            w.punto(*p);
+        }
+    }
 }
 
 fn batalla_leer(r: &mut Lector) -> Result<Batalla, ErrorFormato> {
@@ -490,7 +496,9 @@ fn batalla_leer(r: &mut Lector) -> Result<Batalla, ErrorFormato> {
     let (expira_en, convocatoria_hasta, iniciada_en, aplicada_en, cerrada_en) = (r.i64()?, r.opt_i64()?, r.opt_i64()?, r.opt_i64()?, r.opt_i64()?);
     let asignacion = if r.bool()? { Some(asignacion_leer(r)?) } else { None };
     let resultado = if r.bool()? { Some(resultado_leer(r)?) } else { None };
-    Ok(Batalla { id, estado, iniciada_por, punto, ticket, incorporaciones, salidas, bloqueo, expira_en, convocatoria_hasta, iniciada_en, aplicada_en, cerrada_en, asignacion, resultado })
+    let mut procedencia = || -> Result<Option<base::Punto>, ErrorFormato> { Ok(if r.bool()? { Some(r.punto()?) } else { None }) };
+    let procedencias = [procedencia()?, procedencia()?];
+    Ok(Batalla { id, estado, iniciada_por, punto, ticket, incorporaciones, salidas, bloqueo, expira_en, convocatoria_hasta, iniciada_en, aplicada_en, cerrada_en, asignacion, resultado, procedencias })
 }
 
 pub(crate) fn escribir(w: &mut Escritor, b: &EstadoBatallas) {

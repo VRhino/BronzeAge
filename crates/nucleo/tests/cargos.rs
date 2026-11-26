@@ -362,7 +362,7 @@ fn los_cargos_y_la_puerta_viajan_en_la_foto() {
     e.ok("ana", Comando::VetarJugador { heroe: ana, asentamiento: plaza, vetado: cai, vetar: true });
     assert!(hash0 != hash1 && hash1 != hash2 && hash2 != e.n.hash_estado(), "cada pieza mueve el hash");
     let bytes = e.n.estado().serializar();
-    assert_eq!(&bytes[..5], b"BAN69");
+    assert_eq!(&bytes[..5], b"BAN70");
     let reglas = e.n.estado().reglas.clone();
     let vuelta = Estado::deserializar(&bytes, &reglas, &e.n.estado().mundo_hash).unwrap();
     let a = &vuelta.asentamientos[&plaza];
@@ -420,11 +420,11 @@ fn el_maestro_de_caravanas_viaja_en_la_foto_y_solo_se_lee_el_formato_vigente() {
     assert!(e.asignar("ana", ana, Cargo::Tesorero, bea).aceptada());
     let reglas = e.n.estado().reglas.clone();
     let hash = e.n.estado().mundo_hash.clone();
-    // Solo se lee el formato vigente (BAN69): cualquier otro se rechaza sin mirar el resto, y lo que no empieza por «BAN» no es una foto del núcleo.
+    // Solo se lee el formato vigente (BAN70): cualquier otro se rechaza sin mirar el resto, y lo que no empieza por «BAN» no es una foto del núcleo.
     let mut vieja = e.n.estado().serializar();
-    for magia in [b"BAN10", b"BAN27", b"BAN51", b"BAN61", b"BAN62", b"BAN63", b"BAN64", b"BAN65", b"BAN66", b"BAN67", b"BAN68", b"BAN71"] {
+    for magia in [b"BAN10", b"BAN27", b"BAN51", b"BAN61", b"BAN62", b"BAN63", b"BAN64", b"BAN65", b"BAN66", b"BAN67", b"BAN68", b"BAN69", b"BAN71"] {
         vieja[..5].copy_from_slice(magia);
-        assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m.contains("BAN69") && m.contains("ya no se admite")), "{}", String::from_utf8_lossy(magia));
+        assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m.contains("BAN70") && m.contains("ya no se admite")), "{}", String::from_utf8_lossy(magia));
     }
     vieja[..5].copy_from_slice(b"XXXXX");
     assert!(Estado::deserializar(&vieja, &reglas, &hash).is_err_and(|ErrorFormato(m)| m == "no es un estado del núcleo"));

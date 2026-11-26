@@ -51,6 +51,10 @@ impl Geografia {
         self.cauces.junto_al_rio(p, radio, orilla.media_anchura, orilla.media_anchura_navegable)
     }
 
+    pub(super) fn mundo(&self) -> &Mundo {
+        &self.mundo
+    }
+
     /// Ancho y alto del mapa, en milésimas.
     pub(super) fn tamano(&self) -> (i64, i64) {
         self.mundo.tamano()

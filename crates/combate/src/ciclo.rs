@@ -385,6 +385,9 @@ pub struct Batalla {
     pub asignacion: Option<Asignacion>,
     /// El resultado aplicado, **entero** (idempotencia).
     pub resultado: Option<Resultado>,
+    /// De dónde llegaba cada bando al abrir (atacante, defensor), a unas unidades hacia atrás sobre su plan; `None` si estaba quieto o no es una columna
+    /// (entrada 78: solo da la dirección para el recorte del lugar).
+    pub procedencias: [Option<Punto>; 2],
 }
 
 impl Batalla {
@@ -407,6 +410,7 @@ impl Batalla {
             cerrada_en: None,
             asignacion: None,
             resultado: None,
+            procedencias: [None, None],
         }
     }
 

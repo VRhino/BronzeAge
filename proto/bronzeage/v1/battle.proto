@@ -155,10 +155,61 @@ message BattleSide {
   Sigilo sigilo = 5;
 }
 
-// El terreno de la batalla sale del artefacto de mundo: Unity no lo inventa.
+// El terreno de la batalla sale del artefacto de mundo: Unity no lo inventa. Desde el contrato 0.34.0 lleva el recorte del lugar
+// (Campo_De_Batalla_Del_Lugar.md de Conquest §3, entrada 78): lo único del mundo que el servidor de batalla y los clientes necesitan para el campo.
 message BattleMapReference {
   string mapa_id = 1;                    // hash del artefacto de mundo
-  Punto centro = 2;
+  Punto centro = 2;                      // el centro del recorte: el punto de la batalla, apartado del agua o de un río sin vado si hacía falta
+  RecorteDelLugar recorte = 3;           // falta si el motor no tiene el paquete de relieve: Conquest juega en su campo de siempre
+}
+
+// Una rejilla de valores de un byte por celda de 4 u (las del artefacto que toca el recorte), en orden de filas desde el noroeste.
+message RejillaDelLugar {
+  Punto origen = 1;                      // la esquina noroeste de la primera celda
+  uint32 paso = 2;                       // milésimas entre celdas (4000)
+  uint32 columnas = 3;
+  uint32 filas = 4;
+  bytes valores = 5;                     // columnas · filas bytes, 0..255
+}
+
+// Las muestras del paquete de relieve que toca el recorte, en sus vértices (cada 0,5 u), en orden de filas desde el noroeste.
+message RelieveDelLugar {
+  Punto origen = 1;                      // la primera muestra
+  uint32 paso = 2;                       // milésimas entre muestras (500)
+  uint32 columnas = 3;
+  uint32 filas = 4;
+  bytes alturas = 5;                     // columnas · filas u16 LE, el valor del paquete tal cual (0..65535 = 0..1000 m del mundo, sin zoom)
+  bytes agua = 6;                        // 2 bits por muestra (0 tierra, 1 lago, 2 mar), cuatro por byte: la muestra k en el byte k >> 2, bits 2·(k & 3), LSB primero
+}
+
+message RioDelLugar {
+  repeated Punto puntos = 1;             // el trozo de polilínea que cruza el recorte, con un punto de más a cada lado
+  repeated Punto vados = 2;              // los de dentro del recorte
+  bool navegable = 3;
+  repeated uint32 anchos = 4;            // el ancho del río en cada punto, en milésimas (vacío si el artefacto no lo trae)
+}
+
+message CaminoDelLugar {
+  uint32 escalon = 1;                    // 0 sendero, 1 camino, 2 calzada
+  repeated Punto puntos = 2;
+}
+
+// De dónde llega un bando: solo la dirección (dónde va cada spawn lo decide Conquest).
+message ProcedenciaDelLugar {
+  Punto punto = 1;                       // a 2 u hacia atrás sobre su plan; quieto, su posición
+  bool quieto = 2;
+}
+
+message RecorteDelLugar {
+  uint32 lado = 1;                       // milésimas de lado del recorte (el área jugable más el anillo, por la escala del campo)
+  RelieveDelLugar relieve = 2;           // la clase de terreno sale de la altura (los umbrales del mundo), y no va
+  RejillaDelLugar bosque = 3;
+  RejillaDelLugar humedad = 4;
+  RejillaDelLugar fertilidad = 5;
+  repeated RioDelLugar rios = 6;
+  repeated CaminoDelLugar caminos = 7;   // aún vacío
+  ProcedenciaDelLugar procedencia_atacante = 8;
+  ProcedenciaDelLugar procedencia_defensor = 9;
 }
 
 message EdificioEnBatalla {

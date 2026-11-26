@@ -80,11 +80,13 @@ pub struct Relieve {
 }
 
 /// El paquete de relieve que está junto al artefacto `ruta` (`relieve-<hash>.bin`, en la misma carpeta), validado contra el mundo del arranque.
-/// `Ok(None)` si no está: el servidor arranca igual y los clientes 3D se quedan sin la altura fina.
+/// `Ok(None)` si no está: el servidor arranca igual y los clientes 3D se quedan sin la altura fina. Validado, queda también en el mundo del arranque
+/// (`Mundo::poner_relieve`): de él sale el recorte del lugar de las batallas de Unity (entrada 78); sin él, los tickets van sin recorte.
 pub fn relieve_junto_a(ruta: &Path, arranque: &Arranque) -> Result<Option<Relieve>, ErrorRelieve> {
     let Some(m) = arranque.mundo.as_ref() else { return Ok(None) };
     let Ok(bytes) = std::fs::read(ruta.with_file_name(format!("relieve-{}.bin", m.hash()))) else { return Ok(None) };
     let hash = validar_relieve(&bytes, m.hash(), m.tamano())?;
+    m.poner_relieve(mundo::RelieveFino::desde(&bytes).map_err(|e| ErrorRelieve::Decodificacion(e.to_string()))?);
     Ok(Some(Relieve { hash, bytes: Arc::new(bytes) }))
 }
 

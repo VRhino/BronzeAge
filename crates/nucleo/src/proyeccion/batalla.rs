@@ -178,7 +178,11 @@ pub fn ticket(n: &Nucleo, b: &Batalla) -> pb::BattleTicket {
     let cat = &n.estado().reglas.economia.militar.objetos;
     let mapa = match (&t.contexto, &t.plaza) {
         (&Contexto::Asedio { asentamiento }, Some(p)) => pb::battle_ticket::Mapa::MapaAsentamiento(mapa_de_plaza(u64::from(asentamiento), p)),
-        _ => pb::battle_ticket::Mapa::MapaReferencia(pb::BattleMapReference { mapa_id: n.mundo_hash().to_owned(), centro: Some(punto(b.punto)) }),
+        _ => {
+            let lugar = n.lugar_de_batalla(b);
+            let centro = lugar.as_ref().map_or(b.punto, |l| l.0);
+            pb::battle_ticket::Mapa::MapaReferencia(pb::BattleMapReference { mapa_id: n.mundo_hash().to_owned(), centro: Some(punto(centro)), recorte: lugar.map(|l| l.1) })
+        }
     };
     pb::BattleTicket {
         schema_version: SCHEMA_VERSION,
