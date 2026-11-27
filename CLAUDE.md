@@ -1,14 +1,12 @@
 # BronzeAge: reglas de trabajo para Claude
 
-## Commits y push
+## Cómo se trabaja el código
 
-Todo `git commit` y `git push` lo hace un **subagente con el modelo Haiku 5.5** (`model: "haiku"` en la herramienta Agent), nunca el agente principal. Decidido por el autor el 2026-10-17.
+Modo **ponytail** siempre encendido, en nivel full, en la nube y en el PC (decidido por el autor el 2026-11-27): en todo trabajo de código se siguen las reglas de `.claude/skills/ponytail/SKILL.md` aunque no se invoque. El nivel ultra no se usa. Antes de abrir un PR se pasa `/ponytail-review`. Mientras el autor no decida otra cosa, no se ponen comentarios `shortcut:` en el código.
 
-- El agente principal deja los cambios listos en el árbol de trabajo y lanza al subagente con un prompt autónomo: qué ficheros añadir, el mensaje del commit, la rama destino y la orden de `git push -u origin <rama>`.
-- El mensaje de commit termina con las líneas de atribución que pida el entorno.
-- Si el push falla por red, el subagente reintenta hasta 4 veces con espera creciente (2 s, 4 s, 8 s, 16 s). Si falla por otra causa, informa y no fuerza nada.
-- El subagente no usa `--force`, no reescribe historia y no sube a una rama distinta de la designada.
-- Al terminar, el agente principal comprueba el resultado con `git status` y `git log`, y avisa al autor si algo no quedó subido.
+- **Cambios quirúrgicos.** Cada línea cambiada sale de lo pedido. No se retoca código, comentarios ni formato de al lado. Lo muerto ajeno se señala, no se borra; lo que deja huérfano el cambio propio, sí.
+- **Criterio de éxito comprobable.** Antes de empezar, cada tarea dice cómo se sabrá que está hecha: «arregla X» pasa a «una prueba que reproduce X, y que pase».
+- **El cambio más pequeño no recorta las reglas de la casa.** La ronda final de docs y la subida de versión del crate forman parte del cambio.
 
 ## Versiones de los crates
 
