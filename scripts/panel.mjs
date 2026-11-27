@@ -32,7 +32,7 @@ const { configurations } = JSON.parse(readFileSync(path.join(RAIZ, '.claude/laun
 const CONQUEST = path.resolve(RAIZ, process.env.CONQUEST_RAIZ ?? '../Conquest_prototype');
 const PRUEBA_RED = path.join(CONQUEST, 'Builds', 'PruebaRed', process.platform === 'win32' ? 'PruebaRed.exe' : 'PruebaRed');
 // Qué lleva el lanzador en marcha ('mentira' o 'conquest') y la petición del botón mientras espera al servidor.
-const conquest = { modo: null, duracion: null, esperando: false, mensaje: null };
+const conquest = { modo: null, duracion: null, esperando: false, mensaje: null, fase: null };
 function envConquest(duracion) {
   const registro = path.join(CONQUEST, 'Logs', 'batalla_servidor.log');
   // LANZADOR_ARGUMENTOS se parte por espacios: el registro solo va si su ruta no tiene ninguno (si no, Unity escribe en su Player.log de siempre).
@@ -42,6 +42,42 @@ function envConquest(duracion) {
 function avisoConquest() {
   if (!existsSync(PRUEBA_RED)) return `falta ${PRUEBA_RED}: constrúyelo desde Conquest (menú de PruebaRedEditor, o Unity -batchmode -quit -executeMethod ConquestTactics.Net.Editor.PruebaRedEditor.Construir con el editor cerrado), o pon CONQUEST_RAIZ con la carpeta de Conquest`;
   return null;
+}
+// El campo del lugar (2026-11-27, pedido del autor; Conquest `Docs/Design/Campo_De_Batalla_Del_Lugar.md`): el servidor de batalla genera el campo de cada batalla
+// de campo abierto o de caravana con su propio código, así que un PruebaRed más viejo que el Conquest de al lado juega sin lo último. «Arrancar con Conquest»
+// (y «Jugar») lo reconstruye antes si algo de Conquest (`Assets/Scripts`, `Assets/Scenes` o `Assets/Plugins`) es más nuevo que lo compilado: Unity en batch, unos
+// minutos (`UNITY_EXE`, o el 6000.5.8f1 del Hub). Con el editor de Conquest abierto no se puede (Unity no abre un proyecto dos veces) y arranca con el que hay. Y el
+// campo sale del relieve del mundo: sin el `relieve-<hash>.bin` junto al artefacto, el motor no manda el recorte y las batallas van en el suelo plano de siempre.
+const UNITY = process.env.UNITY_EXE ?? 'C:/Program Files/Unity/Hub/Editor/6000.5.8f1/Editor/Unity.exe';
+const COMPILADO = path.join(CONQUEST, 'Builds', 'PruebaRed', 'PruebaRed_Data', 'Managed', 'Game.ECS.dll');
+// El cambio más reciente (ms) de lo que entra en la compilación bajo `dir`.
+function ultimoCambio(dir) {
+  if (!existsSync(dir)) return 0;
+  let m = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) m = Math.max(m, ultimoCambio(p));
+    else if (/\.(cs|asmdef|dll|unity|prefab|asset)$/.test(e.name)) m = Math.max(m, statSync(p).mtimeMs);
+  }
+  return m;
+}
+const pruebaRedVieja = () => !existsSync(COMPILADO) || ['Scripts', 'Scenes', 'Plugins'].some((d) => ultimoCambio(path.join(CONQUEST, 'Assets', d)) > statSync(COMPILADO).mtimeMs);
+// Construye PruebaRed con Unity en batch. Devuelve por qué no se pudo, o null.
+function construirPruebaRed() {
+  const registro = path.join(CONQUEST, 'Logs', 'construir_pruebared.log');
+  return new Promise((ok) => {
+    const h = spawn(UNITY, ['-batchmode', '-quit', '-projectPath', CONQUEST, '-executeMethod', 'ConquestTactics.Net.Editor.PruebaRedEditor.Construir', '-logFile', registro]);
+    h.on('error', (e) => ok(`no se pudo lanzar Unity (${UNITY}): ${e.message}`));
+    h.on('exit', (code) => ok(code === 0 && !pruebaRedVieja() ? null : `Unity acabó con el código ${code} (¿está abierto el editor de Conquest? ciérralo y vuelve a arrancar); su registro, ${registro}`));
+  });
+}
+// ¿Tiene el mundo de la partida su paquete de relieve al lado? Sin él no hay campo del lugar.
+function conRelieve() {
+  const s = configurations.find((x) => x.name === 'bronzeage-servidor');
+  const ruta = path.resolve(RAIZ, envPartida().BRONZEAGE_MUNDO ?? s?.env?.BRONZEAGE_MUNDO ?? process.env.BRONZEAGE_MUNDO ?? 'generador/salida/mundo');
+  const dir = ruta.endsWith('.bin') ? path.dirname(ruta) : ruta;
+  const mundos = ruta.endsWith('.bin') ? [path.basename(ruta)] : existsSync(dir) ? readdirSync(dir).filter((f) => /^mundo-.*\.bin$/.test(f)) : [];
+  return mundos.length > 0 && mundos.every((f) => existsSync(path.join(dir, `relieve-${f.slice(6)}`)));
 }
 
 // Jugar desde otro equipo de la red local (2026-11-15, pedido del autor). Con la red abierta, el servidor escucha en 0.0.0.0 (no solo en 127.0.0.1) y el lanzador
@@ -254,6 +290,13 @@ async function arrancarConquest(duracion, mentira = false) {
   if (no) { conquest.mensaje = no; return; }
   conquest.esperando = true; conquest.mensaje = null;
   try {
+    if (!mentira && pruebaRedVieja()) {
+      conquest.fase = 'reconstruyendo PruebaRed con el Conquest de ahora (Unity en batch, unos minutos)…';
+      const fallo = await construirPruebaRed();
+      if (fallo) conquest.mensaje = `no se pudo reconstruir PruebaRed, se arranca con el de antes: ${fallo}`;
+    }
+    conquest.fase = null;
+    if (!mentira && !conRelieve()) conquest.mensaje = [conquest.mensaje, 'el mundo no tiene su relieve-<hash>.bin al lado: las batallas irán en el suelo plano de Conquest, sin el campo del lugar (regenera el mundo)'].filter(Boolean).join(' · ');
     if (!(await escucha(puertos[s.name]))) {
       const noServidor = SERVICIOS[s.name].aviso?.(s);
       if (noServidor) { conquest.mensaje = `el servidor no puede arrancar: ${noServidor}`; return; }
@@ -266,7 +309,7 @@ async function arrancarConquest(duracion, mentira = false) {
       }
     }
     arrancar(l, mentira ? {} : envConquest(duracion));
-  } finally { conquest.esperando = false; }
+  } finally { conquest.esperando = false; conquest.fase = null; }
 }
 
 // Lo que escucha distinto con la red abierta: si arrancó con la red de antes, «Aplicar» y «Jugar» lo reinician.
@@ -323,7 +366,7 @@ async function estado() {
       falta: !existsSync(carpeta(c)), aviso: SERVICIOS[c.name]?.aviso?.(c) ?? null,
       escucha: puertos[c.name] ? await escucha(puertos[c.name]) : false, lanzado: !!p?.hijo, log: p?.log.slice(-200) ?? [], red: p?.hijo ? p.red : null,
       ...(c.name === 'bronzeage-lanzador' ? { conquest: { exe: PRUEBA_RED, aviso: avisoConquest(), modo: p?.hijo ? conquest.modo : null, duracion: conquest.duracion,
-        esperando: conquest.esperando, mensaje: conquest.mensaje } } : {}),
+        esperando: conquest.esperando, mensaje: conquest.mensaje, fase: conquest.fase } } : {}),
     };
   }));
 }
@@ -617,7 +660,7 @@ async function pintar(){
     c.querySelector('label').style.display=d.tipo==='tarea'||!d.puerto?'none':'';
     if(d.conquest){const q=d.conquest;
       c.querySelector('.con').disabled=!!q.aviso||!!d.aviso||d.lanzado||q.esperando;c.querySelector('.dur').disabled=d.lanzado||q.esperando;
-      c.querySelector('.cq').textContent=q.esperando?'arrancando el servidor y esperando a que escuche…':d.lanzado?(q.modo==='conquest'?'con Conquest'+(q.duracion?' · batallas de '+q.duracion+' s':''):'con el servidor de batalla de mentira'):'';
+      c.querySelector('.cq').textContent=q.esperando?(q.fase??'arrancando el servidor y esperando a que escuche…'):d.lanzado?(q.modo==='conquest'?'con Conquest'+(q.duracion?' · batallas de '+q.duracion+' s':''):'con el servidor de batalla de mentira'):'';
       c.querySelector('.cqa').textContent=q.aviso??q.mensaje??'';
       c.querySelector('.cmd').textContent=d.nombre+' · '+d.comando+(d.lanzado&&q.modo==='conquest'?'  [Conquest: '+q.exe+']':'');}
     const inp=c.querySelector('label input');
